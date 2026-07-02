@@ -1,0 +1,21 @@
+providers:
+  - name: Groq_Account_1
+    type: openai_compatible
+    url: https://api.groq.com/openai/v1/chat/completions
+    model: llama-3.3-70b-versatile
+    api_key_env: GROQ_API_KEY_1
+    priority: 1
+
+  - name: Groq_Account_2
+    type: openai_compatible
+    url: https://api.groq.com/openai/v1/chat/completions
+    model: llama-3.3-70b-versatile
+    api_key_env: GROQ_API_KEY_2
+    priority: 1
+
+  - name: Gemini_Account_1
+    type: gemini
+    url: https://generativelanguage.googleapis.com/v1beta/models
+    model: gemini-3.5-flash
+    api_key_env: GEMINI_API_KEY_1
+    priority: 2
