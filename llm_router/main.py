@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from llm_router import load_providers_from_config, AutonomousLLMRouter
+from agent.router_chat_model import RouterChatModel
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,13 +23,14 @@ def main():
         return
 
     router = AutonomousLLMRouter(providers=pool)
+    model = RouterChatModel(router=router)
     messages = [
         {"role": "system", "content": "You are a concise scientific assistant."},
         {"role": "user", "content": "Explica brevemente qué es el entrelazamiento cuántico."},
     ]
 
     logger.info("Starting autonomous generation loop...")
-    answer = router.generate(messages)
+    answer = model.invoke(messages).content
     print("\n --- FINAL ANSWER ---")
     print(answer)
 

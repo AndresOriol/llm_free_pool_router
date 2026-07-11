@@ -8,7 +8,6 @@ usage limit hit mid-task is transparent -- the next step just runs on another
 account/model.
 """
 
-import asyncio
 import logging
 import time
 from typing import Any, List, Optional, Sequence
@@ -27,7 +26,15 @@ _MAX_WAIT_SECONDS = 300.0
 
 
 class RouterChatModel(BaseChatModel):
-    """A BaseChatModel that routes each call across the pooled providers."""
+    """A BaseChatModel that routes each call across the pooled providers.
+
+    Only `_generate` (sync) is implemented; the current callers are all sync
+    (the smoke test's `.invoke()`, the agent's `agent.stream()`). Async callers
+    get BaseChatModel's default `_agenerate`, which runs `_generate` in a
+    thread.
+    # ponytail: async bridged via thread — fine for one agent at a time; add a
+    # real `_agenerate` only if high async concurrency ever matters.
+    """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -64,35 +71,13 @@ class RouterChatModel(BaseChatModel):
         for _ in range(self.max_retries):
             provider = self.router.get_best_provider()
             if provider is None:
-                if self._wait_for_cooldown(sleep=time.sleep):
+                if self._wait_for_cooldown():
                     continue
                 break
 
             logger.info(f"Routing to {provider.name} (model={provider.model}).")
             try:
                 message = self._underlying(provider).invoke(
-                    messages, stop=stop, config=_child_config(run_manager), **kwargs)
-                return self._result(message)
-            except Exception as exc:  # noqa: BLE001 - classified below
-                if not self._handle_failure(provider, exc):
-                    raise
-                last_exc = exc
-
-        raise RuntimeError("All providers exhausted across the pool.") from last_exc
-
-    async def _agenerate(self, messages: List[BaseMessage], stop=None,
-                         run_manager=None, **kwargs) -> ChatResult:
-        last_exc: Optional[Exception] = None
-        for _ in range(self.max_retries):
-            provider = self.router.get_best_provider()
-            if provider is None:
-                if await self._wait_for_cooldown(sleep=asyncio.sleep, is_async=True):
-                    continue
-                break
-
-            logger.info(f"Routing to {provider.name} (model={provider.model}).")
-            try:
-                message = await self._underlying(provider).ainvoke(
                     messages, stop=stop, config=_child_config(run_manager), **kwargs)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
@@ -112,17 +97,15 @@ class RouterChatModel(BaseChatModel):
         provider.trigger_cooldown(retry_after)
         return True
 
-    def _wait_for_cooldown(self, sleep, is_async: bool = False):
-        """Sleep until the soonest account leaves cooldown. Returns a coroutine
-        when is_async, else a bool. False means nothing is coming back."""
+    def _wait_for_cooldown(self) -> bool:
+        """Sleep until the soonest account leaves cooldown. Returns False when
+        nothing is coming back (no account in cooldown to wait for)."""
         wait = self.router.seconds_until_available()
         if wait is None:
-            return _noop_false() if is_async else False
+            return False
         delay = min(wait, _MAX_WAIT_SECONDS)
         logger.info(f"Whole pool in cooldown; waiting {delay:.0f}s for the next account.")
-        if is_async:
-            return _sleep_then_true(sleep, delay)
-        sleep(delay)
+        time.sleep(delay)
         return True
 
 
@@ -133,12 +116,3 @@ def _child_config(run_manager):
     if run_manager is None:
         return None
     return {"callbacks": run_manager.get_child()}
-
-
-async def _noop_false() -> bool:
-    return False
-
-
-async def _sleep_then_true(sleep, delay) -> bool:
-    await sleep(delay)
-    return True
