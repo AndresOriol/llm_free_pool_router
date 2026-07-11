@@ -42,6 +42,8 @@ See [docs/DEEP_AGENTS.md](docs/DEEP_AGENTS.md).
 - **New provider account, or want to add a provider?** →
   [docs/PROVIDERS.md](docs/PROVIDERS.md)
 - **Run the coding agent on the pool?** → [docs/DEEP_AGENTS.md](docs/DEEP_AGENTS.md)
+- **How does the router actually work, and why?** →
+  [docs/DESIGN.md](docs/DESIGN.md)
 - **Curious how this project is built (agent roles, model tiers)?** →
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Project goals and standards** → [CLAUDE.md](CLAUDE.md)
