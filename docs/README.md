@@ -13,9 +13,9 @@ following the same rules.
 2. **Component docs** — how to set up or operate one specific part of the
    system, aimed at humans. One file per major component, named for what it
    covers (not for the doc's type). Currently:
-   [PROVIDERS.md](PROVIDERS.md) (llm_router account setup). A future
-   component (e.g. the deep-agents integration) gets its own file here, e.g.
-   `DEEP_AGENTS.md`.
+   [PROVIDERS.md](PROVIDERS.md) (llm_router account setup) and
+   [DEEP_AGENTS.md](DEEP_AGENTS.md) (running the deepagents coding agent on the
+   pool).
 
 ## Conventions
 
@@ -35,6 +35,7 @@ following the same rules.
 | --- | --- | --- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | project-wide | agent model tiers, harness, skills |
 | [PROVIDERS.md](PROVIDERS.md) | llm_router component | free-tier account signup & wiring |
+| [DEEP_AGENTS.md](DEEP_AGENTS.md) | agent component | running the deepagents coding agent on the pool |
 
 ## Maintenance
 

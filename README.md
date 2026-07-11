@@ -26,10 +26,22 @@ Then run:
 python llm_router/main.py
 ```
 
+## Coding agent
+
+Run a [deepagents](https://github.com/langchain-ai/deepagents) coding agent on
+the pool — it keeps working through free-tier limits by switching model mid-task:
+
+```bash
+python -m agent.coding_agent [workdir]
+```
+
+See [docs/DEEP_AGENTS.md](docs/DEEP_AGENTS.md).
+
 ## Docs
 
 - **New provider account, or want to add a provider?** →
   [docs/PROVIDERS.md](docs/PROVIDERS.md)
+- **Run the coding agent on the pool?** → [docs/DEEP_AGENTS.md](docs/DEEP_AGENTS.md)
 - **Curious how this project is built (agent roles, model tiers)?** →
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Project goals and standards** → [CLAUDE.md](CLAUDE.md)
