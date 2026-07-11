@@ -1,8 +1,16 @@
 """One runnable check for is_transient(), the core reroute-vs-raise classifier.
 
-No framework: `python -m llm_router.test_is_transient` (or run the file). Each
-case is the smallest thing that fails if the classification breaks.
+No framework: `python -m tests.llm_router.test_is_transient` (or run the
+file). Each case is the smallest thing that fails if the classification
+breaks.
 """
+
+import sys
+from pathlib import Path
+
+# Allow running either as `python -m tests.llm_router.test_is_transient` or
+# `python tests/llm_router/test_is_transient.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from llm_router.base_provider import is_transient
 

@@ -20,10 +20,10 @@ GROQ_API_KEY_1=...
 GEMINI_API_KEY_1=...
 ```
 
-Then run:
+Then smoke-test the pool:
 
 ```bash
-python llm_router/main.py
+python tests/llm_router/smoke_test.py
 ```
 
 ## Coding agent

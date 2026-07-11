@@ -2,8 +2,9 @@ import sys
 import logging
 from pathlib import Path
 
-# Allow running either as `python -m llm_router.main` or `python llm_router/main.py`.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Allow running either as `python -m tests.llm_router.smoke_test` or
+# `python tests/llm_router/smoke_test.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from llm_router import load_providers_from_config, AutonomousLLMRouter
 from agent.router_chat_model import RouterChatModel

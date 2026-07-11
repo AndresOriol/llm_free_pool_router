@@ -30,9 +30,6 @@ llm_router/
   router.py           AutonomousLLMRouter: filters to available providers,
                        returns the highest-priority one
   config.yaml         One entry per account; see PROVIDERS.md for the schema
-  main.py             Smoke test: one prompt through the pool
-  test_is_transient.py  Framework-free self-check for is_transient()'s
-                          reroute-vs-raise branches (python -m ...)
 
 agent/
   router_chat_model.py  RouterChatModel(BaseChatModel): the failover loop
@@ -40,6 +37,13 @@ agent/
                           failure cooldown it and try the next, repeat
   coding_agent.py        Wires RouterChatModel into a deepagents loop with a
                           filesystem backend
+
+tests/
+  llm_router/
+    smoke_test.py         One prompt through the pool, to sanity-check that
+                            keys/config.yaml are wired up correctly
+    test_is_transient.py  Framework-free self-check for is_transient()'s
+                            reroute-vs-raise branches (python -m ...)
 ```
 
 Each file has exactly one job, and the split maps directly onto a question you
@@ -67,8 +71,9 @@ from that one choice:
 
 There's exactly one failover code path. Both entry points wrap a router in a
 `RouterChatModel` and call it: the smoke test
-([main.py](../llm_router/main.py)) does `RouterChatModel(router=...).invoke(...)`,
-the agent hands the same object to deepagents. `AutonomousLLMRouter` only
+([tests/llm_router/smoke_test.py](../tests/llm_router/smoke_test.py)) does
+`RouterChatModel(router=...).invoke(...)`, the agent hands the same object to
+deepagents. `AutonomousLLMRouter` only
 selects; it deliberately has no `.generate()` of its own (that would make
 `llm_router` import `agent`, inverting the layering).
 
