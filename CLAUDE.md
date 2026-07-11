@@ -67,3 +67,15 @@ just the current llm_router stage; read it before adding a new doc.
 - Follow [ponytail](https://github.com/anthropics/skills) principles: simplest
   solution that works, standard library over dependencies, no speculative
   abstraction. Apply the `ponytail` skill on non-trivial changes.
+
+## Commits
+
+- No AI/agent attribution in commit messages — no "Co-Authored-By", no
+  mention of Claude or any model/agent having made the change. Commits read
+  as if a human wrote them.
+- Keep messages concise: a short imperative summary line; a body only when
+  the "why" isn't obvious from the diff.
+- Cluster changes by topic, one topic per commit. Don't bundle unrelated
+  files into a single commit just because they changed in the same session —
+  split them (e.g. docs changes and an unrelated config change go in
+  separate commits, even if made back to back).
