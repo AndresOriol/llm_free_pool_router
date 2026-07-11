@@ -70,7 +70,8 @@ class RouterChatModel(BaseChatModel):
 
             logger.info(f"Routing to {provider.name} (model={provider.model}).")
             try:
-                message = self._underlying(provider).invoke(messages, stop=stop, **kwargs)
+                message = self._underlying(provider).invoke(
+                    messages, stop=stop, config=_child_config(run_manager), **kwargs)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
                 if not self._handle_failure(provider, exc):
@@ -91,7 +92,8 @@ class RouterChatModel(BaseChatModel):
 
             logger.info(f"Routing to {provider.name} (model={provider.model}).")
             try:
-                message = await self._underlying(provider).ainvoke(messages, stop=stop, **kwargs)
+                message = await self._underlying(provider).ainvoke(
+                    messages, stop=stop, config=_child_config(run_manager), **kwargs)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
                 if not self._handle_failure(provider, exc):
@@ -122,6 +124,15 @@ class RouterChatModel(BaseChatModel):
             return _sleep_then_true(sleep, delay)
         sleep(delay)
         return True
+
+
+def _child_config(run_manager):
+    """Nest the chosen provider's call under the router's run so LangSmith
+    traces show which account/model actually served each step (and where
+    failover happened). Returns None when there's no tracing context."""
+    if run_manager is None:
+        return None
+    return {"callbacks": run_manager.get_child()}
 
 
 async def _noop_false() -> bool:
