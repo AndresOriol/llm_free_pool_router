@@ -32,6 +32,25 @@ tokens-per-minute); both are treated as transient. A single agent step may walk
 several small-TPM Groq models before a higher-limit account (e.g. Gemini)
 accepts the request — this is expected.
 
+## Tracing (LangSmith)
+
+The whole stack is LangChain/LangGraph, so LangSmith tracing is native — no code
+wiring, just env vars in [llm_router/.env](../llm_router/.env):
+
+```bash
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=<your key from smith.langchain.com>
+LANGSMITH_PROJECT=free-coding-agent
+```
+
+Every agent run then shows up in the `free-coding-agent` project: the LangGraph
+loop, each step's messages, and tool calls. Because the router call passes its
+`run_manager` down to the chosen provider (`_child_config` in
+[router_chat_model.py](../agent/router_chat_model.py)), each step nests the
+account/model that actually served it — so failover is visible in the trace
+tree. Collect these runs into datasets to evaluate and improve the agent. Leave
+`LANGSMITH_API_KEY` blank to run with tracing off.
+
 ## Pool requirement
 
 Every model in [config.yaml](../llm_router/config.yaml) must support tool
