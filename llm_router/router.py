@@ -1,47 +1,47 @@
+import time
 import logging
-import asyncio
-import aiohttp
-from typing import List, Optional, Dict
-from base_provider import LLMProvider
+from typing import List, Optional
+
+from .base_provider import LLMProvider
 
 logger = logging.getLogger("LLMRouter")
 
+
 class AutonomousLLMRouter:
-    """Routes async requests to the best available provider."""
+    """Selects the best available provider from the pool and tracks cooldowns.
+
+    Selection/cooldown coordination lives here; the actual model invocation and
+    failover loop live in the LangChain-facing RouterChatModel, so an agent and
+    the smoke test share one code path.
+    """
 
     def __init__(self, providers: List[LLMProvider]):
         self.providers = providers
 
     def get_best_provider(self) -> Optional[LLMProvider]:
-        """Filters available providers and sorts by strict priority."""
+        """Filter to available providers and return the highest priority one."""
         available = [p for p in self.providers if p.check_availability()]
-        
+
         if not available:
             return None
-            
+
         available.sort(key=lambda p: p.priority)
         return available[0]
 
-    async def generate(self, messages: List[Dict[str, str]], max_retries: int = 5) -> str:
-        """Attempts to route the standard message payload asynchronously."""
-        retries = 0
-        
-        async with aiohttp.ClientSession() as session:
-            while retries < max_retries:
-                provider = self.get_best_provider()
+    def seconds_until_available(self) -> Optional[float]:
+        """How long until the soonest provider leaves cooldown, or None if some
+        provider is already available."""
+        waits = [p.cooldown_until - time.time()
+                 for p in self.providers if not p.is_available]
+        future = [w for w in waits if w > 0]
+        return min(future) if future else None
 
-                if not provider:
-                    logger.error("Critical Error: All providers are in cooldown.")
-                    raise RuntimeError("All providers exhausted. Circuit broken.")
+    def generate(self, messages, max_retries: int = 6) -> str:
+        """Convenience string generation used by the smoke test.
 
-                logger.info(f"Routing to: {provider.name} (Model: {provider.model}) [Priority: {provider.priority}]")
-                answer = await provider.send_request(session, messages)
+        Routes through RouterChatModel so there is a single failover path.
+        """
+        from agent.router_chat_model import RouterChatModel
 
-                if answer:
-                    return answer
-
-                logger.info("Provider failed. Rerouting to next available provider...")
-                retries += 1
-                await asyncio.sleep(1) # Tiny buffer before the next loop
-                
-        raise RuntimeError("Max retries exceeded across the provider pool.")
+        model = RouterChatModel(router=self, max_retries=max_retries)
+        return model.invoke(messages).content

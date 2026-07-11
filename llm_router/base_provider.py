@@ -1,89 +1,112 @@
 import time
 import logging
-import asyncio
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, List, Dict
-import aiohttp
+from typing import Optional, Tuple
+
+from langchain_core.language_models.chat_models import BaseChatModel
 
 logger = logging.getLogger("LLMRouter")
 
-CONECTION_TIMEOUT=120 # We keep conservative for reasoning tasks, where models take a lot of time (2 mins)
+
+def _retry_after(exc: Exception) -> Optional[int]:
+    """Best-effort read of a Retry-After hint from a provider exception."""
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers:
+        value = headers.get("retry-after") or headers.get("Retry-After")
+        if value and str(value).isdigit():
+            return int(value)
+    return None
+
+
+def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
+    """Classify an exception raised while calling a provider.
+
+    Returns (should_cooldown_and_retry, retry_after_seconds). Anything that means
+    "this account/model is temporarily unusable, try another" is transient and
+    triggers a reroute: rate limits, server errors (5xx), timeouts, connection
+    errors. Clear client errors (bad request, auth) and anything without a status
+    are fatal, so real bugs surface instead of silently exhausting the pool.
+
+    Note: free tiers signal rate limits inconsistently -- Groq returns HTTP 413
+    ("Request too large" for tokens-per-minute) with a `rate_limit_exceeded`
+    body, not 429 -- so we match on the rate-limit signal first, before status.
+    """
+    message = str(getattr(exc, "message", "") or exc).lower()
+    if "rate_limit" in message or "rate limit" in message or "too many requests" in message:
+        return True, _retry_after(exc)
+
+    # openai SDK exceptions expose .status_code; google-genai APIError exposes .code
+    status = getattr(exc, "status_code", None)
+    if not isinstance(status, int):
+        code = getattr(exc, "code", None)
+        status = code if isinstance(code, int) else None
+
+    if isinstance(status, int):
+        if status in (408, 409, 429) or status >= 500:
+            return True, _retry_after(exc)
+        return False, None  # other 4xx client error -> don't keep rerouting
+
+    name = type(exc).__name__.lower()
+    if "timeout" in name or "connection" in name:
+        return True, None
+
+    return False, None  # unknown error with no status -> surface it
+
 
 class LLMProvider(ABC):
-    """Abstract base class for an asynchronous LLM provider within the pool."""
+    """One free-tier account/model in the pool.
 
-    def __init__(self, name: str, url: str, model: str, api_key: str, priority: int):
+    Owns availability/cooldown state (the router's core value) and builds a
+    LangChain chat model that does the actual API call, so tool calling and
+    message conversion come from battle-tested provider packages.
+    """
+
+    def __init__(self, name: str, url: str, model: str, api_key: str,
+                 priority: int, temperature: float = 0.2):
         self.name = name
         self.url = url
         self.model = model
         self.api_key = api_key
         self.priority = priority
+        self.temperature = temperature
 
         self.is_available = True
         self.cooldown_until = 0.0
         self.consecutive_failures = 0
+        self._chat: Optional[BaseChatModel] = None
 
     @abstractmethod
-    def _build_request(self, messages: List[Dict[str, str]]) -> Tuple[str, dict, dict]:
-        """Build the provider-specific HTTP request using a standard message array."""
-        pass
+    def build_chat_model(self) -> BaseChatModel:
+        """Build the LangChain chat model for this account/model."""
+        raise NotImplementedError
 
-    @abstractmethod
-    def _parse_response(self, res_json: dict) -> str:
-        """Extract the response text from the provider's JSON payload."""
-        pass
+    @property
+    def chat(self) -> BaseChatModel:
+        """The provider's LangChain chat model, built once and cached."""
+        if self._chat is None:
+            self._chat = self.build_chat_model()
+        return self._chat
 
     def check_availability(self) -> bool:
         """Check whether the provider has served its penalty time."""
-        
         if not self.is_available and time.time() > self.cooldown_until:
             self.is_available = True
             self.consecutive_failures = 0
             logger.info(f"{self.name} has finished its cooldown and is available again.")
-        
+
         return self.is_available
 
     def trigger_cooldown(self, retry_after: Optional[int] = None):
-        """Temporarily block the provider. Uses Retry-After header or exponential backoff."""
+        """Temporarily block the provider. Uses Retry-After or exponential backoff."""
         self.is_available = False
         self.consecutive_failures += 1
-        
+
         if retry_after:
             duration = retry_after
         else:
             # Exponential backoff capped at 300 seconds (5 mins)
             duration = min(30 * (2 ** (self.consecutive_failures - 1)), 300)
-            
+
         self.cooldown_until = time.time() + duration
         logger.warning(f"{self.name} exhausted/failed. Entering cooldown for {duration}s.")
-
-    async def send_request(self, session: aiohttp.ClientSession, messages: List[Dict[str, str]]) -> Optional[str]:
-        """Asynchronous entry point for the router."""
-        url, headers, payload = self._build_request(messages)
-        return await self._execute_post(session, url, headers, payload)
-
-    async def _execute_post(self, session: aiohttp.ClientSession, url: str, headers: dict, payload: dict) -> Optional[str]:
-        """Execute the HTTP call asynchronously and handle common errors."""
-        try:
-            async with session.post(url, json=payload, headers=headers, timeout=CONECTION_TIMEOUT) as response:
-                if response.status == 429 or response.status >= 500:
-                    retry_header = response.headers.get("Retry-After")
-                    retry_secs = int(retry_header) if retry_header and retry_header.isdigit() else None
-                    self.trigger_cooldown(retry_secs)
-                    return None
-                
-                response.raise_for_status()
-                data = await response.json()
-                return self._parse_response(data)
-                
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout error with {self.name}. The model lasted longer than {CONECTION_TIMEOUT} seconds to respond.")
-            self.trigger_cooldown()
-            return None
-        except aiohttp.ClientError as e:
-            logger.error(f"Connection error with {self.name}: {e}")
-            self.trigger_cooldown()
-            return None
-        except (KeyError, IndexError, TypeError) as e:
-            logger.error(f"Error parsing response from {self.name}: {e}")
-            return None

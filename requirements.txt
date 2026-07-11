@@ -1,3 +1,9 @@
-aiohttp
 dotenv
 pyyaml
+
+# Agent stack (deepagents on the pooled router)
+deepagents
+langgraph
+langchain-core
+langchain-openai
+langchain-google-genai
