@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "model": "haiku",
+            "prompt": "The agent's turn just ended. Run `git status --porcelain` and `git diff` (plus `git diff --cached` if anything is staged) to see everything that changed in this repo during the turn. If every changed path is inside docs/, or is README.md or CLAUDE.md at the project root, do nothing and stop immediately — do not edit docs in response to a docs-only change. Otherwise, read docs/README.md to see how docs/ is organized (what each file covers, the index of current files) and check the non-doc changes against it. If a change makes any doc listed there inaccurate or incomplete (new/renamed/removed component, changed env var or config schema, changed setup/quick-start steps, changed harness/model-tier responsibilities), make a minimal, factual edit to the affected doc file(s) only — including updating docs/README.md's index if a doc file is added or removed. If nothing changed, or no listed doc is affected, make no changes and say so briefly.",
+            "timeout": 120,
+            "statusMessage": "Haiku checking docs for drift..."
+          }
+        ]
+      }
+    ]
+  }
+}
