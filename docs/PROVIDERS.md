@@ -33,6 +33,18 @@ Free tier, generous rate limits, fast inference.
 4. To add another account, repeat with a different email/Google account and
    use `GROQ_API_KEY_2`, etc.
 
+### Límites de los Modelos Groq
+
+| Modelo | RPM | TPM | RPD | TPD |
+| :--- | :---: | :---: | :---: | :---: |
+| `llama-3.1-8b-instant` | 30 | 6K | 14.4K | 100K |
+| `llama-3.3-70b-versatile` | 30 | 12K | 1K | 100K |
+| `meta-llama/llama-4-scout-17b-16e-instruct` | 30 | 30K | 1K | 100K |
+| `openai/gpt-oss-20b` | 30 | 8K | 1K | 100K |
+| `openai/gpt-oss-120b` | 30 | 8K | 1K | 100K |
+| `qwen/qwen3-32b` | 60 | 6K | 1K | 100K |
+| `qwen/qwen3.6-27b` | 30 | 8K | 1K | 100K |
+
 ## Google Gemini
 
 Free tier via Google AI Studio.
@@ -43,6 +55,17 @@ Free tier via Google AI Studio.
 3. Copy the key into `llm_router/.env` as `GEMINI_API_KEY_1`.
 4. To add another account, repeat with a different Google account and use
    `GEMINI_API_KEY_2`, etc.
+
+### Límites de los Modelos Gemini
+| Modelo | RPM | TPM | RPD |
+| :--- | :--- | :--- | :--- |
+| `gemini-3.5-flash` | 5 | 250K | 20 |
+| `gemini-3.1-flash-lite` | 15 | 250K | 500 |
+| `gemini-3-flash-preview` | 5 | 250K | 20 |
+| `gemini-2.5-flash` | 5 | 250K | 20 |
+| `gemini-2.5-flash-lite` | 10 | 250K | 20 |
+| `gemma-4-31b-it` | 15 | Ilimitado | 1.5K |
+| `gemma-4-26b-a4b-it` | 15 | Ilimitado | 1.5K |
 
 ## Adding a new provider
 

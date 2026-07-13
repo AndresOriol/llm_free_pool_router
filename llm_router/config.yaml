@@ -73,17 +73,28 @@ models:
     model: gemini-3.1-flash-lite
     priority: 9
 
+  - name: Gemini_3_Flash
+    platform: gemini
+    model: gemini-3-flash-preview
+    priority: 10
+
   - name: Gemini_2_5_Flash
     platform: gemini
     model: gemini-2.5-flash
-    priority: 10
+    priority: 11
 
   - name: Gemini_2_5_FlashLite
     platform: gemini
     model: gemini-2.5-flash-lite
-    priority: 11
-
-  - name: Gemini_2_5_Pro
-    platform: gemini
-    model: gemini-2.5-pro
     priority: 12
+
+  - name: Gemma4_31b
+    platform: gemini
+    model: gemma-4-31b-it
+    priority: 13
+
+  - name: Gemma4_26b
+    platform: gemini
+    model: gemma-4-26b-a4b-it
+    priority: 14
+
