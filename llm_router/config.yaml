@@ -4,89 +4,86 @@
 # `compound-mini` agentic systems don't accept a standard `tools` param and are
 # intentionally excluded.
 #
-# For openai_compatible entries, `url` is the v1 base (no /chat/completions).
-# `priority`: lower = tried first. Optional `temperature` defaults to 0.2.
-providers:
-  - name: Groq_Account_1
+# Each model is defined once per platform, not once per account: the loader
+# fans every model out across all accounts on that platform, so adding a
+# second Groq account (say) automatically gives every Groq model a fallback
+# account without touching the models list.
+#
+# `type` selects the provider adapter (openai_compatible or gemini) and, for
+# openai_compatible accounts, `url` is the v1 base (no /chat/completions).
+# `priority`: lower = tried first (shared by every account serving that
+# model). Optional `temperature` defaults to 0.2.
+accounts:
+  - name: groq_1
+    user: [EMAIL_ADDRESS]
+    platform: groq
     type: openai_compatible
     url: https://api.groq.com/openai/v1
-    model: llama-3.3-70b-versatile
     api_key_env: GROQ_API_KEY_1
+  - name: gemini_1
+    user: [EMAIL_ADDRESS]
+    platform: gemini
+    type: gemini
+    url: https://generativelanguage.googleapis.com/v1beta/models
+    api_key_env: GEMINI_API_KEY_1
+
+models:
+  - name: Llama3_70b
+    platform: groq
+    model: llama-3.3-70b-versatile
     priority: 1
 
-  - name: Groq_Account_1_GptOss120b
-    type: openai_compatible
-    url: https://api.groq.com/openai/v1
+  - name: GptOss120b
+    platform: groq
     model: openai/gpt-oss-120b
-    api_key_env: GROQ_API_KEY_1
     priority: 2
 
-  - name: Groq_Account_1_Qwen3_32b
-    type: openai_compatible
-    url: https://api.groq.com/openai/v1
+  - name: Qwen3_32b
+    platform: groq
     model: qwen/qwen3-32b
-    api_key_env: GROQ_API_KEY_1
     priority: 3
 
-  - name: Groq_Account_1_Qwen3_6_27b
-    type: openai_compatible
-    url: https://api.groq.com/openai/v1
+  - name: Qwen3_6_27b
+    platform: groq
     model: qwen/qwen3.6-27b
-    api_key_env: GROQ_API_KEY_1
     priority: 4
 
-  - name: Groq_Account_1_Llama4Scout
-    type: openai_compatible
-    url: https://api.groq.com/openai/v1
+  - name: Llama4Scout
+    platform: groq
     model: meta-llama/llama-4-scout-17b-16e-instruct
-    api_key_env: GROQ_API_KEY_1
     priority: 5
 
-  - name: Groq_Account_1_GptOss20b
-    type: openai_compatible
-    url: https://api.groq.com/openai/v1
+  - name: GptOss20b
+    platform: groq
     model: openai/gpt-oss-20b
-    api_key_env: GROQ_API_KEY_1
     priority: 6
 
-  - name: Groq_Account_1_Llama3_8b
-    type: openai_compatible
-    url: https://api.groq.com/openai/v1
+  - name: Llama3_8b
+    platform: groq
     model: llama-3.1-8b-instant
-    api_key_env: GROQ_API_KEY_1
     priority: 7
 
-  - name: Gemini_Account_1
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
+  - name: Gemini_3_5_Flash
+    platform: gemini
     model: gemini-3.5-flash
-    api_key_env: GEMINI_API_KEY_1
     priority: 8
 
-  - name: Gemini_Account_1_3_1_FlashLite
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
+  - name: Gemini_3_1_FlashLite
+    platform: gemini
     model: gemini-3.1-flash-lite
-    api_key_env: GEMINI_API_KEY_1
     priority: 9
 
-  - name: Gemini_Account_1_2_5_Flash
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
+  - name: Gemini_2_5_Flash
+    platform: gemini
     model: gemini-2.5-flash
-    api_key_env: GEMINI_API_KEY_1
     priority: 10
 
-  - name: Gemini_Account_1_2_5_FlashLite
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
+  - name: Gemini_2_5_FlashLite
+    platform: gemini
     model: gemini-2.5-flash-lite
-    api_key_env: GEMINI_API_KEY_1
     priority: 11
 
-  - name: Gemini_Account_1_2_5_Pro
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
+  - name: Gemini_2_5_Pro
+    platform: gemini
     model: gemini-2.5-pro
-    api_key_env: GEMINI_API_KEY_1
     priority: 12
