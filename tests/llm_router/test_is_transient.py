@@ -47,6 +47,11 @@ def _run():
     # A real client error (bad request/auth/model) must NOT reroute.
     assert is_transient(_Exc("invalid model", status_code=400)) == (False, None)
 
+    # A malformed tool call (Groq 400 `tool_use_failed`) IS transient despite the
+    # 400 -- it's a model-output glitch, so reroute to another model.
+    assert is_transient(_Exc("tool call validation failed: ... code tool_use_failed",
+                             status_code=400)) == (True, None)
+
     # Gemini-style APIError exposes .code, not .status_code.
     assert is_transient(_Exc("overloaded", code=503))[0] is True
 

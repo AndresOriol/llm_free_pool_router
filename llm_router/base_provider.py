@@ -36,6 +36,14 @@ def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     if "rate_limit" in message or "rate limit" in message or "too many requests" in message:
         return True, _retry_after(exc)
 
+    # A malformed tool call is a per-model output glitch (small models sometimes
+    # emit the args inside the tool name); Groq rejects it as HTTP 400
+    # `tool_use_failed`. Reroute to another model rather than killing the run --
+    # the next model usually formats it correctly. Matched before the status
+    # check so it isn't swept up by the "other 4xx -> fatal" rule below.
+    if "tool_use_failed" in message or "tool call validation failed" in message:
+        return True, None
+
     # openai SDK exceptions expose .status_code; google-genai APIError exposes .code
     status = getattr(exc, "status_code", None)
     if not isinstance(status, int):
