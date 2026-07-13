@@ -11,6 +11,12 @@ pip install -r requirements.txt          # deepagents + langchain stack
 python -m agent.coding_agent [workdir]
 ```
 
+Or run it in one-shot mode by piping a task file:
+
+```bash
+python -m agent.coding_agent workdir < brief.md
+```
+
 - `workdir` is the directory the agent reads and edits (defaults to the current
   directory). The agent is **jailed to it** (`virtual_mode=True`): it cannot use
   absolute paths or `..` to reach the rest of the disk.

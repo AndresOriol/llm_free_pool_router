@@ -71,6 +71,20 @@ def main() -> None:
     workdir.mkdir(parents=True, exist_ok=True)
 
     agent = build_agent(workdir)
+
+    if not sys.stdin.isatty():
+        task = sys.stdin.read()
+        history = [{"role": "user", "content": task}]
+        final_state = None
+        seen = 0
+        for state in agent.stream({"messages": history}, stream_mode="values", config=_RUN_CONFIG):
+            final_state = state
+            messages = state["messages"]
+            while seen < len(messages):
+                _render(messages[seen])
+                seen += 1
+        return
+
     print(f"Coding agent ready. Working dir: {workdir}")
     print("Enter a task, or 'exit' to quit.")
 
