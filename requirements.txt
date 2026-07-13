@@ -7,3 +7,7 @@ langgraph
 langchain-core
 langchain-openai
 langchain-google-genai
+
+# The agent runs its target project's tests via `python -m pytest`
+# (RestrictedShellBackend), so pytest must be importable in this interpreter.
+pytest
