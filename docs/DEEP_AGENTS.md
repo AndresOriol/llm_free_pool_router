@@ -50,11 +50,13 @@ LANGSMITH_PROJECT=free-coding-agent
 ```
 
 Every agent run then shows up in the `free-coding-agent` project: the LangGraph
-loop, each step's messages, and tool calls. Because the router call passes its
-`run_manager` down to the chosen provider (`_child_config` in
-[router_chat_model.py](../agent/router_chat_model.py)), each step nests the
-account/model that actually served it — so failover is visible in the trace
-tree. Collect these runs into datasets to evaluate and improve the agent. Leave
+loop, each step's messages, and tool calls. The router calls the chosen
+provider with no explicit config, so each attempt inherits the ambient run
+context and is traced under the current step as the real model that served it
+(`ChatOpenAI`/`ChatGoogleGenerativeAI` with the model name) — and a step that
+walked several rate-limited accounts shows one failed provider run per attempt
+before the one that succeeded, so failover is visible in the trace. Collect
+these runs into datasets to evaluate and improve the agent. Leave
 `LANGSMITH_API_KEY` blank to run with tracing off.
 
 ## Pool requirement

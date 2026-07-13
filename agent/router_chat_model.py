@@ -12,7 +12,6 @@ import logging
 import time
 from typing import Any, List, Optional, Sequence
 
-from langchain_core.callbacks.manager import CallbackManager
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -78,8 +77,13 @@ class RouterChatModel(BaseChatModel):
 
             logger.info(f"Routing to {provider.name} (model={provider.model}).")
             try:
+                # No explicit config: the provider call inherits the ambient run
+                # context, so each attempt is traced under the current agent step
+                # (showing which model served it, and any failed attempts before
+                # it). Passing a hand-built child manager here doesn't change that
+                # nesting and trips the tracer's run_map ("No indexed run ID").
                 message = self._underlying(provider).invoke(
-                    messages, stop=stop, config=_child_config(run_manager), **kwargs)
+                    messages, stop=stop, **kwargs)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
                 if not self._handle_failure(provider, exc):
@@ -108,24 +112,3 @@ class RouterChatModel(BaseChatModel):
         logger.info(f"Whole pool in cooldown; waiting {delay:.0f}s for the next account.")
         time.sleep(delay)
         return True
-
-
-def _child_config(run_manager):
-    """Nest the chosen provider's call under the router's run so LangSmith
-    traces show which account/model actually served each step (and where
-    failover happened). Returns None when there's no tracing context.
-
-    CallbackManagerForLLMRun has no get_child() (LLM runs are normally leaf
-    nodes), so build the child manager by hand the way get_child() would."""
-    if run_manager is None:
-        return None
-    manager = CallbackManager(
-        handlers=run_manager.inheritable_handlers,
-        inheritable_handlers=run_manager.inheritable_handlers,
-        parent_run_id=run_manager.run_id,
-        tags=run_manager.inheritable_tags,
-        inheritable_tags=run_manager.inheritable_tags,
-        metadata=run_manager.inheritable_metadata,
-        inheritable_metadata=run_manager.inheritable_metadata,
-    )
-    return {"callbacks": manager}
