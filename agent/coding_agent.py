@@ -17,11 +17,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from deepagents import create_deep_agent
-from deepagents.backends import FilesystemBackend
 from langchain_core.messages import AIMessage, ToolMessage
 
 from llm_router import load_providers_from_config, AutonomousLLMRouter
 from agent.router_chat_model import RouterChatModel
+from agent.restricted_backend import RestrictedShellBackend
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 # The pool's routing/cooldown logs are the interesting ones; quiet the rest.
@@ -32,7 +32,13 @@ filesystem rooted at the working directory. Use the file tools (ls, read_file, \
 glob, grep) to understand the project before changing it, and write_file / \
 edit_file to make changes. Break non-trivial work into a todo list with \
 write_todos and work through it. Prefer the simplest change that works; match \
-the surrounding code's style. When you finish, briefly summarize what you did."""
+the surrounding code's style. The working directory root is `/`: write files \
+at paths like `/calc.py` and `/test_calc.py` (do NOT invent paths like \
+`/home/user`). Verify your work with the execute tool, which runs from the \
+project root: run the tests with execute(command="python -m pytest") -- it \
+discovers tests in the current directory. Only python and pytest may be run \
+(no pip, no shell). A task is not done until its tests pass. When you finish, \
+briefly summarize what you did."""
 
 _RUN_CONFIG = {"recursion_limit": 150}
 
@@ -47,9 +53,10 @@ def build_agent(workdir: Path):
     # tiers several small-TPM models may reject a large request before a
     # higher-limit account (e.g. Gemini) accepts it.
     model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    # virtual_mode=True jails all paths under workdir (no absolute paths / '..'
-    # escaping to the rest of the disk), so the agent stays inside the project.
-    backend = FilesystemBackend(root_dir=str(workdir), virtual_mode=True)
+    # File tools stay jailed under workdir; execute() is limited to running the
+    # project's own tests (python/pytest), so the agent can close its own loop
+    # without an unrestricted host shell. See agent/restricted_backend.py.
+    backend = RestrictedShellBackend(root_dir=str(workdir))
     return create_deep_agent(model=model, system_prompt=INSTRUCTIONS, backend=backend)
 
 

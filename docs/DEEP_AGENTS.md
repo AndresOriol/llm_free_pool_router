@@ -20,6 +20,11 @@ python -m agent.coding_agent workdir < brief.md
 - `workdir` is the directory the agent reads and edits (defaults to the current
   directory). The agent is **jailed to it** (`virtual_mode=True`): it cannot use
   absolute paths or `..` to reach the rest of the disk.
+- The agent can **run its own tests** via the `execute` tool, but only
+  `python`/`pytest` (no arbitrary shell) with `workdir` as the cwd — see
+  `RestrictedShellBackend` in [restricted_backend.py](../agent/restricted_backend.py).
+  This is a small blast radius, not a real sandbox (`python` is arbitrary code
+  execution); for full isolation run the agent inside a container.
 - Keys come from [llm_router/.env](../llm_router/.env) (see [PROVIDERS.md](PROVIDERS.md)).
 - Type a task at the `>` prompt; `exit` to quit. Tool calls and the agent's
   replies stream to the terminal.
