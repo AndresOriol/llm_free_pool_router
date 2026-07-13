@@ -8,8 +8,9 @@ following the same rules.
 ## Two kinds of docs
 
 1. **Harness docs** — how the project itself gets built: agent model tiers,
-   skills, standards. Project-wide, stable, doesn't change with routine
-   feature work. Currently: [ARCHITECTURE.md](ARCHITECTURE.md).
+   skills, standards, how agent runs are evaluated. Project-wide, stable,
+   doesn't change with routine feature work. Currently:
+   [ARCHITECTURE.md](ARCHITECTURE.md) and [EVAL.md](EVAL.md).
 2. **Design docs** — how the system actually works and why it's built that
    way: module responsibilities, request/failover flow, the reasoning behind
    non-obvious choices. Read instead of the source to understand the logic.
@@ -38,6 +39,7 @@ following the same rules.
 | File | Scope | Covers |
 | --- | --- | --- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | project-wide | agent model tiers, harness, skills |
+| [EVAL.md](EVAL.md) | project-wide | how to score an agent run on a brief (metrics, protocol) |
 | [DESIGN.md](DESIGN.md) | project-wide | how the router/agent code works and why, module by module |
 | [PROVIDERS.md](PROVIDERS.md) | llm_router component | free-tier account signup & wiring |
 | [DEEP_AGENTS.md](DEEP_AGENTS.md) | agent component | running the deepagents coding agent on the pool |
