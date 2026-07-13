@@ -52,6 +52,10 @@ def _run():
     assert is_transient(_Exc("tool call validation failed: ... code tool_use_failed",
                              status_code=400)) == (True, None)
 
+    # Gemini quota exhaustion arrives as RESOURCE_EXHAUSTED with no numeric status
+    # on the wrapped exception -- must still be transient.
+    assert is_transient(_Exc("Error calling model (RESOURCE_EXHAUSTED): 429 ..."))[0] is True
+
     # Gemini-style APIError exposes .code, not .status_code.
     assert is_transient(_Exc("overloaded", code=503))[0] is True
 

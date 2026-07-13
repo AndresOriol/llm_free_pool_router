@@ -33,7 +33,11 @@ def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     body, not 429 -- so we match on the rate-limit signal first, before status.
     """
     message = str(getattr(exc, "message", "") or exc).lower()
-    if "rate_limit" in message or "rate limit" in message or "too many requests" in message:
+    if ("rate_limit" in message or "rate limit" in message or "too many requests" in message
+            # Gemini signals quota/rate exhaustion as RESOURCE_EXHAUSTED and its
+            # LangChain wrapper (ChatGoogleGenerativeAIError) exposes no numeric
+            # status, so match the wording -- a free-tier quota hit is transient.
+            or "resource_exhausted" in message or "exceeded your current quota" in message):
         return True, _retry_after(exc)
 
     # A malformed tool call is a per-model output glitch (small models sometimes
