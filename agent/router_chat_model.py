@@ -12,6 +12,7 @@ import logging
 import time
 from typing import Any, List, Optional, Sequence
 
+from langchain_core.callbacks.manager import CallbackManager
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -112,7 +113,19 @@ class RouterChatModel(BaseChatModel):
 def _child_config(run_manager):
     """Nest the chosen provider's call under the router's run so LangSmith
     traces show which account/model actually served each step (and where
-    failover happened). Returns None when there's no tracing context."""
+    failover happened). Returns None when there's no tracing context.
+
+    CallbackManagerForLLMRun has no get_child() (LLM runs are normally leaf
+    nodes), so build the child manager by hand the way get_child() would."""
     if run_manager is None:
         return None
-    return {"callbacks": run_manager.get_child()}
+    manager = CallbackManager(
+        handlers=run_manager.inheritable_handlers,
+        inheritable_handlers=run_manager.inheritable_handlers,
+        parent_run_id=run_manager.run_id,
+        tags=run_manager.inheritable_tags,
+        inheritable_tags=run_manager.inheritable_tags,
+        metadata=run_manager.inheritable_metadata,
+        inheritable_metadata=run_manager.inheritable_metadata,
+    )
+    return {"callbacks": manager}
