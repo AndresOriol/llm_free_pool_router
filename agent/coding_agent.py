@@ -9,12 +9,9 @@ Run:
     python -m agent.coding_agent [workdir]
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
-
-# Allow `python agent/coding_agent.py` as well as `python -m agent.coding_agent`.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from deepagents import create_deep_agent
 from langchain_core.messages import AIMessage, ToolMessage
@@ -27,20 +24,24 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # The pool's routing/cooldown logs are the interesting ones; quiet the rest.
 logging.getLogger("LLMRouter").setLevel(logging.INFO)
 
-INSTRUCTIONS = """You are an autonomous coding agent working on a real local \
-filesystem rooted at the working directory. Use the file tools (ls, read_file, \
-glob, grep) to understand the project before changing it, and write_file / \
-edit_file to make changes. Break non-trivial work into a todo list with \
-write_todos and work through it. Prefer the simplest change that works; match \
-the surrounding code's style. The working directory root is `/`: write files \
-at paths like `/calc.py` and `/test_calc.py` (do NOT invent paths like \
-`/home/user`). Verify your work with the execute tool, which runs from the \
-project root: run the tests with execute(command="python -m pytest") -- it \
-discovers tests in the current directory. Only python and pytest may be run \
-(no pip, no shell). A task is not done until its tests pass. When you finish, \
-briefly summarize what you did."""
 
 _RUN_CONFIG = {"recursion_limit": 150}
+
+def load_agent_instructions(workdir: Path): 
+    """Load CLAUDE.md and AGENTS.md files from the working directory."""
+
+    # Important: The order of the files is important.
+    agent_instruction_files = ["CLAUDE.md", "AGENTS.md"]
+    
+    for instruction_file in agent_instruction_files:
+        instruction_path = workdir / instruction_file
+        if instruction_path.is_file():
+            try:
+                return instruction_path.read_text(encoding="utf-8")
+            except Exception as e:
+                logging.warning(f"Error reading {instruction_file}: {e}")
+
+    return ""
 
 
 def build_agent(workdir: Path):
@@ -49,15 +50,12 @@ def build_agent(workdir: Path):
         raise SystemExit("No providers loaded. Set your keys in llm_router/.env.")
 
     router = AutonomousLLMRouter(providers)
-    # Give the failover budget room to walk the whole pool in one step: on free
-    # tiers several small-TPM models may reject a large request before a
-    # higher-limit account (e.g. Gemini) accepts it.
     model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    # File tools stay jailed under workdir; execute() is limited to running the
-    # project's own tests (python/pytest), so the agent can close its own loop
-    # without an unrestricted host shell. See agent/restricted_backend.py.
     backend = RestrictedShellBackend(root_dir=str(workdir))
-    return create_deep_agent(model=model, system_prompt=INSTRUCTIONS, backend=backend)
+
+    system_prompt = load_agent_instructions(workdir)
+
+    return create_deep_agent(model=model, system_prompt=system_prompt, backend=backend)
 
 
 def _render(message) -> None:
