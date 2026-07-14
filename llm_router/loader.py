@@ -68,6 +68,7 @@ def load_providers_from_config(config_path=None) -> List[LLMProvider]:
                 api_key=api_key,
                 priority=conf["priority"],
                 temperature=conf.get("temperature", 0.2),
+                max_input_tokens=conf.get("max_input_tokens"),
             ))
 
     return providers

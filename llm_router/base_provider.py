@@ -19,6 +19,55 @@ def _retry_after(exc: Exception) -> Optional[int]:
     return None
 
 
+def estimate_tokens(messages, tools=None) -> int:
+    """Rough token estimate for a request: ~4 chars per token over the
+    serialized messages and tool schemas.
+
+    Deliberately a cheap heuristic -- no per-provider tokenizer, no dependency.
+    It only needs to be good enough to keep a request off a model whose window
+    it clearly overflows, so the router can pick a higher-capacity provider up
+    front instead of walking the whole small-TPM pool on 413s.
+    """
+    chars = 0
+    for message in messages or []:
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, dict):
+            content = message.get("content")
+        chars += len(str(content))
+    for tool in tools or []:
+        chars += len(str(tool))
+    return chars // 4
+
+
+def provider_error_detail(exc: Exception) -> Optional[str]:
+    """Pull the provider's structured error body out of an SDK exception.
+
+    Groq's `tool_use_failed` (HTTP 400) carries the model's raw malformed output
+    in `error.failed_generation` -- the key clue for *why* a tool call was
+    rejected. The router reroutes past this error, so without surfacing the body
+    the failure is invisible. Returns a readable one-liner, or None when there's
+    no structured body to show.
+    """
+    body = getattr(exc, "body", None)
+    if not isinstance(body, dict):
+        response = getattr(exc, "response", None)
+        try:
+            body = response.json() if response is not None else None
+        except Exception:  # noqa: BLE001 - body simply isn't JSON
+            body = None
+    if not isinstance(body, dict):
+        return None
+
+    error = body.get("error", body)
+    if not isinstance(error, dict):
+        return None
+
+    parts = [f"{key}={error[key]}"
+             for key in ("code", "message", "failed_generation")
+             if error.get(key)]
+    return "; ".join(parts) or None
+
+
 def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     """Classify an exception raised while calling a provider.
 
@@ -75,13 +124,17 @@ class LLMProvider(ABC):
     """
 
     def __init__(self, name: str, url: str, model: str, api_key: str,
-                 priority: int, temperature: float = 0.2):
+                 priority: int, temperature: float = 0.2,
+                 max_input_tokens: Optional[int] = None):
         self.name = name
         self.url = url
         self.model = model
         self.api_key = api_key
         self.priority = priority
         self.temperature = temperature
+        # Per-request token ceiling (min of the model's TPM and context window).
+        # None means "unknown, never filter it out" -- see get_best_provider.
+        self.max_input_tokens = max_input_tokens
 
         self.is_available = True
         self.cooldown_until = 0.0

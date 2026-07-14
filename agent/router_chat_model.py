@@ -17,7 +17,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import ConfigDict
 
-from llm_router.base_provider import is_transient
+from llm_router.base_provider import estimate_tokens, is_transient, provider_error_detail
 
 logger = logging.getLogger("LLMRouter")
 
@@ -68,14 +68,17 @@ class RouterChatModel(BaseChatModel):
     def _generate(self, messages: List[BaseMessage], stop=None,
                   run_manager=None, **kwargs) -> ChatResult:
         last_exc: Optional[Exception] = None
+        # Size the request once so routing can skip models it would overflow.
+        estimated = estimate_tokens(messages, self.bound_tools)
         for _ in range(self.max_retries):
-            provider = self.router.get_best_provider()
+            provider = self.router.get_best_provider(estimated)
             if provider is None:
                 if self._wait_for_cooldown():
                     continue
                 break
 
-            logger.info(f"Routing to {provider.name} (model={provider.model}).")
+            logger.info(f"Routing to {provider.name} (model={provider.model}, "
+                        f"~{estimated} tok).")
             try:
                 # No explicit config: the provider call inherits the ambient run
                 # context, so each attempt is traced under the current agent step
@@ -86,19 +89,32 @@ class RouterChatModel(BaseChatModel):
                     messages, stop=stop, **kwargs)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
-                if not self._handle_failure(provider, exc):
+                if not self._handle_failure(provider, exc, run_manager):
                     raise
                 last_exc = exc
 
         raise RuntimeError("All providers exhausted across the pool.") from last_exc
 
-    def _handle_failure(self, provider, exc: Exception) -> bool:
-        """Cooldown + reroute on transient errors; return False to re-raise."""
+    def _handle_failure(self, provider, exc: Exception, run_manager=None) -> bool:
+        """Cooldown + reroute on transient errors; return False to re-raise.
+
+        A rerouted error is easy to lose track of, so surface the provider's
+        error body (Groq's `tool_use_failed` puts the model's raw malformed
+        output in `failed_generation`): log it at WARNING and, when tracing,
+        attach it to the run via `on_text` so the failed attempt shows up in
+        LangSmith instead of vanishing behind the successful reroute.
+        """
         transient, retry_after = is_transient(exc)
+        detail = provider_error_detail(exc)
         if not transient:
             logger.error(f"{provider.name} failed with a non-transient error: {exc!r}")
             return False
-        logger.warning(f"{provider.name} transient failure ({exc!r}); rerouting.")
+
+        reason = detail or repr(exc)
+        logger.warning(f"{provider.name} transient failure; rerouting. {reason}")
+        if detail and run_manager is not None:
+            run_manager.on_text(f"\n[router] {provider.name} failed ({provider.model}): "
+                                f"{detail}\n")
         provider.trigger_cooldown(retry_after)
         return True
 

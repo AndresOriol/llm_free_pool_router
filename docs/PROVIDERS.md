@@ -35,6 +35,12 @@ Free tier, generous rate limits, fast inference.
 
 ### Límites de los Modelos Groq
 
+These TPM figures aren't just reference: each model's `max_input_tokens` in
+[config.yaml](../llm_router/config.yaml) is set from them (`min(TPM, context
+window)`) and the router uses it to route a large request to a model that can
+hold it — see "Size-aware filtering" in [DESIGN.md](DESIGN.md). Update
+`max_input_tokens` when a provider changes a limit.
+
 | Modelo | RPM | TPM | RPD | TPD |
 | :--- | :---: | :---: | :---: | :---: |
 | `llama-3.1-8b-instant` | 30 | 6K | 14.4K | 100K |

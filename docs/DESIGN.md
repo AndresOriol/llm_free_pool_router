@@ -128,15 +128,31 @@ the ordering in [base_provider.py](../llm_router/base_provider.py):
 
 ## Selection: `AutonomousLLMRouter.get_best_provider()`
 
-Filter providers to those where `check_availability()` is `True`, return the
-one with the lowest `priority` (`min(...)`). `priority` is a manually-assigned
-number in `config.yaml` — lower tried first. This is deliberately not scored
-by anything dynamic (latency, cost, success rate): priority order is set once
-per config to encode "prefer the fast/cheap/high-limit model first," and the
-cooldown mechanism is what actually reacts to real-time availability. Keeping
-selection this simple is a direct application of the "boring and reliable"
-standard in [CLAUDE.md](../CLAUDE.md) — a scoring model would add tuning
-surface with no evidence it's needed yet.
+Filter providers to those where `check_availability()` is `True`, then return
+the one with the lowest `priority` (`min(...)`). `priority` is a
+manually-assigned number in `config.yaml` — lower tried first. This is
+deliberately not scored by anything dynamic (latency, cost, success rate):
+priority order is set once per config to encode "prefer the fast/cheap/high-limit
+model first," and the cooldown mechanism is what actually reacts to real-time
+availability. Keeping selection this simple is a direct application of the
+"boring and reliable" standard in [CLAUDE.md](../CLAUDE.md) — a scoring model
+would add tuning surface with no evidence it's needed yet.
+
+**Size-aware filtering.** Selection also takes an optional `estimated_tokens`
+(from `estimate_tokens()`, a chars/4 heuristic over the messages and tool
+schemas). Providers whose `max_input_tokens` ceiling — `min(TPM, context
+window)` from `config.yaml`, see [PROVIDERS.md](PROVIDERS.md) — the request
+would overflow are filtered out *before* the priority sort, so a large request
+routes straight to a high-capacity model (Gemini/Gemma) instead of getting
+rejected with HTTP 413 by every small-TPM Groq account in turn and benching
+them. This matters because a request structurally larger than a model's TPM
+never fits it — cooling the account down and retrying later is futile, and the
+old behaviour drained the whole pool down to Gemini's tiny daily quota. A
+provider with no declared ceiling is never filtered out; when *nothing* fits,
+selection falls back to the largest available window (best-effort attempt over
+a stall — the too-large error then surfaces via the failure logging below). A
+`_FIT_SAFETY` margin (0.9) leaves headroom for the estimate's imprecision and
+the model's own output sharing the TPM budget.
 
 ## The failover loop: `RouterChatModel._generate`
 
@@ -186,14 +202,26 @@ the model actually serving the request isn't known until routing happens.
 
 ## Tracing: why failover is visible in LangSmith
 
-`_child_config()` passes `run_manager.get_child()` as the `callbacks` config
-into the underlying provider's `.invoke()`/`.ainvoke()`. This nests the
-provider's actual call as a child run under the router's own run in
-LangSmith, so a trace shows not just "the agent called a model" but which
-account/model served each step — including the point where a step rerouted
-after a cooldown. Without this, tracing would show a single opaque "router"
-node and failover would be invisible. See
-[DEEP_AGENTS.md](DEEP_AGENTS.md#tracing-langsmith) for how to turn tracing on.
+The router calls the chosen provider's `.invoke()` with no explicit config, so
+the provider's actual call inherits the ambient run context and is traced as a
+child run under the current agent step — a trace shows not just "the agent
+called a model" but which account/model served it (`ChatOpenAI` /
+`ChatGoogleGenerativeAI` with the model name). Passing a hand-built child
+callback manager here doesn't improve that nesting and trips the tracer's
+run_map with "No indexed run ID", so it's deliberately not done (an earlier
+`_child_config()` that did this was removed).
+
+The gap that leaves: a **rerouted** attempt is caught and swallowed inside
+`_generate`, so the successful reroute is what the step records — the failed
+attempt (e.g. a Groq `tool_use_failed`) can vanish from the trace. So
+`_handle_failure` closes it explicitly: it pulls the provider's error body via
+`provider_error_detail()` (Groq puts the model's raw malformed output in
+`error.failed_generation`), logs it at WARNING, and — when a `run_manager` is
+present — calls `run_manager.on_text(...)` to attach the failure to the router's
+own run. That way the *reason* a step rerouted is both in the logs and in
+LangSmith, without depending on the swallowed child attempt showing up on its
+own. See [DEEP_AGENTS.md](DEEP_AGENTS.md#tracing-langsmith) for turning tracing
+on.
 
 ## Config and provider construction
 

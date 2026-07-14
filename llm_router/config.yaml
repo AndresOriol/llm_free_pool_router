@@ -13,6 +13,12 @@
 # openai_compatible accounts, `url` is the v1 base (no /chat/completions).
 # `priority`: lower = tried first (shared by every account serving that
 # model). Optional `temperature` defaults to 0.2.
+#
+# `max_input_tokens` is the per-request token ceiling the router uses to route a
+# large request to a model that can hold it (see get_best_provider). It's
+# min(TPM, context window): on Groq the TPM is the bottleneck (see
+# docs/PROVIDERS.md), while Gemma has unlimited TPM so its context window is the
+# ceiling. Omit it only for a model whose limit is genuinely unknown.
 accounts:
   - name: groq_1
     user: [EMAIL_ADDRESS]
@@ -32,69 +38,83 @@ models:
     platform: groq
     model: llama-3.3-70b-versatile
     priority: 1
+    max_input_tokens: 12000
 
   - name: GptOss120b
     platform: groq
     model: openai/gpt-oss-120b
     priority: 2
+    max_input_tokens: 8000
 
   - name: Qwen3_32b
     platform: groq
     model: qwen/qwen3-32b
     priority: 3
+    max_input_tokens: 6000
 
   - name: Qwen3_6_27b
     platform: groq
     model: qwen/qwen3.6-27b
     priority: 4
+    max_input_tokens: 8000
 
   - name: Llama4Scout
     platform: groq
     model: meta-llama/llama-4-scout-17b-16e-instruct
     priority: 5
+    max_input_tokens: 30000
 
   - name: GptOss20b
     platform: groq
     model: openai/gpt-oss-20b
     priority: 6
+    max_input_tokens: 8000
 
   - name: Llama3_8b
     platform: groq
     model: llama-3.1-8b-instant
     priority: 7
+    max_input_tokens: 6000
 
   - name: Gemini_3_5_Flash
     platform: gemini
     model: gemini-3.5-flash
     priority: 8
+    max_input_tokens: 250000
 
   - name: Gemini_3_1_FlashLite
     platform: gemini
     model: gemini-3.1-flash-lite
     priority: 9
+    max_input_tokens: 250000
 
   - name: Gemini_3_Flash
     platform: gemini
     model: gemini-3-flash-preview
     priority: 10
+    max_input_tokens: 250000
 
   - name: Gemini_2_5_Flash
     platform: gemini
     model: gemini-2.5-flash
     priority: 11
+    max_input_tokens: 250000
 
   - name: Gemini_2_5_FlashLite
     platform: gemini
     model: gemini-2.5-flash-lite
     priority: 12
+    max_input_tokens: 250000
 
+  # Gemma has unlimited TPM, so its ceiling is the model's context window.
   - name: Gemma4_31b
     platform: gemini
     model: gemma-4-31b-it
     priority: 13
+    max_input_tokens: 128000
 
   - name: Gemma4_26b
     platform: gemini
     model: gemma-4-26b-a4b-it
     priority: 14
-
+    max_input_tokens: 128000
