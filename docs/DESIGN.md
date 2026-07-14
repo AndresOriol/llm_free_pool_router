@@ -223,6 +223,27 @@ LangSmith, without depending on the swallowed child attempt showing up on its
 own. See [DEEP_AGENTS.md](DEEP_AGENTS.md#tracing-langsmith) for turning tracing
 on.
 
+## Model tiers
+
+`priority` in [config.yaml](../llm_router/config.yaml) is grouped into four
+bands (reasoning, mid, workhorse fallback, last resort) instead of one flat
+list. This came out of reading actual LangSmith traces of the `free-coding-agent`
+project: on any task longer than ~10 steps, Groq's free tier behaves as **one
+shared org-wide request budget across every model on the account**, not six
+independent pools — a burst of steps exhausts the whole Groq side within
+seconds regardless of which Groq model is tried first, and the stronger Gemini
+models (`gemini-3.5-flash`) get hit hard enough to 429/503 too. What's left
+standing with headroom is `gemini-3.1-flash-lite`, which then ends up serving
+most of the real implementation work on longer tasks by exhaustion, not by
+choice.
+
+Tiering doesn't fix that fallthrough — it only decides who's tried first while
+capacity exists — but it does mean the *early* steps of every run (and the
+entirety of short runs) get the router's best judgment instead of whichever
+config-file position happened to be first. Fixing the fallthrough itself needs
+more account capacity (a second Groq/Gemini account), tracked as a follow-up,
+not a routing change.
+
 ## Config and provider construction
 
 `loader.load_providers_from_config()` ([loader.py](../llm_router/loader.py))

@@ -19,6 +19,14 @@
 # min(TPM, context window): on Groq the TPM is the bottleneck (see
 # docs/PROVIDERS.md), while Gemma has unlimited TPM so its context window is the
 # ceiling. Omit it only for a model whose limit is genuinely unknown.
+#
+# Priority is grouped into four capability tiers (see docs/DESIGN.md#model-tiers):
+# reasoning (1-9) -> mid (10-19) -> workhorse fallback (20-29) -> last resort
+# (30+). Within a tier, order doesn't matter much -- Groq's free tier shares one
+# org-wide request budget across every model on the account, so a burst of
+# steps exhausts the whole Groq side almost at once regardless of which Groq
+# model is listed first. The gaps between tiers leave room to slot in new
+# models without renumbering everything.
 accounts:
   - name: groq_1
     user: [EMAIL_ADDRESS]
@@ -34,6 +42,7 @@ accounts:
     api_key_env: GEMINI_API_KEY_1
 
 models:
+  # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
   - name: Llama3_70b
     platform: groq
     model: llama-3.3-70b-versatile
@@ -46,75 +55,81 @@ models:
     priority: 2
     max_input_tokens: 8000
 
+  - name: Gemini_3_5_Flash
+    platform: gemini
+    model: gemini-3.5-flash
+    priority: 3
+    max_input_tokens: 250000
+
+  # -- Mid tier: solid for well-scoped implementation steps.
   - name: Qwen3_32b
     platform: groq
     model: qwen/qwen3-32b
-    priority: 3
+    priority: 10
     max_input_tokens: 6000
 
   - name: Qwen3_6_27b
     platform: groq
     model: qwen/qwen3.6-27b
-    priority: 4
+    priority: 11
     max_input_tokens: 8000
-
-  - name: Llama4Scout
-    platform: groq
-    model: meta-llama/llama-4-scout-17b-16e-instruct
-    priority: 5
-    max_input_tokens: 30000
-
-  - name: GptOss20b
-    platform: groq
-    model: openai/gpt-oss-20b
-    priority: 6
-    max_input_tokens: 8000
-
-  - name: Llama3_8b
-    platform: groq
-    model: llama-3.1-8b-instant
-    priority: 7
-    max_input_tokens: 6000
-
-  - name: Gemini_3_5_Flash
-    platform: gemini
-    model: gemini-3.5-flash
-    priority: 8
-    max_input_tokens: 250000
-
-  - name: Gemini_3_1_FlashLite
-    platform: gemini
-    model: gemini-3.1-flash-lite
-    priority: 9
-    max_input_tokens: 250000
 
   - name: Gemini_3_Flash
     platform: gemini
     model: gemini-3-flash-preview
-    priority: 10
+    priority: 12
     max_input_tokens: 250000
 
   - name: Gemini_2_5_Flash
     platform: gemini
     model: gemini-2.5-flash
-    priority: 11
+    priority: 13
+    max_input_tokens: 250000
+
+  # -- Workhorse fallback: weaker, but the free tier's real bottleneck (Groq's
+  # shared org-wide request budget) routinely dumps whole tasks here once the
+  # reasoning/mid tiers exhaust, so quality here matters more than the tier
+  # name implies. See docs/DESIGN.md#model-tiers.
+  - name: Llama4Scout
+    platform: groq
+    model: meta-llama/llama-4-scout-17b-16e-instruct
+    priority: 20
+    max_input_tokens: 30000
+
+  - name: GptOss20b
+    platform: groq
+    model: openai/gpt-oss-20b
+    priority: 21
+    max_input_tokens: 8000
+
+  - name: Gemini_3_1_FlashLite
+    platform: gemini
+    model: gemini-3.1-flash-lite
+    priority: 22
     max_input_tokens: 250000
 
   - name: Gemini_2_5_FlashLite
     platform: gemini
     model: gemini-2.5-flash-lite
-    priority: 12
+    priority: 23
     max_input_tokens: 250000
+
+  # -- Last resort: only when everything above is in cooldown.
+  - name: Llama3_8b
+    platform: groq
+    model: llama-3.1-8b-instant
+    priority: 30
+    max_input_tokens: 6000
 
   # Gemma has unlimited TPM, so its ceiling is the model's context window.
   - name: Gemma4_31b
     platform: gemini
     model: gemma-4-31b-it
-    priority: 13
+    priority: 31
     max_input_tokens: 128000
 
   - name: Gemma4_26b
     platform: gemini
     model: gemma-4-26b-a4b-it
-    priority: 14
+    priority: 32
     max_input_tokens: 128000
