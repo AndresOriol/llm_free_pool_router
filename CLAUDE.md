@@ -68,6 +68,16 @@ just the current llm_router stage; read it before adding a new doc.
   solution that works, standard library over dependencies, no speculative
   abstraction. Apply the `ponytail` skill on non-trivial changes.
 
+## Changing the harness
+
+Changes to the agent harness (router config, system prompt, backend, agent
+loop) are evaluated, not argued. Each candidate is a branch = one *agent
+configuration*, run against scenario-based tests and compared to the baseline
+on quantitative metrics; a change that can't be shown to help doesn't merge.
+The protocol, metrics and promotion rule are in [docs/EVAL.md](docs/EVAL.md);
+the runner and result data live in the separate `agent_evals` repo so they
+survive branch switching.
+
 ## Commits
 
 - No AI/agent attribution in commit messages — no "Co-Authored-By", no
