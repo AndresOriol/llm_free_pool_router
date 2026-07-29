@@ -1,0 +1,7 @@
+name: baseline
+repo: ../..
+ref: master
+# Keys are injected from here into the subprocess: worktrees never contain .env
+env_file: ../../llm_router/.env
+overrides:
+  env: {}

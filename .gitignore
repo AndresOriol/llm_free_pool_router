@@ -1,2 +1,3 @@
 /llm_router/.env
-*.pyc
+*.pycevals/.worktrees/
+evals/results/

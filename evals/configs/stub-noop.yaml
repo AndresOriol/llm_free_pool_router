@@ -1,0 +1,7 @@
+name: stub-noop
+repo: ../..
+ref: master
+agent_cmd: [python, evals/fake_agent.py, "{workdir}"]
+overrides:
+  env:
+    FAKE_MODE: noop
