@@ -64,6 +64,24 @@ before the one that succeeded, so failover is visible in the trace. Collect
 these runs into datasets to evaluate and improve the agent. Leave
 `LANGSMITH_API_KEY` blank to run with tracing off.
 
+## Local trace (for evaluation)
+
+LangSmith runs expire, so scoring a run later needs a local record. Set
+`EVAL_TRACE_FILE` and the agent appends one JSON object per LLM/tool event to
+that path:
+
+```bash
+EVAL_TRACE_FILE=run.jsonl python -m agent.coding_agent workdir < brief.md
+```
+
+Unset, nothing is attached and the agent behaves exactly as before. The handler
+([agent/trace.py](../agent/trace.py)) is registered as an inheritable callback
+on the run config, so it records the *provider* models the router delegates to,
+not just the wrapper — a rerouted attempt shows up as an `llm_error` followed by
+another `llm_start` on a different model, which is what makes failover
+countable. Tool args and outputs are clipped to 2 KB. This file is the input to
+every automatic metric in [EVAL.md](EVAL.md).
+
 ## Pool requirement
 
 Every model in [config.yaml](../llm_router/config.yaml) must support tool
