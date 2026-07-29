@@ -19,6 +19,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from llm_router import load_providers_from_config, AutonomousLLMRouter
 from agent.router_chat_model import RouterChatModel
 from agent.restricted_backend import RestrictedShellBackend
+from agent.trace import tracer_from_env
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 # The pool's routing/cooldown logs are the interesting ones; quiet the rest.
@@ -27,7 +28,22 @@ logging.getLogger("LLMRouter").setLevel(logging.INFO)
 
 _RUN_CONFIG = {"recursion_limit": 150}
 
-def load_agent_instructions(workdir: Path): 
+
+def run_config() -> dict:
+    """The run config, with the eval tracer attached if EVAL_TRACE_FILE is set.
+
+    Registered here rather than on the model so it's inheritable: the router's
+    provider calls are child runs, so failover shows up in the trace too.
+    """
+    config = dict(_RUN_CONFIG)
+    tracer = tracer_from_env()
+    if tracer is not None:
+        config["callbacks"] = [tracer]
+        logging.info(f"Writing eval trace to {tracer.path}")
+    return config
+
+
+def load_agent_instructions(workdir: Path):
     """Load CLAUDE.md and AGENTS.md files from the working directory."""
 
     # Important: The order of the files is important.
@@ -76,13 +92,14 @@ def main() -> None:
     workdir.mkdir(parents=True, exist_ok=True)
 
     agent = build_agent(workdir)
+    config = run_config()
 
     if not sys.stdin.isatty():
         task = sys.stdin.read()
         history = [{"role": "user", "content": task}]
         final_state = None
         seen = 0
-        for state in agent.stream({"messages": history}, stream_mode="values", config=_RUN_CONFIG):
+        for state in agent.stream({"messages": history}, stream_mode="values", config=config):
             final_state = state
             messages = state["messages"]
             while seen < len(messages):
@@ -107,7 +124,7 @@ def main() -> None:
         history.append({"role": "user", "content": user})
         final_state = None
         seen = len(history)
-        for state in agent.stream({"messages": history}, stream_mode="values", config=_RUN_CONFIG):
+        for state in agent.stream({"messages": history}, stream_mode="values", config=config):
             final_state = state
             messages = state["messages"]
             while seen < len(messages):
