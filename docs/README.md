@@ -10,10 +10,12 @@ following the same rules.
 1. **Harness docs** — how the project itself gets built: agent model tiers,
    skills, standards, how agent runs are evaluated. Project-wide, stable,
    doesn't change with routine feature work. Currently:
-   [ARCHITECTURE.md](ARCHITECTURE.md) and [EVAL.md](EVAL.md). Note that
-   EVAL.md's *implementation* deliberately lives in a separate repo
-   (`agent_evals`); only the design and the trace instrumentation it requires
-   belong here.
+   [ARCHITECTURE.md](ARCHITECTURE.md), [EVAL.md](EVAL.md) and
+   [EVAL_STATUS.md](EVAL_STATUS.md). The two eval docs split by lifetime:
+   EVAL.md is the design and changes rarely; EVAL_STATUS.md is the running
+   state and is expected to change often. The harness itself lives in
+   [evals/](../evals/); only the *scenarios* live in the separate `agent_evals`
+   repo.
 2. **Design docs** — how the system actually works and why it's built that
    way: module responsibilities, request/failover flow, the reasoning behind
    non-obvious choices. Read instead of the source to understand the logic.
@@ -43,6 +45,7 @@ following the same rules.
 | --- | --- | --- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | project-wide | agent model tiers, harness, skills |
 | [EVAL.md](EVAL.md) | project-wide | evaluation system design: scenarios, metrics, comparing agent configurations |
+| [EVAL_STATUS.md](EVAL_STATUS.md) | project-wide | running state of the evaluation: what's built, current numbers, blockers, next steps |
 | [DESIGN.md](DESIGN.md) | project-wide | how the router/agent code works and why, module by module |
 | [PROVIDERS.md](PROVIDERS.md) | llm_router component | free-tier account signup & wiring |
 | [DEEP_AGENTS.md](DEEP_AGENTS.md) | agent component | running the deepagents coding agent on the pool |

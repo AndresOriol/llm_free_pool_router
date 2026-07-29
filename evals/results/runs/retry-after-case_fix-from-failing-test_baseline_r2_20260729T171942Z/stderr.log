@@ -1,0 +1,215 @@
+2026-07-29 19:19:46,251 - INFO - Writing eval trace to C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\results\runs\retry-after-case_fix-from-failing-test_baseline_r2_20260729T171942Z\trace.jsonl
+2026-07-29 19:19:46,655 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~7017 tok).
+2026-07-29 19:19:47,361 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-07-29 19:19:47,372 - WARNING - Llama3_70b_groq_1 transient failure; rerouting. code=rate_limit_exceeded; message=Rate limit reached for model `llama-3.3-70b-versatile` in organization `org_01kx94z78jfwhb1d0bqyftkajf` service tier `on_demand` on tokens per minute (TPM): Limit 12000, Used 5781, Requested 10626. Please try again in 22.035s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing
+2026-07-29 19:19:47,372 - WARNING - Llama3_70b_groq_1 exhausted/failed. Entering cooldown for 23s.
+2026-07-29 19:19:47,372 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~7017 tok).
+2026-07-29 19:19:47,452 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-07-29 19:19:47,456 - WARNING - GptOss120b_groq_1 transient failure; rerouting. code=rate_limit_exceeded; message=Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kx94z78jfwhb1d0bqyftkajf` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 3154, Requested 6225. Please try again in 10.3425s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing
+2026-07-29 19:19:47,456 - WARNING - GptOss120b_groq_1 exhausted/failed. Entering cooldown for 11s.
+2026-07-29 19:19:47,457 - INFO - Routing to Gemini_3_5_Flash_gemini_1 (model=gemini-3.5-flash, ~7017 tok).
+2026-07-29 19:19:48,961 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent "HTTP/1.1 503 Service Unavailable"
+2026-07-29 19:19:48,974 - WARNING - Gemini_3_5_Flash_gemini_1 transient failure; rerouting. code=503; message=This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.
+2026-07-29 19:19:48,974 - WARNING - Gemini_3_5_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-07-29 19:19:48,974 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~7017 tok).
+2026-07-29 19:19:49,044 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-07-29 19:19:49,049 - WARNING - Qwen3_6_27b_groq_1 transient failure; rerouting. code=rate_limit_exceeded; message=Rate limit reached for model `qwen/qwen3.6-27b` in organization `org_01kx94z78jfwhb1d0bqyftkajf` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 4221, Requested 7086. Please try again in 24.8025s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing
+2026-07-29 19:19:49,049 - WARNING - Qwen3_6_27b_groq_1 exhausted/failed. Entering cooldown for 25s.
+2026-07-29 19:19:49,049 - INFO - Routing to Gemini_3_Flash_gemini_1 (model=gemini-3-flash-preview, ~7017 tok).
+2026-07-29 19:19:49,259 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-29 19:19:49,263 - WARNING - Gemini_3_Flash_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-3-flash-preview' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3-flash\\nPlease retry in 10.775274951s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '10s'}]}}")
+2026-07-29 19:19:49,263 - WARNING - Gemini_3_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-07-29 19:19:49,263 - INFO - Routing to Gemini_2_5_Flash_gemini_1 (model=gemini-2.5-flash, ~7017 tok).
+2026-07-29 19:19:50,997 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-29 19:19:51,029 - INFO - Routing to Gemini_2_5_Flash_gemini_1 (model=gemini-2.5-flash, ~7023 tok).
+2026-07-29 19:19:51,855 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-29 19:19:51,886 - INFO - Routing to Gemini_2_5_Flash_gemini_1 (model=gemini-2.5-flash, ~7029 tok).
+2026-07-29 19:19:53,095 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-29 19:19:53,125 - INFO - Routing to Gemini_2_5_Flash_gemini_1 (model=gemini-2.5-flash, ~7244 tok).
+2026-07-29 19:19:53,230 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-29 19:19:53,236 - WARNING - Gemini_2_5_Flash_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-2.5-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-2.5-flash\\nPlease retry in 6.806922094s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '6s'}]}}")
+2026-07-29 19:19:53,236 - WARNING - Gemini_2_5_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-07-29 19:19:53,236 - INFO - Routing to Llama4Scout_groq_1 (model=meta-llama/llama-4-scout-17b-16e-instruct, ~7244 tok).
+2026-07-29 19:19:53,298 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 404 Not Found"
+2026-07-29 19:19:53,305 - ERROR - Llama4Scout_groq_1 failed with a non-transient error: NotFoundError("Error code: 404 - {'error': {'message': 'The model `meta-llama/llama-4-scout-17b-16e-instruct` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}")
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\.worktrees\baseline-4d76c2fb\agent\coding_agent.py", line 141, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\.worktrees\baseline-4d76c2fb\agent\coding_agent.py", line 106, in main
+    for state in agent.stream({"messages": history}, stream_mode="values", config=config):
+                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\pregel\main.py", line 2967, in stream
+    for _ in runner.tick(
+             ~~~~~~~~~~~^
+        [t for t in loop.tasks.values() if not t.writes],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        schedule_task=loop.accept_push,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\pregel\_runner.py", line 207, in tick
+    run_with_retry(
+    ~~~~~~~~~~~~~~^
+        t,
+        ^^
+    ...<10 lines>...
+        },
+        ^^
+    )
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\pregel\_retry.py", line 617, in run_with_retry
+    return task.proc.invoke(task.input, config)
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\_internal\_runnable.py", line 684, in invoke
+    input = context.run(step.invoke, input, config, **kwargs)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\_internal\_runnable.py", line 426, in invoke
+    ret = self.func(*args, **kwargs)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 1450, in model_node
+    result = wrap_model_call_handler(request, _execute_model_sync)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 311, in composed
+    outer_result = outer(request, inner_handler)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langsmith\run_helpers.py", line 777, in wrapper
+    function_result = run_container["context"].run(
+        func, *args, **kwargs
+    )
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\middleware\todo.py", line 256, in wrap_model_call
+    return handler(request.override(system_message=new_system_message))
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 301, in inner_handler
+    inner_result = inner(req, handler)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 311, in composed
+    outer_result = outer(request, inner_handler)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langsmith\run_helpers.py", line 777, in wrapper
+    function_result = run_container["context"].run(
+        func, *args, **kwargs
+    )
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\deepagents\middleware\filesystem.py", line 1937, in wrap_model_call
+    return handler(request)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 301, in inner_handler
+    inner_result = inner(req, handler)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 311, in composed
+    outer_result = outer(request, inner_handler)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langsmith\run_helpers.py", line 777, in wrapper
+    function_result = run_container["context"].run(
+        func, *args, **kwargs
+    )
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\deepagents\middleware\subagents.py", line 856, in wrap_model_call
+    return handler(request.override(system_message=new_system_message))
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 301, in inner_handler
+    inner_result = inner(req, handler)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 311, in composed
+    outer_result = outer(request, inner_handler)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langsmith\run_helpers.py", line 777, in wrapper
+    function_result = run_container["context"].run(
+        func, *args, **kwargs
+    )
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\deepagents\middleware\summarization.py", line 1434, in wrap_model_call
+    return handler(request.override(messages=truncated_messages))
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 301, in inner_handler
+    inner_result = inner(req, handler)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langsmith\run_helpers.py", line 777, in wrapper
+    function_result = run_container["context"].run(
+        func, *args, **kwargs
+    )
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_anthropic\middleware\prompt_caching.py", line 168, in wrap_model_call
+    return handler(request)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain\agents\factory.py", line 1419, in _execute_model_sync
+    output = model_.invoke(messages)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 476, in invoke
+    self.generate_prompt(
+    ~~~~~~~~~~~~~~~~~~~~^
+        [self._convert_input(input)],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    ).generations[0][0],
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1849, in generate_prompt
+    return self.generate(prompt_messages, stop=stop, callbacks=callbacks, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1656, in generate
+    self._generate_with_cache(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        m,
+        ^^
+    ...<2 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1994, in _generate_with_cache
+    result = self._generate(
+        messages, stop=stop, run_manager=run_manager, **kwargs
+    )
+  File "C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\.worktrees\baseline-4d76c2fb\agent\router_chat_model.py", line 88, in _generate
+    message = self._underlying(provider).invoke(
+        messages, stop=stop, **kwargs)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\runnables\base.py", line 6002, in invoke
+    return self.bound.invoke(
+           ~~~~~~~~~~~~~~~~~^
+        input,
+        ^^^^^^
+        self._merge_configs(config),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **{**self.kwargs, **kwargs},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 476, in invoke
+    self.generate_prompt(
+    ~~~~~~~~~~~~~~~~~~~~^
+        [self._convert_input(input)],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    ).generations[0][0],
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1849, in generate_prompt
+    return self.generate(prompt_messages, stop=stop, callbacks=callbacks, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1656, in generate
+    self._generate_with_cache(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        m,
+        ^^
+    ...<2 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1994, in _generate_with_cache
+    result = self._generate(
+        messages, stop=stop, run_manager=run_manager, **kwargs
+    )
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_openai\chat_models\base.py", line 1738, in _generate
+    _handle_openai_api_error(e)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_openai\chat_models\base.py", line 1733, in _generate
+    raw_response = self.client.with_raw_response.create(**payload)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\_legacy_response.py", line 367, in wrapped
+    return cast(LegacyAPIResponse[R], func(*args, **kwargs))
+                                      ~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\_utils\_utils.py", line 298, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1281, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<53 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\_base_client.py", line 1332, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\_base_client.py", line 1105, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.NotFoundError: Error code: 404 - {'error': {'message': 'The model `meta-llama/llama-4-scout-17b-16e-instruct` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}
+During task with name 'model' and id '7c8c76f3-e92f-6426-2102-7519c78ec01f'

@@ -1,0 +1,27 @@
+  [tool] read_file({'file_path': '/tests/test_retry.py'})
+    ->      1	import sys
+     2	from pathlib import Path
+     3	
+     4	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+     5	
+     6	from retry import parse_retry_after
+     7	
+     8	
+     9	 ...
+  [tool] read_file({'file_path': '/retry.py'})
+    ->      1	"""Reading the Retry-After header a provider sends with a rate-limit response.
+     2	
+     3	The router uses this to decide how long to keep an account in cooldown before
+     4	trying it agai ...
+  [tool] execute({'command': 'python -m pytest tests/test_retry.py'})
+    -> ============================= test session starts =============================
+platform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\aoriol\AppData\Local\Temp\tmpwg5j7ppz\work ...
+  [tool] edit_file({'old_string': '    value = headers.get("retry-after")', 'new_string': '    value = None\n    for k, v in headers.items():\n        if k.lower() == "retry-after":\n            value = v\n            break', 'file_path': '/retry.py'})
+    -> Successfully replaced 1 instance(s) of the string in '/retry.py'
+  [tool] execute({'command': 'python -m pytest tests/test_retry.py'})
+    -> ============================= test session starts =============================
+platform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\aoriol\AppData\Local\Temp\tmpwg5j7ppz\work ...
+
+[{'type': 'text', 'text': 'The test in `tests/test_retry.py` now passes. The `parse_retry_after` function in `retry.py` was updated to correctly handle the case-insensitive nature of HTTP headers by iterating through the header keys and checking for "retry-after" regardless of its casing.', 'extras': {'signature': 'CpABARFNMg89Vr0ZoHvtXBJh1zohIoa2ivHISnBNI/UIlqAhMA7DT1p97O320llL3NtMeu1Tqijhrvd463rhsqZIGLSrWPM8hZCGyPbLVap0gPiGnbl/CaMLqC6ULlvHU2EhJY/l3B9f9yi6mZSv8WO1Q0mRwcKZHN6oDNOh4Q/QPeFWDtQRRVIyyK4ikumCirjb'}}]

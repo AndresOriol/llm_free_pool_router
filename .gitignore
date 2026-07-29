@@ -3,6 +3,6 @@
 __pycache__/
 .pytest_cache/
 
-# Eval worktrees are checkouts of this repo; results are run output.
+# Eval worktrees are throwaway checkouts of this repo. Results are NOT ignored:
+# they are the durable record that replaces expiring hosted traces (~40 KB/run).
 evals/.worktrees/
-evals/results/
