@@ -6,10 +6,9 @@ an **agent configuration**, not a single run: free-tier failover makes any one
 run noisy, so a claim like "this branch is better" only means something as a
 distribution over repeated runs on a fixed set of scenarios.
 
-This doc is the design. The harness that implements it lives in a **separate
-repo** (`agent_evals`, sibling of this one) — see [Why a separate repo](#why-a-separate-repo).
-Nothing here is built yet; scenarios are deliberately deferred to a later
-session.
+This doc is the design. The harness lives in this repo under
+[evals/](../evals/); the **scenarios** live in a separate data-only repo
+(`agent_evals`, sibling of this one) — see [Where things live](#where-things-live).
 
 ## Prior art, and why we still build
 
@@ -46,78 +45,87 @@ re-derived.
 
 | Term | Meaning |
 | --- | --- |
-| **scenario** | A frozen starting state of a codebase — e.g. a project with a real bug in it. Stored as an immutable git tag. |
+| **scenario** | A frozen codebase state — e.g. a project with a real bug in it. One commit in the scenario repo, named by a tag. |
 | **task** | One prompt posed against a scenario, with a machine-checkable acceptance. One scenario carries several tasks. |
-| **config** | One agent configuration: a commit of `free_coding_agent` plus any overrides (router config, env, prompt). |
+| **config** | One agent configuration: a commit of this repo plus any overrides (router config, env, prompt). |
 | **run** | One execution of (config × scenario × task × repetition). The atomic record. |
+| **topic** | A branch in the scenario repo; its commits are the scenarios for that theme. |
 | **suite** | A named subset of tasks, so a targeted change doesn't have to pay for the full set. |
 | **verdict** | The graded result of a run: automatic metrics + integrity checks + LLM-judge scores. |
 
-## Why a separate repo
+## Where things live
 
-Configurations are branches of `free_coding_agent`. If results lived in this
-repo they would churn on every branch switch and conflict on every merge —
-exactly the data that must be stable across all configs. So:
+**Code with the code it measures; data on its own.**
 
-- `free_coding_agent` — the thing under test. Contributes only the trace
-  instrumentation described in [Local trace capture](#local-trace-capture),
-  and this doc.
-- `agent_evals` — scenarios, runner, results, reports. Never checked out by
-  the agent under test.
+- This repo (`llm_free_pool_router`) — the agent under test, plus
+  [evals/](../evals/): the runner, the metric definitions, the configurations,
+  and the results. Metrics are code and evolve with the agent, so a metric
+  change and the change it measures land in the same history.
+- `agent_evals` — scenarios only. No harness, no results. A scenario is a
+  commit whose tree is a real codebase state, which is the natural storage for
+  a test case aimed at something that edits code.
 
-Results are also the answer to LangSmith traces expiring: everything the
-verdict is derived from is written to disk under `results/` and committed.
-LangSmith stays useful for eyeballing a single run live; it is not the record.
+Two consequences worth stating, because both were nearly designed wrong:
+
+- Configurations are branches of *this* repo, so a shared append-only results
+  index would conflict on every merge. Results are therefore **one file per
+  run** (`evals/results/runs/<id>/run.json`) with no index; the summary is
+  derived by globbing. Nothing to conflict on.
+- Results answer LangSmith expiring: everything a verdict rests on is on disk.
+  LangSmith stays useful for watching a run live; it is not the record.
 
 ## Scenario storage
 
-Each scenario is an **orphan branch plus an immutable tag** in `agent_evals`:
+One **branch per topic** in `agent_evals`, and each **commit on it is a
+scenario**, named by a tag:
 
 ```
-master                     runner, configs, results, reports
-scenario/<id>              orphan branch — the scenario tree, editable
-scenario/<id>/v1           tag — frozen; what runs actually reference
+topic/<topic>              the topic's line of scenarios
+scenario/<topic>/<id>      tag on the commit that is that scenario
 ```
 
-Orphan rather than a linear chain of commits: scenarios are unrelated
-codebases, and a chain would make editing an old scenario a history rewrite of
-every scenario after it. Orphan branches keep them independent while still
-making "a scenario is a git state" literally true.
+Grouping by topic keeps related codebase states on one line of history, so a
+topic reads as a coherent body of test cases rather than a pile of unrelated
+trees. Tags are the handle runs actually use, and they are **never moved**: to
+change a scenario, commit again and tag the new commit, so a result citing the
+old tag stays reproducible.
 
-Tags are **immutable**. Editing a scenario means committing to
-`scenario/<id>` and cutting `v2`; `v1` and every result that references it stay
-reproducible. A run record always names the exact tag, never the branch.
+**Materialization** is `git archive` into a throwaway directory, not a
+checkout. Three things follow, all of them load-bearing:
 
-**Materialization** is `git archive`, not checkout:
-
-```bash
-git -C agent_evals archive scenario/router-cooldown/v1 seed | tar -x -C <workdir> --strip-components=1
-```
-
-`git archive` extracts one subtree into a scratch dir with no `.git` in it.
-That matters: the agent is jailed to the workdir, and a `.git` would let it
-read the hidden tests, the reference solution, and every other scenario. It
-also means no detached-HEAD or dirty-tree handling, and nothing to clean up.
+- No `.git` reaches the workdir. The agent cannot commit, cannot walk history
+  to another scenario, and cannot read the withheld material.
+- Nothing in the scenario repo is ever written, so **no run needs reverting** —
+  the temp dir is deleted and that is the whole cleanup.
+- No detached-HEAD or dirty-tree handling on the scenario repo, and concurrent
+  reads of different scenarios can't interfere.
 
 ### Scenario anatomy
 
 ```
-scenario.yaml          metadata: id, title, category, tags, immutable manifest
-seed/                  the ONLY thing the agent sees — copied into the workdir
-tasks/<task-id>.md     one or more prompts, each with its own acceptance
-verify/                hidden tests — overlaid at grading time, never in seed/
-reference/             solution.patch + notes.md, for the judge and for validation
+<the code, at the root>   the code state — this is what the agent gets
+tasks/<task-id>.md        one or more prompts posed against this code
+evaluation/               WITHHELD: criteria.md, tests/, solution.patch
+scenario.yaml             WITHHELD: metadata, test sets, immutable list
 ```
 
-The `seed/` vs `verify/` split is load-bearing. If the acceptance test ships in
-the workdir the agent can (and small models do) edit the test until it passes,
-or overfit to it. Hidden tests are copied over a *copy* of the finished
-workdir, so they apply even if the agent deleted the visible ones.
+The code sits at the root rather than under a `seed/` wrapper, so a topic
+branch checks out as a working codebase you can open and run — a scenario
+should look like a real project, because that is what it is standing in for.
 
-`seed/` may contain its own `CLAUDE.md` — the agent loads it as its system
-prompt ([agent/coding_agent.py](../agent/coding_agent.py)). Whether a scenario
-ships instructions is itself a variable worth testing; record it in
-`scenario.yaml`.
+The withheld set is load-bearing. If the scoring tests ship in the workdir, the
+agent can (and small models do) edit them until they pass, or write code shaped
+to the test rather than the requirement. They are overlaid onto a *copy* of the
+finished workdir, so they apply even if the agent deleted the visible ones.
+`scenario.yaml` is withheld too, because it names them.
+
+The runner **asserts** the withholding after materializing rather than assuming
+it. A scenario that leaked its own tests would score every configuration far
+too well, and would read as a win rather than a bug.
+
+A scenario may ship a `CLAUDE.md` in its code state — the agent loads it as its
+system prompt ([agent/coding_agent.py](../agent/coding_agent.py)). Whether it
+does is itself a variable worth testing; record it as `context_mode`.
 
 ### scenario.yaml
 
@@ -127,17 +135,17 @@ title: Cooldown timer never resets after a 429
 category: bugfix            # bugfix | feature | refactor | tests | ambiguous | trap
 difficulty: L1              # see the difficulty ladder below
 tags: [python, single-file, long-context]
-context_mode: none          # none | claude_md — is a CLAUDE.md shipped in seed/?
+context_mode: none          # none | claude_md — does the code state ship a CLAUDE.md?
 immutable:                  # files the agent must not modify; hashed pre/post
   - tests/test_cooldown.py
 timeout_s: 900
 
 # Borrowed from SWE-bench: two test sets, not one command.
 fail_to_pass:               # must go from failing to passing — did it fix the thing
-  - verify/test_cooldown.py::test_cooldown_resets_after_retry_after
+  - evaluation/tests/test_cooldown.py::test_cooldown_resets_after_retry_after
 pass_to_pass:               # must stay passing — did it break anything else
-  - verify/test_cooldown.py::test_cooldown_blocks_while_hot
-  - verify/test_router.py
+  - evaluation/tests/test_cooldown.py::test_cooldown_blocks_while_hot
+  - evaluation/tests/test_router.py
 ```
 
 `fail_to_pass` / `pass_to_pass` replaces a single verify command, and it's a
@@ -220,12 +228,12 @@ decision on a metric that reads zero for both configs.
 
 Every scenario must self-test before it's usable, via `runner validate`:
 
-1. `seed/` + `verify/` → every `fail_to_pass` test **must fail** and every
+1. untouched code + `evaluation/` → every `fail_to_pass` test **must fail** and every
    `pass_to_pass` test **must pass** (otherwise the task is already solved, or
    the seed is broken in a way the task never mentioned).
-2. `seed/` + `reference/solution.patch` + `verify/` → **all** must pass
+2. untouched code + `evaluation/solution.patch` → **all** must pass
    (otherwise the task is impossible and every config scores a free fail).
-3. Every file in `immutable:` exists in `seed/`.
+3. Every file in `immutable:` exists in the code state.
 
 This is the same empty-patch / gold-patch gate SWE-bench applies to its own
 instances, and it is worth running on every scenario every time the suite runs,
@@ -274,17 +282,17 @@ others — destroying comparability.
 2. **Run** — `python -m agent.coding_agent <workdir> < prompt.txt` from the
    config's worktree, with `EVAL_TRACE_FILE` set. Kill at `timeout_s`.
 3. **Capture** — stdout/stderr, wall time, exit status, `trace.jsonl`, and
-   `diff.patch` (workdir vs `seed/`).
+   `diff.patch` (workdir vs untouched code, test/build caches pruned).
 4. **Verify** — copy the finished workdir to a pristine location, overlay
-   `verify/`, run the `fail_to_pass` and `pass_to_pass` sets. Record both
+   `evaluation/`, run the `fail_to_pass` and `pass_to_pass` sets. Record both
    ratios and the raw output.
 5. **Integrity** — re-hash the immutable manifest. Any change ⇒ run marked
    `tampered`, which is a fail regardless of test outcome and is reported
    separately (it's a distinct failure mode, not the same as "got it wrong").
 6. **Judge** — see below. Skipped if a run with an identical diff hash was
    already judged.
-7. **Record** — write `results/runs/<run_id>/` and append one row to
-   `results/index.jsonl`.
+7. **Record** — write `evals/results/runs/<run_id>/`, one self-contained
+   directory per run.
 
 `run_id`: `<scenario>_<taskid>_<config>_r<rep>_<UTC timestamp>`.
 
@@ -356,7 +364,7 @@ staring at a pass rate.
 ### Judged — `claude -p` with a fixed rubric
 
 The judge sees: the task prompt, `diff.patch`, verification output,
-`reference/solution.patch`, and the scenario's judge notes. It returns JSON
+`evaluation/solution.patch`, and `evaluation/criteria.md`. It returns JSON
 scoring 0–4 on:
 
 - **correctness beyond tests** — right for the right reason, or coincidence?
@@ -448,25 +456,29 @@ that "I changed X, so I ran the tasks that exercise X" is a checkable claim.
 ## Storage layout
 
 ```
-agent_evals/
-  runner/                     the harness
-  configs/<name>.yaml         agent configurations
-  results/
-    index.jsonl               one row per run — the queryable table
-    runs/<run_id>/
-      run.json                config fingerprint, scenario tag, metrics, outcome
+llm_free_pool_router/
+  evals/
+    scenario.py agent_config.py metrics.py verify.py run.py __main__.py
+    configs/<name>.yaml       agent configurations
+    fake_agent.py             stub agent for exercising the runner offline
+    CONFIGS.md                ledger: every config tried, verdict, why kept/dropped
+    results/runs/<run_id>/
+      run.json                fingerprint, scenario tag, metrics, outcome
       trace.jsonl             captured events
-      stdout.log              raw agent output
-      diff.patch              seed → final workdir
+      stdout.log stderr.log   raw agent output
+      diff.patch              untouched code → final workdir
       verify.txt              hidden-test output
       judge.json              rubric scores + judge model/prompt version
-  reports/<date>-<topic>.md   written conclusions
-  CONFIGS.md                  ledger: every config tried, verdict, why kept/dropped
+    reports/<date>-<topic>.md written conclusions
+
+agent_evals/                  scenarios only (see its README)
 ```
 
-`index.jsonl` is append-only and holds every field needed to build a
-leaderboard, so comparison is a small script over one file. The per-run
-directory keeps the evidence behind each row — that's the part LangSmith loses.
+Each run directory is self-contained and carries every field a leaderboard
+needs, so a summary is a glob rather than a query against a shared file — and
+merging a configuration branch can never conflict over results. The directory
+also keeps the evidence behind each row, which is the part hosted tracing
+loses.
 
 Ranking is **lexicographic, not a weighted score**: success rate → integrity
 clean → judge quality → provider calls. Collapsing these into one number
@@ -507,9 +519,9 @@ one, with its first baseline recorded.
   hand and driven end to end manually, to validate the formats before
   automating them.
 - **P1** *(done)* — read `eth-sri/agentbench`'s evaluate/analyze pipeline, then build
-  `runner`: materialize, run, verify (`fail_to_pass`/`pass_to_pass`), integrity,
-  record, `index.jsonl`, `validate`. Metrics automatic, including the failure
-  taxonomy; judging still manual.
+  `evals/`: materialize, run, verify (`fail_to_pass`/`pass_to_pass`), integrity,
+  record, `validate`. Metrics automatic, including the failure taxonomy;
+  judging still manual.
 - **P2** — `claude -p` judge with the pinned rubric and diff-hash cache.
 - **P3** — `compare` / report generation, leaderboard, interleaved execution.
 - **P4** — scenario library filled out across L0–L2 per the category list;

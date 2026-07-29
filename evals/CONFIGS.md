@@ -5,7 +5,7 @@ changes are recorded too — knowing what didn't work is most of the value of
 keeping the data at all, and it's what stops the same idea being re-tried every
 few months.
 
-Promotion rule (see [EVAL.md](../free_coding_agent/docs/EVAL.md#fair-comparison)):
+Promotion rule (see [EVAL.md](../docs/EVAL.md#fair-comparison)):
 promote when no task regresses by more than one trial **and** either success
 rate improves beyond interval overlap, or success rate holds flat while a
 secondary metric improves materially. Anything else is a draw, and a draw keeps
@@ -13,7 +13,7 @@ the simpler configuration.
 
 | Config | Ref / SHA | Change | Suite | Result | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| `baseline` | `e1e5417` | — | `retry-after-case` L0, n=2 | 1 pass, 1 crash | reference point |
+| `baseline` | `master` | — | `scenario/http-headers/retry-after-case` L0, n=2 | 1 pass, 1 crash | reference point |
 
 ### baseline, first measurement (2026-07-29)
 
@@ -24,11 +24,11 @@ gives a first look at variance, nothing more.
 | --- | --- | --- |
 | outcome | pass | crash (`stopping`) |
 | steps | 6 | 5 |
-| provider calls | 10 | 11 |
+| provider calls | 11 | 10 |
 | failover bounces | 4 | 8 |
 | tokens in | 89,260 | 55,126 |
 | distinct models | 5 | 7 |
-| wall time | 19.4s | 15.6s |
+| wall time | 21.6s | 12.7s |
 
 Two observations already worth acting on:
 
@@ -44,7 +44,7 @@ Two observations already worth acting on:
 
 ## Stub configurations
 
-`stub-*` are not real configurations. They drive `tests/fake_agent.py` to
+`stub-*` are not real configurations. They drive `evals/fake_agent.py` to
 exercise the runner's own paths (pass, each failure class, tampering) without
 spending free-tier quota. Always run them with `--results` pointing somewhere
 throwaway so they never enter the real record.
