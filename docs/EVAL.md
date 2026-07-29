@@ -498,12 +498,15 @@ distinct patch.
 
 ## Build order
 
-- **P0** — trace capture in `free_coding_agent` (`EVAL_TRACE_FILE`). This is the
+P0 and P1 are done; the harness lives in the `agent_evals` repo alongside this
+one, with its first baseline recorded.
+
+- **P0** *(done)* — trace capture in `free_coding_agent` (`EVAL_TRACE_FILE`). This is the
   *measuring instrument*, not a candidate change: it must land on `master` so
   the baseline itself can be measured. One L0 and one L1 scenario authored by
   hand and driven end to end manually, to validate the formats before
   automating them.
-- **P1** — read `eth-sri/agentbench`'s evaluate/analyze pipeline, then build
+- **P1** *(done)* — read `eth-sri/agentbench`'s evaluate/analyze pipeline, then build
   `runner`: materialize, run, verify (`fail_to_pass`/`pass_to_pass`), integrity,
   record, `index.jsonl`, `validate`. Metrics automatic, including the failure
   taxonomy; judging still manual.
