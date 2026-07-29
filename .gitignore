@@ -1,3 +1,8 @@
 /llm_router/.env
-*.pycevals/.worktrees/
+*.pyc
+__pycache__/
+.pytest_cache/
+
+# Eval worktrees are checkouts of this repo; results are run output.
+evals/.worktrees/
 evals/results/
