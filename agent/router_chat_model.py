@@ -42,6 +42,13 @@ class RouterChatModel(BaseChatModel):
     max_retries: int = 6
     bound_tools: Optional[List[Any]] = None
     bind_kwargs: dict = {}
+    # Config handed to the provider's own call. Leave None under LangGraph: the
+    # provider call inherits the ambient run context and nests correctly on its
+    # own (see _generate). A caller driving this model directly -- no graph, so
+    # no ambient context -- gets no provider-level trace at all unless it passes
+    # its config here, which would silently cost the eval metrics that count
+    # provider calls and failover bounces.
+    provider_config: Optional[dict] = None
 
     @property
     def _llm_type(self) -> str:
@@ -86,7 +93,7 @@ class RouterChatModel(BaseChatModel):
                 # it). Passing a hand-built child manager here doesn't change that
                 # nesting and trips the tracer's run_map ("No indexed run ID").
                 message = self._underlying(provider).invoke(
-                    messages, stop=stop, **kwargs)
+                    messages, config=self.provider_config, stop=stop, **kwargs)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
                 if not self._handle_failure(provider, exc, run_manager):

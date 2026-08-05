@@ -32,6 +32,7 @@ Selection and state. Never makes an API call itself.
 | [coding_agent.py](../agent/coding_agent.py) | *How is the pool wired into an agent loop?* — builds the deepagents graph, the CLI entry point |
 | [restricted_backend.py](../agent/restricted_backend.py) | *What is the agent allowed to execute?* — `FilesystemBackend` + an `execute` allowlist of `python`/`pytest` |
 | [trace.py](../agent/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
+| [harness/](../agent/harness/) | *Can many narrow agents beat one wide one?* — an alternative loop: one role per job, a shared blackboard, deterministic transitions. Branch candidate, see [6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness) |
 
 ## 2.4 `evals/` — the measurement harness
 

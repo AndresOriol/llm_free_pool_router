@@ -74,6 +74,8 @@ New here? Start with [1. Overview](01-overview.md), then
 [6.9](06-agent.md#69-proposed-strategies) Proposed strategies ·
 [6.10](06-agent.md#610-repo-level-configuration) Repo-level configuration ·
 [6.11](06-agent.md#611-proposed-baseline-implementation) Proposed baseline implementation
+&nbsp;&nbsp;&nbsp;&nbsp;⚙ *built on a branch:*
+[6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness) The ad-hoc role harness
 
 **[7. Observability](07-observability.md)** — two traces, deliberately
 &nbsp;&nbsp;&nbsp;&nbsp;[7.1](07-observability.md#71-why-two) Why two ·

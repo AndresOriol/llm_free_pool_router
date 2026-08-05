@@ -73,6 +73,14 @@ on the model. That detail is what makes failover countable: it records the
 attempt appears as an `llm_error` followed by another `llm_start` on a different
 model — which is precisely how `failover_bounces` and `models_used` are derived.
 
+**That inheritance comes from LangGraph, not from the router.** The provider
+call is made with no explicit config and relies on an ambient run context to
+nest under. A caller driving `RouterChatModel` directly — no graph, so no
+ambient context — silently gets wrapper events only, and every provider-level
+metric reads zero. Such callers must pass their config via the model's
+`provider_config` field; it defaults to `None`, which is exactly the
+inherit-from-the-graph behaviour the deep-agents path depends on.
+
 Tool args and outputs are clipped to 2 KB.
 
 ## 7.4 The shape is a contract

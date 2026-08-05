@@ -1,0 +1,17 @@
+# The ad-hoc harness (agent/harness/) instead of the deep-agents loop.
+#
+# Same contract as the baseline agent -- workdir argument, task on stdin -- so
+# only agent_cmd changes. Compare against `baseline` interleaved; the claim
+# under test is that many small role calls beat one wide loop on a pool whose
+# members cap out at 6-12K tokens per minute.
+#
+# Read tokens_in per step as the leading indicator: it should fall sharply
+# while `steps` rises, since the harness trades turns for context size. Pass
+# rate is the gating axis but needs more than one L0 scenario to move.
+name: adhoc-harness
+repo: ../..
+ref: harness/adhoc-router
+env_file: ../../llm_router/.env
+agent_cmd: ["python", "-m", "agent.harness", "{workdir}"]
+overrides:
+  env: {}

@@ -14,6 +14,26 @@ the simpler configuration.
 | Config | Ref / SHA | Change | Suite | Result | Verdict |
 | --- | --- | --- | --- | --- | --- |
 | `baseline` | `master` | — | `scenario/http-headers/retry-after-case` L0, n=2 | 1 pass, 1 crash | reference point |
+| `adhoc-harness` | `harness/adhoc-router` | Replaces the deep-agents loop with narrow per-role agents over a shared blackboard | — | **not run yet** | candidate; see below |
+
+### adhoc-harness, pre-measurement note
+
+Built and smoke-tested live, **not** compared against baseline yet. One ad-hoc
+run on a seeded one-line bug passed using 9 provider calls / 3,369 input tokens
+across 2 Groq models, with no Gemini call. That is n=1 on a different scenario
+from the baseline row above, so it is evidence the thing works, not evidence it
+is better.
+
+The comparison that would settle it:
+
+```bash
+python -m evals run --config baseline --config adhoc-harness --reps 5
+```
+
+Read `tokens_in` and `models_used` as outcomes rather than confounds here: the
+change is *intended* to shift work back onto the cheap Groq models, which
+[docs/08-evaluation-method.md](../docs/08-evaluation-method.md#86-fair-comparison)
+would otherwise flag as a confounded mix.
 
 ### baseline, first measurement (2026-07-29)
 

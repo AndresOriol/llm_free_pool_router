@@ -344,4 +344,124 @@ Two guardrails on the measurement itself:
 
 ---
 
+## 6.12 An alternative architecture: the ad-hoc role harness
+
+> **Status: built, on branch `harness/adhoc-router`. Not merged, not yet
+> measured against baseline on a shared scenario.**
+
+Sections 6.9–6.11 try to make the deep-agents loop cheaper. This takes the
+opposite bet: **spend more turns to make each turn small enough that the whole
+pool can serve it.**
+
+The wide loop hands every step all nine tools whether or not the step needs
+them. The harness gives each step only the tools its job requires, and keeps
+the run's accumulated knowledge in a shared blackboard rather than in a growing
+conversation. So a role's prompt is bounded by what it declares, not by how
+long the run has been going — step 40 costs what step 1 costs.
+
+### 6.12.1 The roles and the transitions
+
+```
+locate ──▶ inspect ──▶ edit ──▶ [test] ──▶ pass? ──▶ done
+             ▲          ▲                     │
+             └──────────┴──── route ◀─────────┘ fail
+```
+
+| Role | Tools | Sees | Why it is separate |
+| --- | --- | --- | --- |
+| `locate` | `find_files`, `search_code`, `list_dir` | task | Finding files needs search, not editing |
+| `inspect` | `read_lines`, `search_code` | task, files, test | Reading needs no write access |
+| `edit` | `replace_in_file`, `create_file` | task, notes, edits, test | Applying a change needs no search |
+| `[test]` | — | — | **Deterministic. No model call at all** |
+| `route` | **none** | task, notes, edits, test, log | The call that decides what happens next holds nothing that can make anything happen |
+
+Two of those are the load-bearing design choices:
+
+- **`route` has no tools.** Deciding and acting are never the same call, so a
+  model cannot wander into executing something while it is supposed to be
+  choosing. It answers with one word, parsed against a fixed set, with a
+  deterministic fallback — a small model writing a sentence instead of a word
+  must not end a run.
+- **`test` runs no model.** "Run the tests after an edit" needs no
+  intelligence. Every edge the model does not get to choose is an LLM call not
+  spent and a way the run cannot go wrong.
+
+### 6.12.2 What it costs
+
+Measured on a saturated blackboard (30 notes, 30 files, 400 lines of test
+output — far past any real run):
+
+| Role | tools | schema tok | fresh | saturated |
+| --- | ---: | ---: | ---: | ---: |
+| `locate` | 3 | 166 | 266 | 266 |
+| `inspect` | 2 | 133 | 237 | 659 |
+| `edit` | 2 | 156 | 233 | 1,278 |
+| `route` | 0 | 0 | 101 | 1,145 |
+
+Against the deep-agents loop's **~6,097 tokens on every step**, tool schemas
+fall from 5,533 to 133–166 per role. The worst case any role can reach is
+~1,281 tokens, which fits the 6,000-TPM pool member that cannot serve the wide
+loop at all. A test pins this: if any role's saturated prompt exceeds the
+5,400-token usable ceiling, the suite fails.
+
+### 6.12.3 First live run
+
+One task ("`add()` returns the wrong value; fix it"), one run, against the real
+pool:
+
+| | baseline (deepagents, recorded r1) | ad-hoc harness |
+| --- | ---: | ---: |
+| outcome | pass | pass |
+| provider calls | 11 | 9 |
+| distinct models | 5 | 2 |
+| failover bounces | 4 | 1 |
+| `tokens_in` | 89,260 | **3,369** |
+| served by Gemini | 4 of 6 steps | **none** |
+
+The whole task ran on `llama-3.3-70b` and `gpt-oss-120b` — the Groq models that
+[6.8.1](#681-the-overhead-prices-the-groq-half-of-the-pool-out) shows are priced
+out of the wide loop by step 4. That is the mechanism working end to end: cheap
+enough per call that the cheap half of the pool can actually serve it.
+
+**These two runs are not a comparison.** They are different scenarios, n=1
+each, and the baseline's number comes from a previously recorded run. The
+controlled version is `python -m evals run --config baseline --config
+adhoc-harness --reps 5`, interleaved, on the same scenario
+([8.6](08-evaluation-method.md#86-fair-comparison)). Until that exists, the
+honest claim is narrow: the harness works end to end, and its per-call cost is
+roughly an order of magnitude lower.
+
+### 6.12.4 What this trades away
+
+Stated plainly, because the token win is not free:
+
+- **More turns.** Four roles where the wide loop took one step. On a pool
+  limited by requests-per-minute as well as tokens, more calls is a real cost —
+  it is why `provider_calls` is a gating metric, not a vanity one.
+- **No cross-step memory beyond the blackboard.** A finding that no role writes
+  down is gone. The caps in `blackboard.py` are the context budget, and setting
+  them too tight loses information the model needed.
+- **The pipeline is opinionated.** `locate → inspect → edit → test` fits
+  bugfix-shaped work. A refactor or a greenfield feature may want a different
+  graph, and today that means editing `loop.py`, not configuration.
+- **`route` is the only adaptive edge.** Everything else is fixed. That is what
+  makes it cheap and predictable, and also what makes it rigid.
+
+Whether the trade pays is exactly what
+[8. Evaluation method](08-evaluation-method.md) exists to answer, and it needs
+scenarios past L0 to answer it — a single-file bugfix is the case this
+pipeline is shaped for, so it is the case least likely to reveal the limits.
+
+### 6.12.5 A tracing gap this exposed
+
+The trace claimed to record provider-level events, but that only worked because
+LangGraph supplies an ambient run context for the provider call to inherit.
+Driving `RouterChatModel` directly — no graph — recorded the wrapper and
+nothing else, so `provider_calls`, `models_used` and `failover_bounces` all read
+zero. An unmeasurable harness cannot be promoted, so `RouterChatModel` gained an
+opt-in `provider_config`, defaulting to `None`, which leaves the deep-agents
+path byte-identical. See [7.3](07-observability.md#73-the-local-trace).
+
+---
+
 **Previous:** [← 5. Providers and limits](05-providers.md) · **Next:** [7. Observability →](07-observability.md)
