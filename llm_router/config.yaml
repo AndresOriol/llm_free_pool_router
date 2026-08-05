@@ -17,10 +17,10 @@
 # `max_input_tokens` is the per-request token ceiling the router uses to route a
 # large request to a model that can hold it (see get_best_provider). It's
 # min(TPM, context window): on Groq the TPM is the bottleneck (see
-# docs/PROVIDERS.md), while Gemma has unlimited TPM so its context window is the
-# ceiling. Omit it only for a model whose limit is genuinely unknown.
+# docs/05-providers.md), while Gemma has unlimited TPM so its context window is
+# the ceiling. Omit it only for a model whose limit is genuinely unknown.
 #
-# Priority is grouped into four capability tiers (see docs/DESIGN.md#model-tiers):
+# Priority is grouped into four capability tiers (see docs/03-pool-model.md):
 # reasoning (1-9) -> mid (10-19) -> workhorse fallback (20-29) -> last resort
 # (30+). Within a tier, order doesn't matter much -- Groq's free tier shares one
 # org-wide request budget across every model on the account, so a burst of
@@ -89,7 +89,7 @@ models:
   # -- Workhorse fallback: weaker, but the free tier's real bottleneck (Groq's
   # shared org-wide request budget) routinely dumps whole tasks here once the
   # reasoning/mid tiers exhaust, so quality here matters more than the tier
-  # name implies. See docs/DESIGN.md#model-tiers.
+  # name implies. See docs/03-pool-model.md#34-priority-tiers.
   - name: Llama4Scout
     platform: groq
     model: meta-llama/llama-4-scout-17b-16e-instruct

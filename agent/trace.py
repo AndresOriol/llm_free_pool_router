@@ -1,6 +1,6 @@
 """Local JSONL trace of one agent run, for offline evaluation.
 
-Hosted traces expire; the eval harness (docs/EVAL.md) derives every automatic
+Hosted traces expire; the eval harness (docs/10-metrics.md) derives every automatic
 metric -- provider calls, failover bounces, tokens, bad tool calls, the failure
 taxonomy -- from this file instead, so the evidence behind a verdict survives.
 

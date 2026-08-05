@@ -5,7 +5,7 @@ changes are recorded too — knowing what didn't work is most of the value of
 keeping the data at all, and it's what stops the same idea being re-tried every
 few months.
 
-Promotion rule (see [EVAL.md](../docs/EVAL.md#fair-comparison)):
+Promotion rule (see [8.7](../docs/08-evaluation-method.md#87-the-promotion-rule)):
 promote when no task regresses by more than one trial **and** either success
 rate improves beyond interval overlap, or success rate holds flat while a
 secondary metric improves materially. Anything else is a draw, and a draw keeps
@@ -50,6 +50,6 @@ spending free-tier quota. Always run them with `--results` pointing somewhere
 throwaway so they never enter the real record.
 
 ```bash
-python -m runner run --config stub-fix --config stub-noop --config stub-badedit \
+python -m evals run --config stub-fix --config stub-noop --config stub-badedit \
   --config stub-lost --config stub-tamper --reps 1 --results /tmp/selftest
 ```

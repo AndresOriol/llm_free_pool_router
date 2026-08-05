@@ -12,7 +12,7 @@ pip install -r requirements.txt
 ```
 
 Create `llm_router/.env` with your API keys (see
-[docs/PROVIDERS.md](docs/PROVIDERS.md) for how to get a free key from each
+[docs/05-providers.md](docs/05-providers.md) for how to get a free key from each
 provider):
 
 ```
@@ -35,15 +35,19 @@ the pool — it keeps working through free-tier limits by switching model mid-ta
 python -m agent.coding_agent [workdir]
 ```
 
-See [docs/DEEP_AGENTS.md](docs/DEEP_AGENTS.md).
+See [docs/06-agent.md](docs/06-agent.md).
 
 ## Docs
 
+Everything beyond the quick start lives in the wiki — start at
+**[docs/README.md](docs/README.md)**, which indexes it.
+
 - **New provider account, or want to add a provider?** →
-  [docs/PROVIDERS.md](docs/PROVIDERS.md)
-- **Run the coding agent on the pool?** → [docs/DEEP_AGENTS.md](docs/DEEP_AGENTS.md)
+  [5. Providers and limits](docs/05-providers.md)
+- **Run the coding agent on the pool?** → [6. The coding agent](docs/06-agent.md)
 - **How does the router actually work, and why?** →
-  [docs/DESIGN.md](docs/DESIGN.md)
+  [4. Failover](docs/04-failover.md)
 - **Curious how this project is built (agent roles, model tiers)?** →
-  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+  [12. Development harness](docs/12-development-harness.md)
+- **Where is this going next?** → [13. Roadmap and scope](docs/13-roadmap.md)
 - **Project goals and standards** → [CLAUDE.md](CLAUDE.md)

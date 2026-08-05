@@ -30,30 +30,36 @@ right now the router itself is the whole project.
 
 ## Current state
 
-- [llm_router](llm_router/) — async router that holds a list of `LLMProvider`
-  instances (one per API key/account), filters by availability, sorts by
-  priority, and retries across the pool on failure. See
-  [llm_router/router.py](llm_router/router.py), [llm_router/providers.py](llm_router/providers.py),
-  [llm_router/base_provider.py](llm_router/base_provider.py), configured via
-  [llm_router/config.yaml](llm_router/config.yaml).
-- Providers today: Groq (multiple accounts), Gemini. Expect more free-tier
-  providers (Cerebras, OpenRouter free models, Mistral free tier, HuggingFace
-  Inference, etc.) to be added as they're evaluated — the provider list is
-  meant to grow, not stay fixed.
+- [llm_router](llm_router/) — holds one `LLMProvider` per account×model pair,
+  filters to the ones available and large enough for the request, and returns
+  the highest-priority one. Selection only; it never makes a call.
+  Configured via [llm_router/config.yaml](llm_router/config.yaml).
+- [agent](agent/) — `RouterChatModel` (the failover loop, as a LangChain
+  `BaseChatModel`) plus a deepagents coding loop that runs on it, jailed to a
+  workdir with `python`/`pytest` execution.
+- [evals](evals/) — the harness that decides whether a change to either of the
+  above helped. Scenarios live in the separate `agent_evals` repo.
+- Providers today: Groq, Gemini. Expect more free-tier providers (Cerebras,
+  OpenRouter free models, Mistral free tier, HuggingFace Inference, etc.) as
+  they're evaluated — the provider list is meant to grow, not stay fixed.
 
-For the full agentic development harness (which model tier does what, how
-skills fit in), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+## Docs
 
-## Docs structure
+[docs/](docs/) is a wiki: numbered, concept-first pages that explain the logic
+rather than the code. **Read it instead of the source** to understand the
+system; read the source when you're about to change it. Start at
+[docs/README.md](docs/README.md), which is the index and defines the wiki's
+conventions — read it before adding a page.
 
 [README.md](README.md) is the human entry point (quick start, links out) and
 this file is the agent entry point (goal, standards, this index) — both stay
-short and link into `docs/` rather than growing inline.
+short and link into the wiki rather than growing inline.
 
-Everything else — how `docs/` itself is organized, what goes where, and who
-maintains it — is defined in [docs/README.md](docs/README.md). That file is
-the source of truth for the docs structure across the whole project, not
-just the current llm_router stage; read it before adding a new doc.
+Quick pointers: [4. Failover](docs/04-failover.md) for how the router works,
+[5. Providers](docs/05-providers.md) for accounts and limits,
+[12. Development harness](docs/12-development-harness.md) for which model tier
+does what, [13. Roadmap and scope](docs/13-roadmap.md) for what's next and
+what's already settled.
 
 ## Coding standards
 
@@ -74,9 +80,11 @@ Changes to the agent harness (router config, system prompt, backend, agent
 loop) are evaluated, not argued. Each candidate is a branch = one *agent
 configuration*, run against scenario-based tests and compared to the baseline
 on quantitative metrics; a change that can't be shown to help doesn't merge.
-The protocol, metrics and promotion rule are in [docs/EVAL.md](docs/EVAL.md);
-the runner and result data live in the separate `agent_evals` repo so they
-survive branch switching.
+The protocol, metrics and promotion rule are in
+[8. Evaluation method](docs/08-evaluation-method.md) and
+[10. Metrics](docs/10-metrics.md). The runner and its results live in
+[evals/](evals/); only the scenarios live in the separate `agent_evals` repo,
+so they survive branch switching.
 
 ## Commits
 
