@@ -61,13 +61,19 @@ New here? Start with [1. Overview](01-overview.md), then
 
 ### Part III — The agent
 
-**[6. The coding agent](06-agent.md)** — what it can do, and what it is not allowed to do
+**[6. The coding agent](06-agent.md)** — what it can do, what it costs per step, and how to make it better
 &nbsp;&nbsp;&nbsp;&nbsp;[6.1](06-agent.md#61-what-it-is) What it is ·
 [6.2](06-agent.md#62-the-blast-radius) The blast radius ·
 [6.3](06-agent.md#63-the-agents-instructions) The agent's instructions ·
-[6.4](06-agent.md#64-what-the-library-gives-us-and-what-we-left-at-defaults) Library defaults left untuned ·
-[6.5](06-agent.md#65-loop-budget) Loop budget ·
-[6.6](06-agent.md#66-what-failover-looks-like-in-practice) Failover in practice
+[6.4](06-agent.md#64-what-the-model-actually-receives) What the model actually receives ·
+[6.5](06-agent.md#65-the-librarys-prompts-and-what-they-cost-us) The library's prompts, and what they cost ·
+[6.6](06-agent.md#66-loop-budget) Loop budget ·
+[6.7](06-agent.md#67-what-failover-looks-like-in-practice) Failover in practice
+&nbsp;&nbsp;&nbsp;&nbsp;⚠ *proposals under review:*
+[6.8](06-agent.md#68-why-the-agent-underperforms-the-measured-diagnosis) The measured diagnosis ·
+[6.9](06-agent.md#69-proposed-strategies) Proposed strategies ·
+[6.10](06-agent.md#610-repo-level-configuration) Repo-level configuration ·
+[6.11](06-agent.md#611-proposed-baseline-implementation) Proposed baseline implementation
 
 **[7. Observability](07-observability.md)** — two traces, deliberately
 &nbsp;&nbsp;&nbsp;&nbsp;[7.1](07-observability.md#71-why-two) Why two ·

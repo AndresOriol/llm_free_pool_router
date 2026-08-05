@@ -79,7 +79,8 @@ Live, unresolved, and worth deciding when the evidence arrives — not before.
 | How does a free-pool judge get validated? | It must agree with the Claude judge on a labelled set before its scores can be trusted. |
 | Where does shared cooldown state live, if it ever needs to be shared across processes? | A second concurrent consumer actually existing. |
 | Where do per-provider curated docs live once the provider list grows? | The provider list growing past what one page holds ([5. Providers](05-providers.md)). |
-| Should deepagents' summarization be tuned for the pool's real (much smaller) context windows? | It's a candidate change like any other — measure it. Background in [6.4](06-agent.md#64-what-the-library-gives-us-and-what-we-left-at-defaults). |
+| Should deepagents' summarization be tuned for the pool's real (much smaller) context windows? | It's a candidate change like any other — measure it. Proposed as S5 in [6.9](06-agent.md#69-proposed-strategies). |
+| Should the agent keep the `task`/subagent tool at all? It costs 31% of the per-step budget and is never configured. | An L2 multi-file scenario run with and without it. See the tension in [6.9.1](06-agent.md#691-the-one-real-tension). |
 
 ## 13.5 Settled decisions
 
