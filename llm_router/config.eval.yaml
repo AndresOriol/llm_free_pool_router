@@ -1,0 +1,95 @@
+# Eval pool: llm_router/config.yaml minus models that are dead upstream.
+#
+# Groq returns `404 model_not_found` for llama-4-scout. A 404 is not in the
+# router's transient set, so it propagates and kills the whole run -- roughly
+# half of the recorded baseline runs died this way, for a reason unrelated to
+# the task being measured (docs/11-eval-status.md#114-blockers).
+#
+# Dropping it here isolates the harness comparison from that crash. This is a
+# workaround for the measurement, NOT the fix: the router should disable a
+# decommissioned model permanently, the way it benches a rate-limited one
+# temporarily. Delete this file once that lands.
+#
+# Every eval configuration points at this same file, so both sides of a
+# comparison draw from an identical pool. Regenerate after editing config.yaml.
+accounts:
+- name: groq_1
+  user:
+  - EMAIL_ADDRESS
+  platform: groq
+  type: openai_compatible
+  url: https://api.groq.com/openai/v1
+  api_key_env: GROQ_API_KEY_1
+- name: gemini_1
+  user:
+  - EMAIL_ADDRESS
+  platform: gemini
+  type: gemini
+  url: https://generativelanguage.googleapis.com/v1beta/models
+  api_key_env: GEMINI_API_KEY_1
+models:
+- name: Llama3_70b
+  platform: groq
+  model: llama-3.3-70b-versatile
+  priority: 1
+  max_input_tokens: 12000
+- name: GptOss120b
+  platform: groq
+  model: openai/gpt-oss-120b
+  priority: 2
+  max_input_tokens: 8000
+- name: Gemini_3_5_Flash
+  platform: gemini
+  model: gemini-3.5-flash
+  priority: 3
+  max_input_tokens: 250000
+- name: Qwen3_32b
+  platform: groq
+  model: qwen/qwen3-32b
+  priority: 10
+  max_input_tokens: 6000
+- name: Qwen3_6_27b
+  platform: groq
+  model: qwen/qwen3.6-27b
+  priority: 11
+  max_input_tokens: 8000
+- name: Gemini_3_Flash
+  platform: gemini
+  model: gemini-3-flash-preview
+  priority: 12
+  max_input_tokens: 250000
+- name: Gemini_2_5_Flash
+  platform: gemini
+  model: gemini-2.5-flash
+  priority: 13
+  max_input_tokens: 250000
+- name: GptOss20b
+  platform: groq
+  model: openai/gpt-oss-20b
+  priority: 21
+  max_input_tokens: 8000
+- name: Gemini_3_1_FlashLite
+  platform: gemini
+  model: gemini-3.1-flash-lite
+  priority: 22
+  max_input_tokens: 250000
+- name: Gemini_2_5_FlashLite
+  platform: gemini
+  model: gemini-2.5-flash-lite
+  priority: 23
+  max_input_tokens: 250000
+- name: Llama3_8b
+  platform: groq
+  model: llama-3.1-8b-instant
+  priority: 30
+  max_input_tokens: 6000
+- name: Gemma4_31b
+  platform: gemini
+  model: gemma-4-31b-it
+  priority: 31
+  max_input_tokens: 128000
+- name: Gemma4_26b
+  platform: gemini
+  model: gemma-4-26b-a4b-it
+  priority: 32
+  max_input_tokens: 128000

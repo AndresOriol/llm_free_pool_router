@@ -4,4 +4,7 @@ ref: master
 # Keys are injected from here into the subprocess: worktrees never contain .env
 env_file: ../../llm_router/.env
 overrides:
+  # Both sides of a comparison must draw from the same pool, and that pool must
+  # not contain a model that 404s and kills the run. See the file's header.
+  router_config: llm_router/config.eval.yaml
   env: {}
