@@ -1,0 +1,14 @@
+# Ad-hoc harness, architecture variant `v5-lean`.
+# v2 + v4 + a two-tool locate. The combination, if each part holds on its own.
+#
+# Differs from `adhoc-harness` only by HARNESS_VARIANT, so a comparison between
+# them isolates the architecture from everything else.
+name: harness-v5-lean
+repo: ../..
+ref: harness/adhoc-router
+env_file: ../../llm_router/.env
+agent_cmd: ["python", "-m", "agent.harness", "{workdir}"]
+overrides:
+  router_config: llm_router/config.eval.yaml
+  env:
+    HARNESS_VARIANT: v5-lean

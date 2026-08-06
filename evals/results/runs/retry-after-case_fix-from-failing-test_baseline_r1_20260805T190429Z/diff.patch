@@ -1,0 +1,16 @@
+diff --git a/retry.py b/retry.py
+index 026406a..ffa4aae 100644
+--- a/retry.py
++++ b/retry.py
+@@ -7,7 +7,7 @@ trying it again.
+ 
+ def parse_retry_after(headers):
+     """Seconds to wait before retrying, or None if the header is absent."""
+-    value = headers.get("retry-after")
+-    if value is None:
+-        return None
+-    return int(value)
++    for key, value in headers.items():
++        if key.lower() == "retry-after":
++            return int(value)
++    return None

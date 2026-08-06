@@ -25,7 +25,8 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from llm_router.base_provider import estimate_tokens
 from agent.harness.blackboard import Blackboard
-from agent.harness.roles import ROLES, ROUTE_CHOICES
+from agent.harness.roles import ROUTE_CHOICES
+from agent.harness.variants import V1, Variant
 
 logger = logging.getLogger("harness")
 
@@ -33,6 +34,9 @@ DEFAULT_TEST_CMD = "python -m pytest"
 MAX_CYCLES = 6
 # Paths as the tools emit them: /pkg/mod.py, optionally followed by :line:
 _PATH_RE = re.compile(r"(/[\w./\-]+\.\w+)")
+# Source files a variant's seed step considers. Kept to code the agent could
+# plausibly need to change; data and fixtures would just crowd the list.
+_SEED_GLOBS = ("**/*.py",)
 
 
 @dataclass
@@ -119,31 +123,62 @@ def run_tests(backend, command: str = DEFAULT_TEST_CMD):
     return output, result.exit_code == 0
 
 
+def seed_files(backend, limit: int) -> list:
+    """List the project's source files without asking a model.
+
+    In a small tree, "which files exist" is a glob, not a reasoning problem.
+    Returns [] when the tree is bigger than `limit`, so the `locate` role still
+    earns its keep on projects where searching is actually necessary.
+    """
+    found = []
+    for pattern in _SEED_GLOBS:
+        res = backend.glob(pattern, path="/")
+        if res.error:
+            return []
+        found.extend(m["path"] for m in res.matches if not m.get("is_dir"))
+    return found if 0 < len(found) <= limit else []
+
+
 def solve(model, backend, toolset, task: str, config=None,
-          test_cmd: str = DEFAULT_TEST_CMD, max_cycles: int = MAX_CYCLES):
-    """Drive one task to a verdict. Returns (blackboard, stats, outcome)."""
+          test_cmd: str = DEFAULT_TEST_CMD, max_cycles: int = MAX_CYCLES,
+          variant: Variant = V1):
+    """Drive one task to a verdict. Returns (blackboard, stats, outcome).
+
+    `variant` selects the architecture; see agent/harness/variants.py.
+    """
     config = config or {}
     bb = Blackboard(task=task)
     stats = Stats()
-    state = "locate"
+    retries_left = variant.fast_retries
+
+    # A merged variant folds finding into the inspect role, so there is no
+    # separate locate state to enter.
+    state = "inspect" if variant.merged else "locate"
+    if variant.seed_threshold:
+        seeded = seed_files(backend, variant.seed_threshold)
+        if seeded:
+            bb.add_files(seeded)
+            bb.record("seed", f"{len(seeded)} file(s) by glob, skipping locate")
+            state = "inspect"
 
     while bb.cycles < max_cycles:
         if state == "locate":
-            result = run_role(model, ROLES["locate"], toolset, bb, config, stats)
+            result = run_role(model, variant.locate, toolset, bb, config, stats)
             bb.add_files(_harvest_paths(result))
             bb.record("locate", ", ".join(bb.files[:4]) or "nothing found")
             state = "inspect"
 
         elif state == "inspect":
-            result = run_role(model, ROLES["inspect"], toolset, bb, config, stats)
+            # In a merged variant this role also does the finding.
+            result = run_role(model, variant.inspect, toolset, bb, config, stats)
             bb.add_files(_harvest_paths(result))
             if result.text:
                 bb.add_note(result.text)
-            bb.record("inspect", result.text or "no finding")
+            bb.record(variant.inspect.name, result.text or "no finding")
             state = "edit"
 
         elif state == "edit":
-            result = run_role(model, ROLES["edit"], toolset, bb, config, stats)
+            result = run_role(model, variant.edit, toolset, bb, config, stats)
             applied = [out for _, out in result.outputs if out.startswith("ok:")]
             for line in applied:
                 bb.add_edit(line)
@@ -159,14 +194,24 @@ def solve(model, backend, toolset, task: str, config=None,
             if passed:
                 return bb, stats, "pass"
             bb.cycles += 1
-            state = "route"
+            # After a near-miss edit the next move is almost always another
+            # edit. Paying a model call to be told that is waste, so a variant
+            # may spend its retries before consulting `route`.
+            if retries_left:
+                retries_left -= 1
+                bb.record("retry", "edit again without routing")
+                state = "edit"
+            else:
+                state = "route"
 
         elif state == "route":
-            result = run_role(model, ROLES["route"], toolset, bb, config, stats)
+            result = run_role(model, variant.route, toolset, bb, config, stats)
             state = _parse_route(result.text, bb)
             bb.record("route", f"-> {state}")
             if state == "giveup":
                 return bb, stats, "giveup"
+            if state == "locate" and variant.merged:
+                state = "inspect"   # no locate role exists in a merged variant
 
     return bb, stats, "exhausted"
 

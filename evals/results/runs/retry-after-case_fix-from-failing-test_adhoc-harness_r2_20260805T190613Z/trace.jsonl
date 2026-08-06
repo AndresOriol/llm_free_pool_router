@@ -1,0 +1,52 @@
+{"ts": 1785956778.43, "event": "llm_start", "run_id": "019fd351-c1bd-71e2-800c-4be63ffac323", "model": "RouterChatModel"}
+{"ts": 1785956779.456, "event": "llm_start", "run_id": "019fd351-c5bf-79c3-a7b7-f0f5d0f222a3", "model": "llama-3.3-70b-versatile"}
+{"ts": 1785956779.978, "event": "llm_end", "run_id": "019fd351-c5bf-79c3-a7b7-f0f5d0f222a3", "ok": true, "tokens_in": 477, "tokens_out": 31}
+{"ts": 1785956779.982, "event": "llm_end", "run_id": "019fd351-c1bd-71e2-800c-4be63ffac323", "ok": true, "tokens_in": 477, "tokens_out": 31}
+{"ts": 1785956779.994, "event": "tool_start", "run_id": "019fd351-c7d9-7540-8764-34aab14007ce", "tool": "find_files", "args": "{'pattern': 'tests/test_retry.py'}"}
+{"ts": 1785956779.998, "event": "tool_end", "run_id": "019fd351-c7d9-7540-8764-34aab14007ce", "ok": true, "tool": "find_files", "output": "/tests/test_retry.py"}
+{"ts": 1785956780.0, "event": "tool_start", "run_id": "019fd351-c7e0-75a1-a2f9-7303fcf333f8", "tool": "find_files", "args": "{'pattern': 'retry.py'}"}
+{"ts": 1785956780.008, "event": "tool_end", "run_id": "019fd351-c7e0-75a1-a2f9-7303fcf333f8", "ok": true, "tool": "find_files", "output": "/retry.py"}
+{"ts": 1785956780.011, "event": "llm_start", "run_id": "019fd351-c7eb-7451-838a-062b68cbda4c", "model": "RouterChatModel"}
+{"ts": 1785956780.014, "event": "llm_start", "run_id": "019fd351-c7ed-74f0-ab27-191d8f4c7723", "model": "llama-3.3-70b-versatile"}
+{"ts": 1785956780.313, "event": "llm_end", "run_id": "019fd351-c7ed-74f0-ab27-191d8f4c7723", "ok": true, "tokens_in": 531, "tokens_out": 28}
+{"ts": 1785956780.316, "event": "llm_end", "run_id": "019fd351-c7eb-7451-838a-062b68cbda4c", "ok": true, "tokens_in": 531, "tokens_out": 28}
+{"ts": 1785956780.319, "event": "tool_start", "run_id": "019fd351-c91f-7952-9e03-7323fb21783d", "tool": "search_code", "args": "{'pattern': 'test_retry'}"}
+{"ts": 1785956780.331, "event": "tool_end", "run_id": "019fd351-c91f-7952-9e03-7323fb21783d", "ok": true, "tool": "search_code", "output": "no matches"}
+{"ts": 1785956780.333, "event": "tool_start", "run_id": "019fd351-c92d-79d0-866f-76003a45a557", "tool": "search_code", "args": "{'pattern': 'retry'}"}
+{"ts": 1785956780.339, "event": "tool_end", "run_id": "019fd351-c92d-79d0-866f-76003a45a557", "ok": true, "tool": "search_code", "output": "/retry.py:8: def parse_retry_after(headers):\n/retry.py:9: \"\"\"Seconds to wait before retrying, or None if the header is absent.\"\"\"\n/retry.py:10: value = headers.get(\"retry-after\")\n/tests/test_retry.py:6: from retry import parse_retry_after\n/tests/test_retry.py:11: assert parse_retry_after({\"Retry-After\": \"30\"}) == 30"}
+{"ts": 1785956780.343, "event": "llm_start", "run_id": "019fd351-c936-7413-9d83-8faf3d1c701e", "model": "RouterChatModel"}
+{"ts": 1785956780.346, "event": "llm_start", "run_id": "019fd351-c939-7f73-b194-f1940f6d4fa9", "model": "llama-3.3-70b-versatile"}
+{"ts": 1785956780.783, "event": "llm_end", "run_id": "019fd351-c939-7f73-b194-f1940f6d4fa9", "ok": true, "tokens_in": 661, "tokens_out": 25}
+{"ts": 1785956780.785, "event": "llm_end", "run_id": "019fd351-c936-7413-9d83-8faf3d1c701e", "ok": true, "tokens_in": 661, "tokens_out": 25}
+{"ts": 1785956780.789, "event": "tool_start", "run_id": "019fd351-caf5-7893-8a49-b1ac87851c6c", "tool": "list_dir", "args": "{'path': 'tests'}"}
+{"ts": 1785956780.794, "event": "tool_end", "run_id": "019fd351-caf5-7893-8a49-b1ac87851c6c", "ok": true, "tool": "list_dir", "output": "/tests/test_retry.py"}
+{"ts": 1785956780.796, "event": "tool_start", "run_id": "019fd351-cafb-79d0-9adc-6f467e873a10", "tool": "list_dir", "args": "{'path': ''}"}
+{"ts": 1785956780.799, "event": "tool_end", "run_id": "019fd351-cafb-79d0-9adc-6f467e873a10", "ok": true, "tool": "list_dir", "output": "/retry.py\n/tests//"}
+{"ts": 1785956780.802, "event": "llm_start", "run_id": "019fd351-cb02-73d1-b7d2-1d3244582ef4", "model": "RouterChatModel"}
+{"ts": 1785956780.808, "event": "llm_start", "run_id": "019fd351-cb08-7aa1-8367-b4cad904f625", "model": "llama-3.3-70b-versatile"}
+{"ts": 1785956781.186, "event": "llm_error", "run_id": "019fd351-cb08-7aa1-8367-b4cad904f625", "ok": false, "detail": "BadRequestError('Error code: 400 - {\\'error\\': {\\'message\\': \"Failed to call a function. Please adjust your prompt. See \\'failed_generation\\' for more details.\", \\'type\\': \\'invalid_request_error\\', \\'code\\': \\'tool_use_failed\\', \\'failed_generation\\': \\'<function=search_code {\"pattern\": \"def retry\"} </function>\\\\n\\'}}')"}
+{"ts": 1785956781.202, "event": "llm_start", "run_id": "019fd351-cc91-7320-8692-018e15789298", "model": "openai/gpt-oss-120b"}
+{"ts": 1785956781.518, "event": "llm_end", "run_id": "019fd351-cc91-7320-8692-018e15789298", "ok": true, "tokens_in": 336, "tokens_out": 34}
+{"ts": 1785956781.522, "event": "llm_end", "run_id": "019fd351-cb02-73d1-b7d2-1d3244582ef4", "ok": true, "tokens_in": 336, "tokens_out": 34}
+{"ts": 1785956781.526, "event": "tool_start", "run_id": "019fd351-cdd6-7a93-a0b4-ddef5a45baa1", "tool": "read_lines", "args": "{'file_path': 'retry.py', 'offset': 0}"}
+{"ts": 1785956781.53, "event": "tool_end", "run_id": "019fd351-cdd6-7a93-a0b4-ddef5a45baa1", "ok": true, "tool": "read_lines", "output": "1\t\"\"\"Reading the Retry-After header a provider sends with a rate-limit response.\n2\t\n3\tThe router uses this to decide how long to keep an account in cooldown before\n4\ttrying it again.\n5\t\"\"\"\n6\t\n7\t\n8\tdef parse_retry_after(headers):\n9\t    \"\"\"Seconds to wait before retrying, or None if the header is absent.\"\"\"\n10\t    value = headers.get(\"retry-after\")\n11\t    if value is None:\n12\t        return None\n13\t    return int(value)\n14\t"}
+{"ts": 1785956781.532, "event": "llm_start", "run_id": "019fd351-cddc-7603-bc36-f17f9879c916", "model": "RouterChatModel"}
+{"ts": 1785956781.536, "event": "llm_start", "run_id": "019fd351-cde0-7d60-9d67-27b7d5cc8bc2", "model": "openai/gpt-oss-120b"}
+{"ts": 1785956782.031, "event": "llm_end", "run_id": "019fd351-cde0-7d60-9d67-27b7d5cc8bc2", "ok": true, "tokens_in": 475, "tokens_out": 41}
+{"ts": 1785956782.034, "event": "llm_end", "run_id": "019fd351-cddc-7603-bc36-f17f9879c916", "ok": true, "tokens_in": 475, "tokens_out": 41}
+{"ts": 1785956782.038, "event": "tool_start", "run_id": "019fd351-cfd5-7a43-95fa-57cac1cfd714", "tool": "search_code", "args": "{'path': 'tests/test_retry.py', 'pattern': 'parse_retry_after'}"}
+{"ts": 1785956782.045, "event": "tool_end", "run_id": "019fd351-cfd5-7a43-95fa-57cac1cfd714", "ok": true, "tool": "search_code", "output": "/retry.py:8: def parse_retry_after(headers):\n/tests/test_retry.py:6: from retry import parse_retry_after\n/tests/test_retry.py:11: assert parse_retry_after({\"Retry-After\": \"30\"}) == 30"}
+{"ts": 1785956782.048, "event": "llm_start", "run_id": "019fd351-cfdf-7340-8081-b12838ff092e", "model": "RouterChatModel"}
+{"ts": 1785956782.05, "event": "llm_start", "run_id": "019fd351-cfe2-79b2-a393-7f7d877e9290", "model": "openai/gpt-oss-120b"}
+{"ts": 1785956782.464, "event": "llm_end", "run_id": "019fd351-cfe2-79b2-a393-7f7d877e9290", "ok": true, "tokens_in": 561, "tokens_out": 32}
+{"ts": 1785956782.468, "event": "llm_end", "run_id": "019fd351-cfdf-7340-8081-b12838ff092e", "ok": true, "tokens_in": 561, "tokens_out": 32}
+{"ts": 1785956782.472, "event": "tool_start", "run_id": "019fd351-d188-7310-a369-c4fc68acf982", "tool": "read_lines", "args": "{'file_path': 'tests/test_retry.py', 'offset': 0}"}
+{"ts": 1785956782.476, "event": "tool_end", "run_id": "019fd351-d188-7310-a369-c4fc68acf982", "ok": true, "tool": "read_lines", "output": "1\timport sys\n2\tfrom pathlib import Path\n3\t\n4\tsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n5\t\n6\tfrom retry import parse_retry_after\n7\t\n8\t\n9\tdef test_matches_header_case_insensitively():\n10\t    # Providers send the canonical HTTP casing, not lowercase.\n11\t    assert parse_retry_after({\"Retry-After\": \"30\"}) == 30\n12\t"}
+{"ts": 1785956782.479, "event": "llm_start", "run_id": "019fd351-d18e-78d1-a3ac-9ff31ff39708", "model": "RouterChatModel"}
+{"ts": 1785956782.484, "event": "llm_start", "run_id": "019fd351-d193-72a1-8eb0-7372cc8e79ff", "model": "openai/gpt-oss-120b"}
+{"ts": 1785956783.093, "event": "llm_error", "run_id": "019fd351-d193-72a1-8eb0-7372cc8e79ff", "ok": false, "detail": "BadRequestError('Error code: 400 - {\\'error\\': {\\'message\\': \"Tool call validation failed: tool call validation failed: attempted to call tool \\'run_code\\' which was not in request.tools\", \\'type\\': \\'invalid_request_error\\', \\'code\\': \\'tool_use_failed\\', \\'failed_generation\\': \\'{\"name\": \"run_code\", \"arguments\": {\"code\":\"import subprocess, json, os, sys, textwrap, pathlib, runpy, importlib.util, importlib.machinery, traceback, sys\\\\\\\\nprint(\\\\\\'Running tests...\\\\\\')\\\\\\\\nimport subprocess, sys, os\\\\\\\\nresult = subprocess.run([sys.executable, \\\\\\'-m\\\\\\', \\\\\\'pytest\\\\\\', \\\\\\'-q\\\\\\', \\\\\\'tests\\\\\\'], capture_output=True, text=True)\\\\\\\\nprint(\\\\\\'stdout:\\\\\\', result.stdout)\\\\\\\\nprint(\\\\\\'stderr:\\\\\\', result.stderr)\\\\\\\\nprint(\\\\\\'returncode\\\\\\', result.returncode)\"}}\\'}}')"}
+{"ts": 1785956783.18, "event": "llm_start", "run_id": "019fd351-d44c-7ad0-9441-057f528294f1", "model": "gemini-3.5-flash"}
+{"ts": 1785956787.303, "event": "llm_error", "run_id": "019fd351-d44c-7ad0-9441-057f528294f1", "ok": false, "detail": "ServerError(\"503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}\")"}
+{"ts": 1785956787.325, "event": "llm_start", "run_id": "019fd351-e47d-7313-89a5-da1bcc0cf4e6", "model": "qwen/qwen3-32b"}
+{"ts": 1785956787.447, "event": "llm_error", "run_id": "019fd351-e47d-7313-89a5-da1bcc0cf4e6", "ok": false, "detail": "NotFoundError(\"Error code: 404 - {'error': {'message': 'The model `qwen/qwen3-32b` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}\")"}
+{"ts": 1785956787.454, "event": "llm_error", "run_id": "019fd351-d18e-78d1-a3ac-9ff31ff39708", "ok": false, "detail": "NotFoundError(\"Error code: 404 - {'error': {'message': 'The model `qwen/qwen3-32b` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}\")"}

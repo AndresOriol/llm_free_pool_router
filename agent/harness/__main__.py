@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
+from agent.harness import variants
 from agent.harness.loop import DEFAULT_TEST_CMD, solve
 from agent.harness.tools import make_tools
 from agent.restricted_backend import RestrictedShellBackend
@@ -54,11 +55,15 @@ def main() -> None:
 
     model, backend, toolset = build(workdir, config)
 
+    variant = variants.get(os.environ.get("HARNESS_VARIANT"))
+    logging.info(f"Variant: {variant.name} -- {variant.note}")
+
     bb, stats, outcome = solve(model, backend, toolset, task, config=config,
                                test_cmd=os.environ.get("HARNESS_TEST_CMD")
-                               or DEFAULT_TEST_CMD)
+                               or DEFAULT_TEST_CMD,
+                               variant=variant)
 
-    print(f"\n=== {outcome.upper()} after {bb.cycles} cycle(s) ===")
+    print(f"\n=== {outcome.upper()} after {bb.cycles} cycle(s) [{variant.name}] ===")
     for line in bb.log:
         print(f"  {line}")
     avg = stats.prompt_tokens // stats.calls if stats.calls else 0

@@ -1,14 +1,20 @@
 # Eval pool: llm_router/config.yaml minus models that are dead upstream.
 #
-# Groq returns `404 model_not_found` for llama-4-scout. A 404 is not in the
-# router's transient set, so it propagates and kills the whole run -- roughly
-# half of the recorded baseline runs died this way, for a reason unrelated to
-# the task being measured (docs/11-eval-status.md#114-blockers).
+# Groq returns `404 model_not_found` for llama-4-scout and qwen3-32b. A 404 is
+# not in the router's transient set, so it propagates and kills the whole run.
+# Both were verified dead by probing every pool member directly.
 #
-# Dropping it here isolates the harness comparison from that crash. This is a
+# Dropping them here isolates a comparison from that crash. This is a
 # workaround for the measurement, NOT the fix: the router should disable a
 # decommissioned model permanently, the way it benches a rate-limited one
-# temporarily. Delete this file once that lands.
+# temporarily (docs/13-roadmap.md#132-what-to-do-next).
+#
+# Note which configurations this bites. A dead model is only reached if a
+# request is small enough to pass the size filter, so an agent that shrinks its
+# requests -- the whole point of the ad-hoc harness -- reaches *further* into
+# the pool and trips landmines that a token-heavy agent never gets near. The
+# 6,000-ceiling qwen3-32b was invisible to the deep-agents loop for exactly
+# this reason.
 #
 # Every eval configuration points at this same file, so both sides of a
 # comparison draw from an identical pool. Regenerate after editing config.yaml.
@@ -43,11 +49,6 @@ models:
   model: gemini-3.5-flash
   priority: 3
   max_input_tokens: 250000
-- name: Qwen3_32b
-  platform: groq
-  model: qwen/qwen3-32b
-  priority: 10
-  max_input_tokens: 6000
 - name: Qwen3_6_27b
   platform: groq
   model: qwen/qwen3.6-27b

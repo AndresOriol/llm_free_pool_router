@@ -10,9 +10,11 @@ from pathlib import Path
 from langchain_core.messages import AIMessage
 
 from agent.harness.blackboard import Blackboard, MAX_NOTE_CHARS
-from agent.harness.loop import Stats, run_role, solve, _parse_route, _harvest_paths, RoleResult
+from agent.harness.loop import (Stats, run_role, seed_files, solve, _parse_route,
+                                _harvest_paths, RoleResult)
 from agent.harness.roles import ROLES
 from agent.harness.tools import make_tools
+from agent.harness.variants import V1, V2, V3, V4, V5, VARIANTS, get
 from agent.restricted_backend import RestrictedShellBackend
 
 BROKEN = "def add(a, b):\n    return a - b\n"
@@ -169,6 +171,114 @@ def test_prompt_stays_small():
     return worst
 
 
+def test_seeding():
+    """v2/v5 replace the `locate` role with a glob on small trees."""
+    root = seed_project()
+    backend = RestrictedShellBackend(root_dir=str(root))
+    found = seed_files(backend, limit=25)
+    check("seeds both files", sorted(found) == ["/calc.py", "/test_calc.py"])
+    check("declines when over the limit", seed_files(backend, limit=1) == [])
+
+
+class RoleAwareModel(ScriptedModel):
+    """Answers according to which role is asking, not from a fixed queue.
+
+    A fixed script cannot compare architectures: each variant consumes it in a
+    different order, so the test ends up measuring script drift rather than
+    call count. Keying the response off the role holds *model behaviour*
+    constant while the architecture varies, which is the comparison we want.
+    """
+
+    def __init__(self, first_round=None):
+        super().__init__([])
+        self.round = {}
+        self.first_round = first_round or {}
+
+    def bind_tools(self, tools, **kw):
+        clone = RoleAwareModel()
+        clone.round, clone.first_round, clone.seen = self.round, self.first_round, self.seen
+        clone.bound = [t.name for t in tools]
+        return clone
+
+    def invoke(self, messages, config=None, **kw):
+        self.seen.append({"messages": messages, "tools": self.bound})
+        role = self._role_of(messages)
+        n = self.round.get(role, 0)
+        self.round[role] = n + 1
+        # Round 0: make the tool call the role exists to make. Round 1+: report.
+        if n == 0 and role in self.first_round:
+            return self.first_round[role]
+        return AIMessage(content={"route": "GIVEUP"}.get(role, "done"))
+
+    @staticmethod
+    def _role_of(messages):
+        text = str(messages[0].content)
+        if "no tools" in text:
+            return "route"
+        if "find the files" in text.lower() or "you find the files" in text.lower():
+            return "locate"
+        if "apply one code change" in text:
+            return "edit"
+        return "inspect"      # covers `investigate` too
+
+
+def test_variant_call_counts():
+    """The point of each variant is its call count. Model behaviour is held
+    constant; only the architecture differs, so this table isolates it."""
+    rows = {}
+    for name, variant in VARIANTS.items():
+        root = seed_project()
+        backend = RestrictedShellBackend(root_dir=str(root))
+        toolset = make_tools(backend)
+        model = RoleAwareModel(first_round={
+            "locate": ai(calls=[("search_code", {"pattern": "def add"})]),
+            "inspect": ai(calls=[("read_lines", {"file_path": "/calc.py"})]),
+            "edit": ai(calls=[("replace_in_file", {"file_path": "/calc.py",
+                                                   "old_text": "return a - b",
+                                                   "new_text": "return a + b"})]),
+        })
+        bb, stats, outcome = solve(model, backend, toolset, "add() is wrong",
+                                   max_cycles=3, variant=variant)
+        rows[name] = (outcome, stats.calls, sorted(stats.by_role))
+        check(f"{name} should pass", outcome == "pass")
+        check(f"{name} fixed the file", (root / "calc.py").read_text() == FIXED)
+
+    check("v2 skips locate", "locate" not in rows["v2-seeded"][2])
+    check("v3 uses investigate", "investigate" in rows["v3-merged"][2])
+    check("v5 skips locate", "locate" not in rows["v5-lean"][2])
+    check("seeding removes calls", rows["v2-seeded"][1] < rows["v1-pipeline"][1])
+    check("merging removes calls", rows["v3-merged"][1] < rows["v1-pipeline"][1])
+    return rows
+
+
+def test_fast_retry():
+    """v4 must retry the edit once before spending a call on `route`."""
+    root = seed_project()
+    backend = RestrictedShellBackend(root_dir=str(root))
+    toolset = make_tools(backend)
+    model = ScriptedModel([
+        ai("none"),                 # locate
+        ai("/calc.py is wrong"),    # inspect
+        ai("cannot edit"),          # edit  -> test fails
+        ai("still cannot"),         # edit again (deterministic retry, no route)
+        ai("GIVEUP"),               # route
+    ])
+    bb, stats, outcome = solve(model, backend, toolset, "fix", max_cycles=4, variant=V4)
+    check("edit ran twice before routing", stats.by_role["edit"]["calls"] >= 2)
+    check("route consulted only after the retry", stats.by_role["route"]["calls"] == 1)
+    check("retry recorded", any("retry" in line for line in bb.log))
+
+
+def test_variant_lookup():
+    check("default", get(None) is V1)
+    check("by name", get("v5-lean") is V5)
+    try:
+        get("nope")
+    except SystemExit:
+        return
+    raise AssertionError("unknown variant must fail loudly, not fall back")
+
+
 if __name__ == "__main__":
     test_blackboard_caps()
     test_role_isolation()
@@ -176,5 +286,12 @@ if __name__ == "__main__":
     test_path_harvest()
     test_end_to_end_pass()
     test_failing_edit_routes()
+    test_seeding()
+    test_fast_retry()
+    test_variant_lookup()
+    rows = test_variant_call_counts()
     worst = test_prompt_stays_small()
-    print(f"harness: all checks passed (worst-case role prompt ~{worst} tokens)")
+    print(f"harness: all checks passed (worst-case role prompt ~{worst} tokens)\n")
+    print(f"{'variant':<14}{'outcome':<9}{'calls':>6}  roles")
+    for name, (outcome, calls, roles) in rows.items():
+        print(f"{name:<14}{outcome:<9}{calls:>6}  {', '.join(roles)}")
