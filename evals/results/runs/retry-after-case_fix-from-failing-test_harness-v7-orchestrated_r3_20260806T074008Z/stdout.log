@@ -1,0 +1,19 @@
+
+=== PASS after 4 cycle(s) [v7-orchestrated] ===
+  orchestrate: -> explore
+  explore: <think>
+The test expects `parse_retry_after({"Retry-After": "30"})` to return `30`.
+The current implementation in `retry
+...(clipped)
+  orchestrate: -> edit
+  edit: ok: replaced 1 occurrence(s) in retry.py
+  auto: -> execute
+  orchestrate: -> execute
+  execute: succeeded
+  orchestrate: -> done
+
+model calls: 11 | ~prompt tokens: 4041 | ~avg/call: 367
+  edit      3 calls  ~420 tok/call
+  execute   2 calls  ~310 tok/call
+  explore   3 calls  ~376 tok/call
+  orchestrate  3 calls  ~343 tok/call

@@ -13,27 +13,41 @@ the simpler configuration.
 
 | Config | Ref / SHA | Change | Suite | Result | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| `baseline` | `master` | — | `scenario/http-headers/retry-after-case` L0, n=2 | 1 pass, 1 crash | reference point |
-| `adhoc-harness` | `harness/adhoc-router` | Replaces the deep-agents loop with narrow per-role agents over a shared blackboard | — | **not run yet** | candidate; see below |
+| `baseline` | `master` | — | L0 `retry-after-case`, n=3 | 3/3 | reference point |
+| `adhoc-harness` | `harness/adhoc-router` | Narrow per-role agents over a shared blackboard | L0, n=6 | 4/6, 15k tok | **draw** — keep measuring |
+| `harness-v3-merged` | `harness/adhoc-router` | One `investigate` role replaces locate + inspect | L0, n=6 | 4/6, 10.5k tok | **draw** — its 3/3 did not replicate |
+| `harness-v6-guarded` | `harness/adhoc-router` | Forced summary + no-note guard on edit | L0, n=3 | 2/3, **5.8k tok** | cheapest by far; undecided |
+| `harness-v5-lean` | `harness/adhoc-router` | Seeded files + edit retry + two-tool locate | L0, n=3 | 1/3 | **dropped** |
+| `harness-v2-seeded` | `harness/adhoc-router` | Glob the file list, skip `locate` | L0, n=3 | 0/3 | **dropped** |
+| `harness-v7-orchestrated` | `harness/adhoc-router` | Hub and spoke; execution as an agent | L0, n=3 | 0/3, most calls | **dropped for this task shape** |
 
-### adhoc-harness, pre-measurement note
+### The harness family, 2026-08-06
 
-Built and smoke-tested live, **not** compared against baseline yet. One ad-hoc
-run on a seeded one-line bug passed using 9 provider calls / 3,369 input tokens
-across 2 Groq models, with no Gemini call. That is n=1 on a different scenario
-from the baseline row above, so it is evidence the thing works, not evidence it
-is better.
+Full write-up in
+[docs/06-agent.md](../docs/06-agent.md#614-architecture-variants-tried). Three
+things worth carrying forward:
 
-The comparison that would settle it:
-
-```bash
-python -m evals run --config baseline --config adhoc-harness --reps 5
-```
-
-Read `tokens_in` and `models_used` as outcomes rather than confounds here: the
-change is *intended* to shift work back onto the cheap Groq models, which
+**No promotion.** Nothing beat baseline on the gating axis, and nothing is
+distinguishable from anything else. `harness-v3-merged` scored 3/3 in one batch
+and 1/3 in the next on an identical configuration — direct evidence that one L0
+task at n=3 sits inside the noise floor, exactly as
 [docs/08-evaluation-method.md](../docs/08-evaluation-method.md#86-fair-comparison)
-would otherwise flag as a confounded mix.
+predicts. Any ranking read off these pass rates would be invented.
+
+**The cost result is real.** Token and call counts replicated across every rep
+and batch, with between-configuration spread far exceeding within-configuration
+variance: `harness-v6-guarded` runs the task on 7.3 calls / 5,756 input tokens
+against baseline's 20.0 / 226,854. A 39× reduction, on a pool where tokens are
+the binding constraint.
+
+**Every failure is `reasoning`** — 12 of 13, with one `stopping` and zero
+`retrieval` or `tooling`. Every variant found the file, edited it, and ran the
+tests; they got the fix conceptually wrong. Architecture changes cannot move
+that number, which is the strongest available argument for spending the next
+effort on scenarios and model tiering rather than on more topologies.
+
+**Do not re-run these on L0.** They are exhausted as a comparison. The next
+useful measurement is the same set against a scenario that can discriminate.
 
 ### baseline, first measurement (2026-07-29)
 

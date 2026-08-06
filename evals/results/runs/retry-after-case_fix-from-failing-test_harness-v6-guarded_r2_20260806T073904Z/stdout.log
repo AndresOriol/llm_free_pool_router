@@ -1,0 +1,15 @@
+
+=== PASS after 0 cycle(s) [v6-guarded] ===
+  seed: 2 file(s) by glob, skipping locate
+  inspect: File: **retry.py**  
+Wrong line: `value = headers.get("retry-after")`  
+It should be caseâ€‘insensitive, e.g.:  
+
+```pytho
+...(clipped)
+  edit: ok: replaced 1 occurrence(s) in retry.py
+  test: passed
+
+model calls: 6 | ~prompt tokens: 2041 | ~avg/call: 340
+  edit      3 calls  ~343 tok/call
+  inspect   3 calls  ~337 tok/call

@@ -1,0 +1,36 @@
+{"ts": 1786001937.158, "event": "llm_start", "run_id": "019fd602-d305-7620-8cab-64db705fa5d9", "model": "RouterChatModel"}
+{"ts": 1786001937.892, "event": "llm_start", "run_id": "019fd602-d5e3-7952-9aee-f6461e7af46b", "model": "llama-3.3-70b-versatile"}
+{"ts": 1786001938.222, "event": "llm_end", "run_id": "019fd602-d5e3-7952-9aee-f6461e7af46b", "ok": true, "tokens_in": 530, "tokens_out": 31}
+{"ts": 1786001938.223, "event": "llm_end", "run_id": "019fd602-d305-7620-8cab-64db705fa5d9", "ok": true, "tokens_in": 530, "tokens_out": 31}
+{"ts": 1786001938.224, "event": "tool_start", "run_id": "019fd602-d72f-77c2-bc42-61ca4e722d6d", "tool": "search_code", "args": "{'pattern': 'def retry'}"}
+{"ts": 1786001938.23, "event": "tool_end", "run_id": "019fd602-d72f-77c2-bc42-61ca4e722d6d", "ok": true, "tool": "search_code", "output": "no matches"}
+{"ts": 1786001938.231, "event": "tool_start", "run_id": "019fd602-d737-7800-978a-243f5fe62944", "tool": "read_lines", "args": "{'file_path': 'retry.py', 'offset': 0}"}
+{"ts": 1786001938.232, "event": "tool_end", "run_id": "019fd602-d737-7800-978a-243f5fe62944", "ok": true, "tool": "read_lines", "output": "1\t\"\"\"Reading the Retry-After header a provider sends with a rate-limit response.\n2\t\n3\tThe router uses this to decide how long to keep an account in cooldown before\n4\ttrying it again.\n5\t\"\"\"\n6\t\n7\t\n8\tdef parse_retry_after(headers):\n9\t    \"\"\"Seconds to wait before retrying, or None if the header is absent.\"\"\"\n10\t    value = headers.get(\"retry-after\")\n11\t    if value is None:\n12\t        return None\n13\t    return int(value)\n14\t"}
+{"ts": 1786001938.233, "event": "llm_start", "run_id": "019fd602-d739-7f42-b89d-daafc2940fc1", "model": "RouterChatModel"}
+{"ts": 1786001938.234, "event": "llm_start", "run_id": "019fd602-d73a-7bf3-82b7-964f785e9f7d", "model": "llama-3.3-70b-versatile"}
+{"ts": 1786001938.434, "event": "llm_end", "run_id": "019fd602-d73a-7bf3-82b7-964f785e9f7d", "ok": true, "tokens_in": 688, "tokens_out": 23}
+{"ts": 1786001938.435, "event": "llm_end", "run_id": "019fd602-d739-7f42-b89d-daafc2940fc1", "ok": true, "tokens_in": 688, "tokens_out": 23}
+{"ts": 1786001938.436, "event": "tool_start", "run_id": "019fd602-d803-7931-addb-85611aa3e3b9", "tool": "read_lines", "args": "{'file_path': 'tests/test_retry.py', 'offset': 0}"}
+{"ts": 1786001938.437, "event": "tool_end", "run_id": "019fd602-d803-7931-addb-85611aa3e3b9", "ok": true, "tool": "read_lines", "output": "1\timport sys\n2\tfrom pathlib import Path\n3\t\n4\tsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n5\t\n6\tfrom retry import parse_retry_after\n7\t\n8\t\n9\tdef test_matches_header_case_insensitively():\n10\t    # Providers send the canonical HTTP casing, not lowercase.\n11\t    assert parse_retry_after({\"Retry-After\": \"30\"}) == 30\n12\t"}
+{"ts": 1786001938.438, "event": "llm_start", "run_id": "019fd602-d806-7613-b26a-05f55eaab4f0", "model": "RouterChatModel"}
+{"ts": 1786001938.439, "event": "llm_start", "run_id": "019fd602-d807-7a72-a7ad-4dc9421942e8", "model": "llama-3.3-70b-versatile"}
+{"ts": 1786001938.702, "event": "llm_end", "run_id": "019fd602-d807-7a72-a7ad-4dc9421942e8", "ok": true, "tokens_in": 809, "tokens_out": 38}
+{"ts": 1786001938.703, "event": "llm_end", "run_id": "019fd602-d806-7613-b26a-05f55eaab4f0", "ok": true, "tokens_in": 809, "tokens_out": 38}
+{"ts": 1786001938.704, "event": "tool_start", "run_id": "019fd602-d910-79f3-bf10-db5c6f9d96d1", "tool": "read_lines", "args": "{'file_path': 'retry.py', 'offset': 0}"}
+{"ts": 1786001938.705, "event": "tool_end", "run_id": "019fd602-d910-79f3-bf10-db5c6f9d96d1", "ok": true, "tool": "read_lines", "output": "1\t\"\"\"Reading the Retry-After header a provider sends with a rate-limit response.\n2\t\n3\tThe router uses this to decide how long to keep an account in cooldown before\n4\ttrying it again.\n5\t\"\"\"\n6\t\n7\t\n8\tdef parse_retry_after(headers):\n9\t    \"\"\"Seconds to wait before retrying, or None if the header is absent.\"\"\"\n10\t    value = headers.get(\"retry-after\")\n11\t    if value is None:\n12\t        return None\n13\t    return int(value)\n14\t"}
+{"ts": 1786001938.706, "event": "tool_start", "run_id": "019fd602-d912-7761-93df-0a038e0c4ce8", "tool": "search_code", "args": "{'pattern': 'headers.get(\"retry-after\")'}"}
+{"ts": 1786001938.708, "event": "tool_end", "run_id": "019fd602-d912-7761-93df-0a038e0c4ce8", "ok": true, "tool": "search_code", "output": "/retry.py:10: value = headers.get(\"retry-after\")"}
+{"ts": 1786001938.709, "event": "llm_start", "run_id": "019fd602-d914-7751-b61e-1a2842fc5cbd", "model": "RouterChatModel"}
+{"ts": 1786001938.71, "event": "llm_start", "run_id": "019fd602-d915-7ff0-b3b9-ca5027236eec", "model": "llama-3.3-70b-versatile"}
+{"ts": 1786001939.067, "event": "llm_end", "run_id": "019fd602-d915-7ff0-b3b9-ca5027236eec", "ok": true, "tokens_in": 983, "tokens_out": 47}
+{"ts": 1786001939.068, "event": "llm_end", "run_id": "019fd602-d914-7751-b61e-1a2842fc5cbd", "ok": true, "tokens_in": 983, "tokens_out": 47}
+{"ts": 1786001939.07, "event": "llm_start", "run_id": "019fd602-da7d-7373-a340-06f5b8b469fb", "model": "RouterChatModel"}
+{"ts": 1786001939.072, "event": "llm_start", "run_id": "019fd602-da7f-7722-8759-00988a937ddc", "model": "llama-3.3-70b-versatile"}
+{"ts": 1786001939.334, "event": "llm_end", "run_id": "019fd602-da7f-7722-8759-00988a937ddc", "ok": true, "tokens_in": 517, "tokens_out": 54}
+{"ts": 1786001939.335, "event": "llm_end", "run_id": "019fd602-da7d-7373-a340-06f5b8b469fb", "ok": true, "tokens_in": 517, "tokens_out": 54}
+{"ts": 1786001939.337, "event": "tool_start", "run_id": "019fd602-db88-7301-bc3d-6b5d24a3f8ea", "tool": "replace_in_file", "args": "{'file_path': 'retry.py', 'new_text': 'value = headers.get(\"Retry-After\") or headers.get(\"retry-after\")', 'old_text': 'value = headers.get(\"retry-after\")'}"}
+{"ts": 1786001939.338, "event": "tool_end", "run_id": "019fd602-db88-7301-bc3d-6b5d24a3f8ea", "ok": true, "tool": "replace_in_file", "output": "ok: replaced 1 occurrence(s) in retry.py"}
+{"ts": 1786001939.339, "event": "llm_start", "run_id": "019fd602-db8a-7851-910b-79a0df4b6c18", "model": "RouterChatModel"}
+{"ts": 1786001939.34, "event": "llm_start", "run_id": "019fd602-db8b-7971-9591-6b642c92e065", "model": "llama-3.3-70b-versatile"}
+{"ts": 1786001939.516, "event": "llm_end", "run_id": "019fd602-db8b-7971-9591-6b642c92e065", "ok": true, "tokens_in": 592, "tokens_out": 7}
+{"ts": 1786001939.517, "event": "llm_end", "run_id": "019fd602-db8a-7851-910b-79a0df4b6c18", "ok": true, "tokens_in": 592, "tokens_out": 7}

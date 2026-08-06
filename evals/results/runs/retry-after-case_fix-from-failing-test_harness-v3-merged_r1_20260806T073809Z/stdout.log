@@ -1,0 +1,12 @@
+
+=== PASS after 0 cycle(s) [v3-merged] ===
+  investigate: The test expects case-insensitive header lookup, but the current code uses lowercase `"retry-after"`.
+
+**File:** `/retry
+...(clipped)
+  edit: ok: replaced 1 occurrence(s) in /retry.py
+  test: passed
+
+model calls: 7 | ~prompt tokens: 2685 | ~avg/call: 383
+  edit      3 calls  ~357 tok/call
+  investigate  4 calls  ~403 tok/call

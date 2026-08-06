@@ -539,4 +539,156 @@ only visible if you read the evidence rather than the score.
 
 ---
 
+## 6.14 Architecture variants tried
+
+Each variant is selectable by `HARNESS_VARIANT` and has its own eval
+configuration, so it is measured rather than argued about
+([variants.py](../agent/harness/variants.py)). All runs are on the same L0
+scenario, interleaved, identical pool.
+
+| Variant | What it changes | pass | calls | bounces | `tokens_in` |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `baseline` | The deep-agents loop | 3/3 | 20.0 | 6.5 | 226,854 |
+| `v1-pipeline` | The original fixed pipeline | 4/6 | 16.8 | 4.2 | 15,067 |
+| `v3-merged` | One `investigate` role replaces locate + inspect | 4/6 | 12.8 | 4.7 | 10,499 |
+| `v6-guarded` | v5 + forced summary + no-note guard on edit | 2/3 | **7.3** | **2.0** | **5,756** |
+| `v5-lean` | Seeded files + edit retry + two-tool locate | 1/3 | 15.0 | 4.7 | 12,827 |
+| `v2-seeded` | Glob the file list, skip `locate` | 0/3 | 15.7 | 4.0 | 13,755 |
+| `v7-orchestrated` | Hub and spoke; execution as an agent | 0/3 | 19.7 | 7.3 | 12,543 |
+
+### 6.14.1 The pass column is noise, and I can prove it
+
+`v3-merged` scored **3/3 in one batch and 1/3 in the next** — same
+configuration, same scenario, same pool, hours apart. Its true rate across both
+is 4/6, identical to `v1`.
+
+So the ordering in that table is not a ranking. An earlier draft of this page
+read `v3`'s 3/3 as evidence that merging roles helps and seeding hurts, and
+built an argument on it. The replication says that argument had no support.
+[8.6](08-evaluation-method.md#86-fair-comparison) predicted exactly this — the
+noise floor is around 15 points at ten times this sample — and it is worth
+recording that the prediction was borne out rather than quietly deleting the
+claim.
+
+**What survives is the cost column.** Token and call counts were stable across
+every rep and every batch, and the spread between configurations is far larger
+than their variance. `v6-guarded` runs the same task on **7.3 calls and 5,756
+tokens against the baseline's 20.0 and 226,854** — a 39× reduction that
+replicated everywhere.
+
+### 6.14.2 Every failure is `reasoning`, and that reframes the whole exercise
+
+Across all 21 harness runs, the failure taxonomy
+([10.3](10-metrics.md#103-failure-taxonomy)) says:
+
+| class | count |
+| --- | ---: |
+| `reasoning` | 12 |
+| `stopping` | 1 |
+| `retrieval` | 0 |
+| `tooling` | 0 |
+
+Not one failure was the agent failing to find the code, or failing to express an
+edit. Every variant located the file, applied a change, ran the tests — and got
+the fix conceptually wrong, almost always the same way: flipping
+`headers.get("retry-after")` to `"Retry-After"` instead of making the lookup
+case-insensitive ([6.13.1](#6131-the-one-failure-is-the-interesting-part)).
+
+**Architecture cannot fix that.** Routing, role splits, context partitioning and
+tool budgets all address `retrieval`, `tooling` and `stopping`. The measured
+bottleneck is none of those. This is the conclusion the taxonomy exists to
+deliver, and it says the remaining headroom on this task is in model tier and
+prompt, not in topology — the harness work bought a 39× cost reduction and has
+close to nothing left to give on correctness.
+
+It also means the harness and baseline may be closer than 3/3-vs-4/6 suggests:
+both fail the same way, and the baseline has more chances to stumble into the
+right answer because it spends 20× the tokens doing it.
+
+### 6.14.3 Observations from the logs
+
+These are mechanisms seen while reading run traces. They are **observations, not
+results** — the pass rates above cannot support them, and each would need its
+own measurement on a scenario set that can discriminate.
+
+**Seeding removed the wrong thing.** `v2-seeded` hands `inspect` a correct file
+list for free and skips a model call, and it was the worst pipeline variant.
+Reading its runs, `locate` looks valuable less for the file list it produces
+than because searching for the task's identifiers is how the agent works out
+what the task is *about*. Seeding delivers the artifact and skips the
+engagement. Plausible, unproven, and cheap to test properly later.
+
+**Handoffs lose information.** Anything a role does not write into a capped
+blackboard note is gone when it returns. Merging locate and inspect removes one
+such boundary. This is the strongest argument for *not* splitting roles further
+than the token budget requires — partition context to fit the budget, not for
+its own sake.
+
+**Hub and spoke cost the most and passed the least.** `v7` spent the most calls
+(19.7) and took the most failover bounces (7.3) of any variant, for 0/3. A model
+call per decision is a real cost on a pool this size, and on a task whose shape
+the fixed pipeline already matches, the flexibility bought nothing. It should be
+re-tested on a scenario the pipeline *cannot* express — a multi-file feature, or
+anything needing a replan — because that is the only place its extra cost could
+pay for itself.
+
+### 6.14.4 Two bugs the variants exposed
+
+**A role could do all its work and report nothing.** If a role spent every round
+on tool calls, the loop ended holding a tool-calling response, whose text
+content is empty. The blackboard then got nothing, and the next role acted
+blind. In one recorded run the `edit` role — write tools, no finding to act on —
+invented a `read_files.py` to explore with, because exploring was the only thing
+left to do with the tools it had. Fixed by `force_summary` (spend the last round
+with no tools bound, so the role must speak) and `require_note` (refuse to enter
+`edit` with nothing to act on).
+
+**Forcing a summary broke the roles it was applied to.** `force_summary` on the
+*edit* role stole the round it needed to act: given two rounds with the last one
+tool-less, a model would spend the first thinking and then describe a fix it
+never applied — sixteen edit calls in one run, no edit. Roles now declare
+`reports`, and the forced summary applies only where the role's value is what it
+*says* rather than what it *does*. That single distinction took the same
+orchestrated task from 40 calls and no fix to 15 calls, fixed and verified.
+
+### 6.14.5 `v7-orchestrated`: hub and spoke
+
+The fixed pipeline can only do bugfix-shaped work in a fixed order. `v7`
+replaces it with an orchestrator that chooses the next worker every time:
+
+```
+        ┌──────────────► orchestrate ◄──────────────┐
+        │              (no tools, sees all)         │
+        │        ┌────────┬────┴───┬─────────┐      │
+        └── explore    plan      edit     execute ──┘
+```
+
+Three changes from the pipeline:
+
+- **Execution is an agent, not a fixed step.** The run can check things other
+  than the test suite, and can decide when checking is worth it.
+- **The orchestrator holds the widest context** — task, plan, files, notes,
+  edits, last command, and the step log — and is consulted after every worker,
+  so it can replan when a result surprises it.
+- **It still holds no tools.** Deciding and acting stay in different calls; that
+  constraint survives the topology change.
+
+This is the opposite bet from the rest of the harness: a model call per
+decision, and the biggest prompt in the system, bought in exchange for
+flexibility. Two guards proved necessary from watching it run:
+
+- **A `DONE` that no successful run backs is refused once.** An unverified
+  "done" is the `stopping` failure class wearing a confident face.
+- **Execution verdicts come from the tool's exit code, not the model's summary
+  of it.** A model that reports "everything passes" about a failing run would
+  otherwise end the task.
+
+And one deterministic edge had to be put back: **after an edit applies, run the
+code.** Orchestrators repeatedly chose `EDIT` again instead of verifying, never
+reached a check, and exhausted the budget — 40 calls with the fix already
+applied and never confirmed. "Check what you just changed" is always the right
+next move, so it is not worth a model call.
+
+---
+
 **Previous:** [← 5. Providers and limits](05-providers.md) · **Next:** [7. Observability →](07-observability.md)
