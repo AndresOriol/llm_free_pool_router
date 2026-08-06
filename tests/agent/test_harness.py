@@ -282,17 +282,18 @@ def test_orchestrated_topology():
 
     # Claim DONE immediately. The guard must force an execute first; that run
     # fails (the bug is still there), so the next DONE must not end the task.
+    # After the edit applies, auto_execute_after_edit runs the suite without
+    # spending an orchestrator call -- hence no EXECUTE word in this script.
     script = [ai("DONE"),                                        # orchestrate
               ai(calls=[("run_tests", {"command": "python -m pytest"})]),
-              ai("it failed"),                                   # execute wrap-up
+              ai("it failed"),                                   # execute summary
               ai("EDIT"),                                        # orchestrate
               ai(calls=[("replace_in_file", {"file_path": "/calc.py",
                                              "old_text": "return a - b",
                                              "new_text": "return a + b"})]),
-              ai("done"),
-              ai("EXECUTE"),                                     # orchestrate
-              ai(calls=[("run_tests", {"command": "python -m pytest"})]),
-              ai("passed"),
+              ai("applied"),                                     # edit summary
+              ai(calls=[("run_tests", {"command": "python -m pytest"})]),  # auto
+              ai("passed"),                                      # execute summary
               ai("DONE")]                                        # orchestrate
     model = ScriptedModel(script)
     bb, stats, outcome = solve(model, backend, toolset, "add() is wrong",
@@ -304,6 +305,8 @@ def test_orchestrated_topology():
     check("execute is its own role", "execute" in stats.by_role)
     check("unverified done was refused",
           any("nothing has run" in line for line in bb.log))
+    check("edit was followed by execution without asking",
+          any(line.startswith("auto: -> execute") for line in bb.log))
     # The orchestrator must never hold tools, in any topology. `bind_tools` is
     # not called at all for a tool-less role, so `tools` stays None -- a
     # stronger guarantee than binding an empty list.

@@ -32,6 +32,12 @@ class Role:
     sections: tuple        # blackboard sections this role is allowed to see
     max_rounds: int = 2    # tool-call rounds before the role is cut off
     instruction: str = ""  # the ask, appended after the rendered blackboard
+    # Is this role's value its *text* (a report) or its *tool effects* (an
+    # action)? Only a reporting role benefits from a forced no-tools final
+    # round. Forcing one on an acting role steals the round it needed to act:
+    # an edit role given two rounds, one of them tool-less, spent the first
+    # thinking and then could only describe the fix it never applied.
+    reports: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +64,7 @@ EXECUTE = Role(
     tools=("run_tests",),
     sections=("task", "plan", "edits"),
     max_rounds=2,
+    reports=False,
     instruction="Run the command that checks this task. Usually "
                 '`python -m pytest`. Then say in one line whether it passed and, '
                 "if not, what failed.",
@@ -135,7 +142,8 @@ EDIT = Role(
            "not run tests and you do not explore.",
     tools=("replace_in_file", "create_file"),
     sections=("task", "plan", "notes", "edits", "exec"),
-    max_rounds=2,
+    max_rounds=3,
+    reports=False,
     instruction="Apply the change described above using replace_in_file. "
                 "`old_text` must match the file exactly. Make the smallest change "
                 "that works.",

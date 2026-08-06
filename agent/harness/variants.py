@@ -79,6 +79,11 @@ class Variant:
     # Orchestrated runs spend a cycle per decision, not per edit-test round, so
     # they need a larger budget to reach the same amount of work.
     max_cycles_hint: int = 0
+    # Orchestrated only: go straight from a successful edit to execution instead
+    # of asking. Observed: orchestrators keep picking EDIT after an edit already
+    # applied, never verify, and burn the budget. "Check what you just changed"
+    # is the one transition that is always right, so it is not worth a call.
+    auto_execute_after_edit: bool = True
 
 
 V1 = Variant(

@@ -74,8 +74,10 @@ def run_role(model, role, toolset, bb: Blackboard, config: dict,
     """
     tools = [toolset[name] for name in role.tools if name in toolset]
     bound = model.bind_tools(tools) if tools else model
-    # Forcing a summary is only meaningful when there is a round to spare.
-    forcing = force_summary and tools and role.max_rounds >= 2
+    # Only worth forcing on a role whose value is what it says, and only when
+    # there is a round to spare. On an acting role it steals the round it
+    # needed to act (see Role.reports).
+    forcing = force_summary and role.reports and tools and role.max_rounds >= 2
 
     messages = [
         SystemMessage(content=role.prompt),
@@ -190,10 +192,15 @@ def solve_orchestrated(model, backend, toolset, task, config, test_cmd,
     workers = {"explore": EXPLORE, "plan": PLAN, "edit": variant.edit,
                "execute": EXECUTE}
 
+    forced_next = None
     while bb.cycles < max_cycles:
         bb.cycles += 1
-        decision = run_role(model, ORCHESTRATE, toolset, bb, config, stats)
-        action = _parse_action(decision.text, bb)
+        if forced_next:
+            action, forced_next = forced_next, None
+            bb.record("auto", f"-> {action}")
+        else:
+            decision = run_role(model, ORCHESTRATE, toolset, bb, config, stats)
+            action = _parse_action(decision.text, bb)
 
         if action == "giveup":
             bb.record("orchestrate", "-> giveup")
@@ -212,9 +219,14 @@ def solve_orchestrated(model, backend, toolset, task, config, test_cmd,
         else:
             bb.record("orchestrate", f"-> {action}")
 
+        before = len(bb.edits)
         result = run_role(model, workers[action], toolset, bb, config, stats,
                           force_summary=variant.force_summary)
         _absorb(action, result, bb, backend)
+
+        if (action == "edit" and variant.auto_execute_after_edit
+                and len(bb.edits) > before):
+            forced_next = "execute"
 
     return bb, stats, "exhausted"
 
