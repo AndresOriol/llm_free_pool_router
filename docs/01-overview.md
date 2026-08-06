@@ -76,15 +76,25 @@ needs a reason, not an opportunity.
 
 Honest summary, as of the last update to [11. Evaluation status](11-eval-status.md):
 
-- The pool works and fails over in practice. A trivial one-line fix costs
-  roughly 10 provider calls across 5–7 distinct models — failover functions,
-  but the pool gets walked hard.
+- The pool works and fails over in practice. A trivial one-line fix costs the
+  deep-agents loop ~20 provider calls and ~227,000 input tokens — failover
+  functions, but the pool gets walked hard.
 - The agent runs real tasks end to end, writes files, and runs its own tests.
-- The evaluation harness runs end to end but has **one scenario**, which is not
-  enough to compare two configurations. That is the current bottleneck.
-- A known crash: Groq returns `404 model_not_found` for a decommissioned model,
-  and 404 is not in the transient set, so it kills the run
-  ([4.6](04-failover.md#46-known-gaps)).
+- The evaluation harness runs end to end and has run its first real comparison.
+  It still has **one scenario**, at the easiest level, and that scenario is now
+  *exhausted as an instrument*: seven configurations were run against it and
+  none was distinguishable from another. **Authoring L1/L2 scenarios is the
+  single blocking item** ([13.2](13-roadmap.md#132-what-to-do-next)).
+- Two Groq models are decommissioned and return `404 model_not_found`, which is
+  not in the transient set, so it kills a run
+  ([4.6](04-failover.md#46-known-gaps)). Evals work around it with a trimmed
+  pool; the shipping pool does not.
+- An alternative agent architecture lives unmerged on `harness/adhoc-router`:
+  same task for 39× fewer tokens, but no demonstrated correctness gain
+  ([6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness)).
+
+**Work in progress lives on a branch, not on `master`.** Check `git branch` before
+assuming what is present.
 
 ## 1.6 Reading paths
 

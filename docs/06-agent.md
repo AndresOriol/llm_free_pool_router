@@ -404,32 +404,23 @@ fall from 5,533 to 133–166 per role. The worst case any role can reach is
 loop at all. A test pins this: if any role's saturated prompt exceeds the
 5,400-token usable ceiling, the suite fails.
 
-### 6.12.3 First live run
+### 6.12.3 Running it
 
-One task ("`add()` returns the wrong value; fix it"), one run, against the real
-pool:
+```bash
+python -m agent.harness [workdir] < brief.md          # same contract as agent.coding_agent
+HARNESS_VARIANT=v6-guarded python -m agent.harness .  # pick an architecture (6.14)
+HARNESS_TEST_CMD="python -m pytest tests/unit" python -m agent.harness .
+ROUTER_CONFIG=llm_router/config.eval.yaml python -m agent.harness .   # pool without dead models
+```
 
-| | baseline (deepagents, recorded r1) | ad-hoc harness |
-| --- | ---: | ---: |
-| outcome | pass | pass |
-| provider calls | 11 | 9 |
-| distinct models | 5 | 2 |
-| failover bounces | 4 | 1 |
-| `tokens_in` | 89,260 | **3,369** |
-| served by Gemini | 4 of 6 steps | **none** |
+Workdir argument, task on stdin, exits at EOF — identical to
+`agent.coding_agent`, which is what lets an eval configuration swap one for the
+other by setting `agent_cmd` and nothing else. Variants have one eval config
+each (`evals/configs/harness-*.yaml`), differing only by `HARNESS_VARIANT`.
 
-The whole task ran on `llama-3.3-70b` and `gpt-oss-120b` — the Groq models that
-[6.8.1](#681-the-overhead-prices-the-groq-half-of-the-pool-out) shows are priced
-out of the wide loop by step 4. That is the mechanism working end to end: cheap
-enough per call that the cheap half of the pool can actually serve it.
-
-**These two runs are not a comparison.** They are different scenarios, n=1
-each, and the baseline's number comes from a previously recorded run. The
-controlled version is `python -m evals run --config baseline --config
-adhoc-harness --reps 5`, interleaved, on the same scenario
-([8.6](08-evaluation-method.md#86-fair-comparison)). Until that exists, the
-honest claim is narrow: the harness works end to end, and its per-call cost is
-roughly an order of magnitude lower.
+The first live run was measured against the real pool and is superseded by the
+controlled comparison in [6.13](#613-what-the-comparison-actually-showed) — read
+that instead.
 
 ### 6.12.4 What this trades away
 

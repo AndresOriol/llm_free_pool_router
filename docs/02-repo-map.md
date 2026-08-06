@@ -32,7 +32,19 @@ Selection and state. Never makes an API call itself.
 | [coding_agent.py](../agent/coding_agent.py) | *How is the pool wired into an agent loop?* — builds the deepagents graph, the CLI entry point |
 | [restricted_backend.py](../agent/restricted_backend.py) | *What is the agent allowed to execute?* — `FilesystemBackend` + an `execute` allowlist of `python`/`pytest` |
 | [trace.py](../agent/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
-| [harness/](../agent/harness/) | *Can many narrow agents beat one wide one?* — an alternative loop: one role per job, a shared blackboard, deterministic transitions. Branch candidate, see [6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness) |
+
+`agent/harness/` is an alternative agent loop — one role per job over a shared
+blackboard — living unmerged on `harness/adhoc-router`. See
+[6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness).
+
+| File | The question it answers |
+| --- | --- |
+| [blackboard.py](../agent/harness/blackboard.py) | *What does a role get to see?* — the shared state, and the per-section caps that **are** the context budget |
+| [roles.py](../agent/harness/roles.py) | *Who does what, with which tools?* — one Role per job, each declaring its tools and its blackboard sections |
+| [tools.py](../agent/harness/tools.py) | *What can a role actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
+| [loop.py](../agent/harness/loop.py) | *What happens when?* — the state machines: fixed pipeline, and hub-and-spoke orchestration |
+| [variants.py](../agent/harness/variants.py) | *Which architecture is this run?* — named variants selected by `HARNESS_VARIANT` |
+| [`__main__.py`](../agent/harness/__main__.py) | CLI, same contract as `agent.coding_agent` |
 
 ## 2.4 `evals/` — the measurement harness
 

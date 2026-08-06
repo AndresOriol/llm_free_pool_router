@@ -11,6 +11,26 @@ source, and read the source only when you're about to change it.
 New here? Start with [1. Overview](01-overview.md), then
 [2. Repo map](02-repo-map.md).
 
+## Where things stand right now
+
+*The three facts most likely to mislead someone picking this up cold. Everything
+else on this page is design and changes rarely; this block is state.*
+
+- **Active work lives on the `harness/adhoc-router` branch, not `master`.** It
+  holds an alternative agent architecture — same task for 39× fewer tokens, no
+  demonstrated correctness gain, deliberately unmerged
+  ([6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness)).
+- **The one L0 scenario is exhausted as a measuring instrument.** Seven
+  configurations were run against it; none could be distinguished from another,
+  and one scored 3/3 and 1/3 on consecutive batches. Re-running them will
+  produce a different random ordering, not an answer
+  ([6.14.1](06-agent.md#6141-the-pass-column-is-noise-and-i-can-prove-it)).
+- **Authoring L1/L2 scenarios is the single blocking item**
+  ([13.2](13-roadmap.md#132-what-to-do-next)). Every measured failure so far was
+  `reasoning`, never `retrieval` or `tooling`, which is why more architecture
+  work is not the next move
+  ([6.14.2](06-agent.md#6142-every-failure-is-reasoning-and-that-reframes-the-whole-exercise)).
+
 ---
 
 ## Index

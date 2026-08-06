@@ -24,18 +24,51 @@ doesn't start until told to.
 
 In order. The ordering is the argument.
 
-1. **Fix the dead-model crash.** `404 model_not_found` propagates and kills a
-   run ([4.6](04-failover.md#46-known-gaps)). Half of all measured runs died on
-   it. Everything downstream of measurement is untrustworthy until this is
-   fixed, which makes it the only thing with a claim to being first. A
-   decommissioned model should be disabled *permanently*, the way a
+1. **Author scenarios at L1 and L2.** The single blocking item. The one L0
+   scenario is *exhausted as an instrument*: seven configurations were run
+   against it and none could be distinguished from another, with one
+   configuration scoring 3/3 and 1/3 on consecutive batches
+   ([6.14.1](06-agent.md#6141-the-pass-column-is-noise-and-i-can-prove-it)).
+   More reps cannot fix that — only a task that discriminates can. Until this
+   lands, every proposed improvement is back to being decided by argument.
+2. **Fix the dead-model crash properly.** `404 model_not_found` propagates and
+   kills a run ([4.6](04-failover.md#46-known-gaps)). Evals work around it with
+   a trimmed pool (`llm_router/config.eval.yaml`); the shipping pool still dies
+   on it. A decommissioned model should be disabled *permanently*, the way a
    rate-limited one is benched *temporarily*.
-2. **Author scenarios at L1 and L2.** With one L0 scenario there is nothing to
-   compare configurations on ([11.4](11-eval-status.md#114-blockers)). This is
-   the single biggest unblocker in the repo: without it, every proposed
-   improvement is back to being decided by argument.
-3. **Re-baseline at n=5**, and record it in the ledger.
-4. **Then** the judge (P2), then compare/report (P3).
+3. **Decide the fate of the ad-hoc harness branch** — see
+   [13.2.1](#1321-the-open-question-on-the-branch) below.
+4. **Re-baseline at n=5** once scenarios exist, and record it in the ledger.
+5. **Then** the judge (P2), then compare/report (P3).
+
+### 13.2.1 The open question on the branch
+
+`harness/adhoc-router` holds a complete alternative agent architecture
+([6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness)–[6.14](06-agent.md#614-architecture-variants-tried)).
+It is **not merged and should not be merged on current evidence** — nothing beat
+baseline on the gating axis, and a draw keeps the simpler configuration.
+
+What the measurement did establish, and what a fresh session should not redo:
+
+- **Cost replicated: 7.3 calls and 5,756 input tokens against baseline's 20.0
+  and 226,854.** A 39× reduction, stable across every rep and batch.
+- **Pass rates on L0 are noise.** Do not re-run those seven configurations
+  against `retry-after-case`; the answer will be a different random ordering.
+- **Every failure was `reasoning`** — 12 of 13, zero `retrieval`, zero
+  `tooling`. Each configuration found the file, edited it, ran the tests, and
+  got the fix conceptually wrong
+  ([6.14.2](06-agent.md#6142-every-failure-is-reasoning-and-that-reframes-the-whole-exercise)).
+  **This is the load-bearing result**: topology changes address retrieval,
+  tooling and stopping, and none of those is the bottleneck. Further
+  architecture work has close to nothing left to give on correctness.
+
+So the branch is a *cost* win awaiting a scenario set that can price its
+*correctness*. The decision needs step 1 first, not more topologies.
+
+Note also that the two paths are independent: [6.9](06-agent.md#69-proposed-strategies)
+proposes making the deep-agents loop cheaper via a harness profile (verified to
+work, never built), while the branch replaces that loop entirely. Neither
+supersedes the other, and only one of them has been measured.
 
 ### Evaluation build order
 
@@ -59,8 +92,15 @@ plan that ignores one of them is wrong.
   *accounts* buys real capacity ([3.4](03-pool-model.md#34-priority-tiers)).
 - **Gemini's shape is the mirror image**: huge token budgets, very few requests
   per day. The pool only works because the two shapes complement each other.
-- **A one-line fix costs ~10 provider calls across 5–7 models.** Throughput, not
-  intelligence, is the binding constraint on long tasks.
+- **A one-line fix costs ~20 provider calls and ~227,000 input tokens** on the
+  deep-agents loop. Throughput is the binding constraint on long tasks — though
+  on the one scenario measured so far, *correctness* failures were all
+  `reasoning`, so throughput and capability are separate problems and only the
+  first has been solved.
+- **Two Groq models are decommissioned** (`llama-4-scout`, `qwen3-32b`) and 404.
+  A dead model is only reached if a request is small enough to pass the size
+  filter, so cheaper agents trip landmines that token-heavy ones never reach —
+  audit the pool before reading any efficiency result.
 - **Cooldown state is per process.** Two concurrent agents on the same keys each
   rediscover which accounts are hot.
 - **A full comparison costs a meaningful fraction of a day's quota**
