@@ -1,0 +1,70 @@
+{"ts": 1786000839.046, "event": "llm_start", "run_id": "019fd5f2-1185-7b32-b4c7-af9757f61859", "model": "RouterChatModel"}
+{"ts": 1786000840.072, "event": "llm_start", "run_id": "019fd5f2-1588-7df3-9f32-1ea564e1fcff", "model": "llama-3.3-70b-versatile"}
+{"ts": 1786000840.415, "event": "llm_end", "run_id": "019fd5f2-1588-7df3-9f32-1ea564e1fcff", "ok": true, "tokens_in": 477, "tokens_out": 31}
+{"ts": 1786000840.42, "event": "llm_end", "run_id": "019fd5f2-1185-7b32-b4c7-af9757f61859", "ok": true, "tokens_in": 477, "tokens_out": 31}
+{"ts": 1786000840.423, "event": "tool_start", "run_id": "019fd5f2-16e7-7aa0-a974-1a2e6bc3a6ee", "tool": "find_files", "args": "{'pattern': 'tests/test_retry.py'}"}
+{"ts": 1786000840.435, "event": "tool_end", "run_id": "019fd5f2-16e7-7aa0-a974-1a2e6bc3a6ee", "ok": true, "tool": "find_files", "output": "/tests/test_retry.py"}
+{"ts": 1786000840.438, "event": "tool_start", "run_id": "019fd5f2-16f6-7b43-a71c-d3baf601ec9f", "tool": "find_files", "args": "{'pattern': 'retry.py'}"}
+{"ts": 1786000840.442, "event": "tool_end", "run_id": "019fd5f2-16f6-7b43-a71c-d3baf601ec9f", "ok": true, "tool": "find_files", "output": "/retry.py"}
+{"ts": 1786000840.444, "event": "llm_start", "run_id": "019fd5f2-16fb-79b1-bd74-2727d5a35024", "model": "RouterChatModel"}
+{"ts": 1786000840.446, "event": "llm_start", "run_id": "019fd5f2-16fe-78b2-9809-6c620bc2f25d", "model": "llama-3.3-70b-versatile"}
+{"ts": 1786000840.846, "event": "llm_error", "run_id": "019fd5f2-16fe-78b2-9809-6c620bc2f25d", "ok": false, "detail": "BadRequestError('Error code: 400 - {\\'error\\': {\\'message\\': \\'tool call validation failed: attempted to call tool \\\\\\'search_code {\"pattern\": \"test_retry\"}\\\\\\' which was not in request.tools\\', \\'type\\': \\'invalid_request_error\\', \\'code\\': \\'tool_use_failed\\', \\'failed_generation\\': \\'<function=search_code {\"pattern\": \"test_retry\"}></function>\\\\n\\'}}')"}
+{"ts": 1786000840.864, "event": "llm_start", "run_id": "019fd5f2-189f-7b93-8bb6-68ec5751e089", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000841.23, "event": "llm_end", "run_id": "019fd5f2-189f-7b93-8bb6-68ec5751e089", "ok": true, "tokens_in": 381, "tokens_out": 38}
+{"ts": 1786000841.233, "event": "llm_end", "run_id": "019fd5f2-16fb-79b1-bd74-2727d5a35024", "ok": true, "tokens_in": 381, "tokens_out": 38}
+{"ts": 1786000841.237, "event": "tool_start", "run_id": "019fd5f2-1a14-7133-b325-484f0d3597c9", "tool": "search_code", "args": "{'path': 'tests/test_retry.py', 'pattern': 'retry'}"}
+{"ts": 1786000841.247, "event": "tool_end", "run_id": "019fd5f2-1a14-7133-b325-484f0d3597c9", "ok": true, "tool": "search_code", "output": "/retry.py:8: def parse_retry_after(headers):\n/retry.py:9: \"\"\"Seconds to wait before retrying, or None if the header is absent.\"\"\"\n/retry.py:10: value = headers.get(\"retry-after\")\n/tests/test_retry.py:6: from retry import parse_retry_after\n/tests/test_retry.py:11: assert parse_retry_after({\"Retry-After\": \"30\"}) == 30"}
+{"ts": 1786000841.25, "event": "llm_start", "run_id": "019fd5f2-1a22-7421-a0a3-c04a44b18bb5", "model": "RouterChatModel"}
+{"ts": 1786000841.256, "event": "llm_start", "run_id": "019fd5f2-1a27-7293-8118-a9bb0a978579", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000841.706, "event": "llm_end", "run_id": "019fd5f2-1a27-7293-8118-a9bb0a978579", "ok": true, "tokens_in": 501, "tokens_out": 33}
+{"ts": 1786000841.708, "event": "llm_end", "run_id": "019fd5f2-1a22-7421-a0a3-c04a44b18bb5", "ok": true, "tokens_in": 501, "tokens_out": 33}
+{"ts": 1786000841.71, "event": "tool_start", "run_id": "019fd5f2-1bee-7351-b1f9-f0c45877d090", "tool": "search_code", "args": "{'path': 'retry.py', 'pattern': 'def'}"}
+{"ts": 1786000841.714, "event": "tool_end", "run_id": "019fd5f2-1bee-7351-b1f9-f0c45877d090", "ok": true, "tool": "search_code", "output": "/retry.py:8: def parse_retry_after(headers):\n/tests/test_retry.py:9: def test_matches_header_case_insensitively():"}
+{"ts": 1786000841.717, "event": "llm_start", "run_id": "019fd5f2-1bf4-7c52-85bd-c82ff2d8ea42", "model": "RouterChatModel"}
+{"ts": 1786000841.723, "event": "llm_start", "run_id": "019fd5f2-1bfb-7fc2-93c9-d34066ebeaa9", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000842.109, "event": "llm_end", "run_id": "019fd5f2-1bfb-7fc2-93c9-d34066ebeaa9", "ok": true, "tokens_in": 336, "tokens_out": 34}
+{"ts": 1786000842.11, "event": "llm_end", "run_id": "019fd5f2-1bf4-7c52-85bd-c82ff2d8ea42", "ok": true, "tokens_in": 336, "tokens_out": 34}
+{"ts": 1786000842.112, "event": "tool_start", "run_id": "019fd5f2-1d7f-7192-9a8d-46374dcaf26b", "tool": "read_lines", "args": "{'file_path': 'retry.py', 'offset': 0}"}
+{"ts": 1786000842.114, "event": "tool_end", "run_id": "019fd5f2-1d7f-7192-9a8d-46374dcaf26b", "ok": true, "tool": "read_lines", "output": "1\t\"\"\"Reading the Retry-After header a provider sends with a rate-limit response.\n2\t\n3\tThe router uses this to decide how long to keep an account in cooldown before\n4\ttrying it again.\n5\t\"\"\"\n6\t\n7\t\n8\tdef parse_retry_after(headers):\n9\t    \"\"\"Seconds to wait before retrying, or None if the header is absent.\"\"\"\n10\t    value = headers.get(\"retry-after\")\n11\t    if value is None:\n12\t        return None\n13\t    return int(value)\n14\t"}
+{"ts": 1786000842.115, "event": "llm_start", "run_id": "019fd5f2-1d83-7873-a06d-4891852544f2", "model": "RouterChatModel"}
+{"ts": 1786000842.118, "event": "llm_start", "run_id": "019fd5f2-1d86-7173-87b9-9f01e3fc401b", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000842.892, "event": "llm_end", "run_id": "019fd5f2-1d86-7173-87b9-9f01e3fc401b", "ok": true, "tokens_in": 475, "tokens_out": 34}
+{"ts": 1786000842.897, "event": "llm_end", "run_id": "019fd5f2-1d83-7873-a06d-4891852544f2", "ok": true, "tokens_in": 475, "tokens_out": 34}
+{"ts": 1786000842.9, "event": "tool_start", "run_id": "019fd5f2-2093-7090-8402-4d0b4a5ccbcd", "tool": "read_lines", "args": "{'file_path': 'tests/test_retry.py', 'offset': 0}"}
+{"ts": 1786000842.904, "event": "tool_end", "run_id": "019fd5f2-2093-7090-8402-4d0b4a5ccbcd", "ok": true, "tool": "read_lines", "output": "1\timport sys\n2\tfrom pathlib import Path\n3\t\n4\tsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n5\t\n6\tfrom retry import parse_retry_after\n7\t\n8\t\n9\tdef test_matches_header_case_insensitively():\n10\t    # Providers send the canonical HTTP casing, not lowercase.\n11\t    assert parse_retry_after({\"Retry-After\": \"30\"}) == 30\n12\t"}
+{"ts": 1786000842.907, "event": "llm_start", "run_id": "019fd5f2-209a-7db1-97b7-d39cce57583f", "model": "RouterChatModel"}
+{"ts": 1786000842.91, "event": "llm_start", "run_id": "019fd5f2-209d-70c2-96f5-b650c219d38b", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000844.014, "event": "llm_end", "run_id": "019fd5f2-209d-70c2-96f5-b650c219d38b", "ok": true, "tokens_in": 599, "tokens_out": 369}
+{"ts": 1786000844.021, "event": "llm_end", "run_id": "019fd5f2-209a-7db1-97b7-d39cce57583f", "ok": true, "tokens_in": 599, "tokens_out": 369}
+{"ts": 1786000844.024, "event": "llm_start", "run_id": "019fd5f2-24f8-7900-bb29-b5e6aa310e98", "model": "RouterChatModel"}
+{"ts": 1786000844.029, "event": "llm_start", "run_id": "019fd5f2-24fd-7090-9002-56b245f5ca58", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000844.467, "event": "llm_end", "run_id": "019fd5f2-24fd-7090-9002-56b245f5ca58", "ok": true, "tokens_in": 432, "tokens_out": 58}
+{"ts": 1786000844.47, "event": "llm_end", "run_id": "019fd5f2-24f8-7900-bb29-b5e6aa310e98", "ok": true, "tokens_in": 432, "tokens_out": 58}
+{"ts": 1786000844.472, "event": "tool_start", "run_id": "019fd5f2-26b7-7dc1-a431-a111afff2d40", "tool": "create_file", "args": "{'content': '', 'file_path': 'retry.py'}"}
+{"ts": 1786000844.473, "event": "tool_end", "run_id": "019fd5f2-26b7-7dc1-a431-a111afff2d40", "ok": true, "tool": "create_file", "output": "error: Cannot write to retry.py because it already exists. Read and then make an edit, or write to a new path."}
+{"ts": 1786000844.475, "event": "llm_start", "run_id": "019fd5f2-26bb-7a61-9f67-4b703a8c18df", "model": "RouterChatModel"}
+{"ts": 1786000844.478, "event": "llm_start", "run_id": "019fd5f2-26bd-7960-a571-3cfdeed7a592", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000844.875, "event": "llm_end", "run_id": "019fd5f2-26bd-7960-a571-3cfdeed7a592", "ok": true, "tokens_in": 489, "tokens_out": 45}
+{"ts": 1786000844.878, "event": "llm_end", "run_id": "019fd5f2-26bb-7a61-9f67-4b703a8c18df", "ok": true, "tokens_in": 489, "tokens_out": 45}
+{"ts": 1786000844.88, "event": "tool_start", "run_id": "019fd5f2-2850-70c0-a1c4-2baffa1efaaf", "tool": "create_file", "args": "{'content': '', 'file_path': 'retry.py'}"}
+{"ts": 1786000844.882, "event": "tool_end", "run_id": "019fd5f2-2850-70c0-a1c4-2baffa1efaaf", "ok": true, "tool": "create_file", "output": "error: Cannot write to retry.py because it already exists. Read and then make an edit, or write to a new path."}
+{"ts": 1786000846.346, "event": "llm_start", "run_id": "019fd5f2-2e0a-7610-9665-645ba0a4b399", "model": "RouterChatModel"}
+{"ts": 1786000846.35, "event": "llm_start", "run_id": "019fd5f2-2e0d-73c2-bc54-17b19bf3a5e3", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000846.745, "event": "llm_end", "run_id": "019fd5f2-2e0d-73c2-bc54-17b19bf3a5e3", "ok": true, "tokens_in": 652, "tokens_out": 42}
+{"ts": 1786000846.747, "event": "llm_end", "run_id": "019fd5f2-2e0a-7610-9665-645ba0a4b399", "ok": true, "tokens_in": 652, "tokens_out": 42}
+{"ts": 1786000846.749, "event": "llm_start", "run_id": "019fd5f2-2f9c-7461-b546-88206d0d0d56", "model": "RouterChatModel"}
+{"ts": 1786000846.752, "event": "llm_start", "run_id": "019fd5f2-2fa0-7dd1-8f1a-67b5b67a2f9b", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000847.231, "event": "llm_end", "run_id": "019fd5f2-2fa0-7dd1-8f1a-67b5b67a2f9b", "ok": true, "tokens_in": 691, "tokens_out": 51}
+{"ts": 1786000847.235, "event": "llm_end", "run_id": "019fd5f2-2f9c-7461-b546-88206d0d0d56", "ok": true, "tokens_in": 691, "tokens_out": 51}
+{"ts": 1786000847.239, "event": "tool_start", "run_id": "019fd5f2-3186-79a2-b37a-93ecace15cb1", "tool": "create_file", "args": "{'content': '', 'file_path': 'retry.py'}"}
+{"ts": 1786000847.242, "event": "tool_end", "run_id": "019fd5f2-3186-79a2-b37a-93ecace15cb1", "ok": true, "tool": "create_file", "output": "error: Cannot write to retry.py because it already exists. Read and then make an edit, or write to a new path."}
+{"ts": 1786000847.245, "event": "llm_start", "run_id": "019fd5f2-318c-7d50-8ba1-603a8c5434a6", "model": "RouterChatModel"}
+{"ts": 1786000847.248, "event": "llm_start", "run_id": "019fd5f2-3190-7b30-b998-43dec79edd4e", "model": "openai/gpt-oss-120b"}
+{"ts": 1786000847.64, "event": "llm_error", "run_id": "019fd5f2-3190-7b30-b998-43dec79edd4e", "ok": false, "detail": "BadRequestError('Error code: 400 - {\\'error\\': {\\'message\\': \"Tool call validation failed: tool call validation failed: attempted to call tool \\'open_file\\' which was not in request.tools\", \\'type\\': \\'invalid_request_error\\', \\'code\\': \\'tool_use_failed\\', \\'failed_generation\\': \\'{\"name\": \"open_file\", \"arguments\": {\"path\":\"retry.py\",\"line_start\":1,\"line_end\":200}}\\'}}')"}
+{"ts": 1786000847.709, "event": "llm_start", "run_id": "019fd5f2-335d-7cf3-b1d9-0607f065d1a8", "model": "gemini-3.5-flash"}
+{"ts": 1786000847.896, "event": "llm_error", "run_id": "019fd5f2-335d-7cf3-b1d9-0607f065d1a8", "ok": false, "detail": "ChatGoogleGenerativeAIError(\"Error calling model 'gemini-3.5-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\\\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.5-flash\\\\nPlease retry in 12.117340193s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '12s'}]}}\")"}
+{"ts": 1786000847.915, "event": "llm_start", "run_id": "019fd5f2-342a-7ec3-9ffd-b5d46636e92e", "model": "qwen/qwen3.6-27b"}
+{"ts": 1786000848.482, "event": "llm_end", "run_id": "019fd5f2-342a-7ec3-9ffd-b5d46636e92e", "ok": true, "tokens_in": 1012, "tokens_out": 162}
+{"ts": 1786000848.489, "event": "llm_end", "run_id": "019fd5f2-318c-7d50-8ba1-603a8c5434a6", "ok": true, "tokens_in": 1012, "tokens_out": 162}
+{"ts": 1786000848.492, "event": "tool_start", "run_id": "019fd5f2-366b-7f02-ae6c-3953e0249307", "tool": "replace_in_file", "args": "{'file_path': 'retry.py', 'new_text': '# Look up the header case\u2011insensitively\\n    value = None\\n    for k, v in headers.items():\\n        if k.lower() == \"retry-after\":\\n            value = v\\n            break\\n    if value is None:\\n        return None\\n    return int(value)', 'old_text': 'value = headers.get(\"retry-after\")\\n    if value is None:\\n        return None\\n    return int(value)'}"}
+{"ts": 1786000848.494, "event": "tool_end", "run_id": "019fd5f2-366b-7f02-ae6c-3953e0249307", "ok": true, "tool": "replace_in_file", "output": "ok: replaced 1 occurrence(s) in retry.py"}

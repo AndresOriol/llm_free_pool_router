@@ -12,7 +12,7 @@ from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
 from agent.harness import variants
-from agent.harness.loop import DEFAULT_TEST_CMD, solve
+from agent.harness.loop import DEFAULT_TEST_CMD, MAX_CYCLES, solve
 from agent.harness.tools import make_tools
 from agent.restricted_backend import RestrictedShellBackend
 from agent.router_chat_model import RouterChatModel
@@ -71,6 +71,7 @@ def main() -> None:
     bb, stats, outcome = solve(model, backend, toolset, task, config=config,
                                test_cmd=os.environ.get("HARNESS_TEST_CMD")
                                or DEFAULT_TEST_CMD,
+                               max_cycles=variant.max_cycles_hint or MAX_CYCLES,
                                variant=variant)
 
     print(f"\n=== {outcome.upper()} after {bb.cycles} cycle(s) [{variant.name}] ===")

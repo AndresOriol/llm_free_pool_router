@@ -1,0 +1,25 @@
+
+=== PASS after 2 cycle(s) [v3-merged] ===
+  edit: no edit applied: ?
+  test: failed
+  route: -> inspect
+  investigate: File: `retry.py`
+Current lines that are wrong:
+  edit: no edit applied: ?
+  test: failed
+  route: -> inspect
+  investigate: **File:**â€¯`retry.py`  
+**Wrong line (8â€‘11):**  
+
+```python
+    value = headers.get("retry-after")
+    if value is None:
+
+...(clipped)
+  edit: ok: replaced 1 occurrence(s) in retry.py
+  test: passed
+
+model calls: 17 | ~prompt tokens: 9013 | ~avg/call: 530
+  edit      6 calls  ~511 tok/call
+  investigate  9 calls  ~558 tok/call
+  route     2 calls  ~458 tok/call

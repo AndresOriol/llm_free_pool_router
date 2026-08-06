@@ -1,0 +1,14 @@
+# Ad-hoc harness, architecture variant `v7-orchestrated`.
+# Hub and spoke: an orchestrator routes to explore/plan/edit/execute after every step; execution is an agent, not a fixed step.
+#
+# Differs from `adhoc-harness` only by HARNESS_VARIANT, so a comparison between
+# them isolates the architecture from everything else.
+name: harness-v7-orchestrated
+repo: ../..
+ref: harness/adhoc-router
+env_file: ../../llm_router/.env
+agent_cmd: ["python", "-m", "agent.harness", "{workdir}"]
+overrides:
+  router_config: llm_router/config.eval.yaml
+  env:
+    HARNESS_VARIANT: v7-orchestrated

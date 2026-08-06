@@ -1,0 +1,42 @@
+2026-08-06 09:25:51,709 - INFO - Writing eval trace to C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\results\runs\retry-after-case_fix-from-failing-test_harness-v3-merged_r2_20260806T072546Z\trace.jsonl
+2026-08-06 09:25:51,727 - INFO - Variant: v3-merged -- One `investigate` role instead of locate + inspect.
+2026-08-06 09:25:51,834 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~328 tok).
+2026-08-06 09:25:53,133 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 400 Bad Request"
+2026-08-06 09:25:53,152 - WARNING - Llama3_70b_groq_1 transient failure; rerouting. code=tool_use_failed; message=tool call validation failed: attempted to call tool 'search_code {"pattern": "def test_retry"}' which was not in request.tools; failed_generation=<function=search_code {"pattern": "def test_retry"}></function>
+
+2026-08-06 09:25:53,152 - WARNING - Llama3_70b_groq_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-06 09:25:53,152 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~328 tok).
+2026-08-06 09:25:53,530 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:25:53,567 - INFO - ripgrep ('rg') not found on PATH; using Python grep fallback. Install ripgrep for faster searches and automatic .gitignore handling.
+2026-08-06 09:25:53,577 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~407 tok).
+2026-08-06 09:25:53,942 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:25:53,964 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~514 tok).
+2026-08-06 09:25:54,504 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 400 Bad Request"
+2026-08-06 09:25:54,513 - WARNING - GptOss120b_groq_1 transient failure; rerouting. code=tool_use_failed; message=Tool call validation failed: tool call validation failed: attempted to call tool 'exec' which was not in request.tools; failed_generation={"name": "exec", "arguments": {"cmd":["bash","-lc","python - <<'PY'\nimport pytest, sys, json, os\nsys.path.append('.')\nimport subprocess, shlex, textwrap, pathlib\nprint('Running tests')\nres = subprocess.run(['pytest','-q','tests'], capture_output=True, text=True)\nprint(res.stdout)\nprint(res.stderr)\nPY"]}}
+2026-08-06 09:25:54,514 - WARNING - GptOss120b_groq_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-06 09:25:54,514 - INFO - Routing to Gemini_3_5_Flash_gemini_1 (model=gemini-3.5-flash, ~514 tok).
+2026-08-06 09:25:54,737 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-08-06 09:25:54,754 - WARNING - Gemini_3_5_Flash_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-3.5-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash\\nPlease retry in 5.267030036s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '5s'}]}}")
+2026-08-06 09:25:54,754 - WARNING - Gemini_3_5_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-06 09:25:54,755 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~514 tok).
+2026-08-06 09:25:55,533 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:25:55,555 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~596 tok).
+2026-08-06 09:25:56,530 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:25:56,546 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~377 tok).
+2026-08-06 09:25:57,290 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:25:57,304 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~387 tok).
+2026-08-06 09:25:57,563 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 400 Bad Request"
+2026-08-06 09:25:57,572 - WARNING - Qwen3_6_27b_groq_1 transient failure; rerouting. code=tool_use_failed; message=tool call validation failed: attempted to call tool 'execute' which was not in request.tools; failed_generation=<tool_call>
+<function=execute>
+<parameter=command>
+python -m pytest tests
+</parameter>
+</function>
+</tool_call>
+2026-08-06 09:25:57,572 - WARNING - Qwen3_6_27b_groq_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-06 09:25:57,573 - INFO - Routing to Gemini_3_Flash_gemini_1 (model=gemini-3-flash-preview, ~387 tok).
+2026-08-06 09:25:57,800 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-08-06 09:25:57,808 - WARNING - Gemini_3_Flash_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-3-flash-preview' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3-flash\\nPlease retry in 2.204478467s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '2s'}]}}")
+2026-08-06 09:25:57,809 - WARNING - Gemini_3_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-06 09:25:57,809 - INFO - Routing to Gemini_2_5_Flash_gemini_1 (model=gemini-2.5-flash, ~387 tok).
+2026-08-06 09:25:59,455 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"

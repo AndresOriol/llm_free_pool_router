@@ -1,0 +1,27 @@
+
+=== PASS after 2 cycle(s) [v5-lean] ===
+  inspect: no finding
+  edit: no edit applied: ?
+  test: failed
+  retry: edit again without routing
+  edit: no edit applied: ?
+  test: failed
+  route: -> inspect
+  inspect: File: `/retry.py`
+
+Current line 10:
+```python
+    value = headers.get("retry-after")
+```
+
+Should become:
+```python
+    v
+...(clipped)
+  edit: ok: replaced 1 occurrence(s) in /retry.py
+  test: passed
+
+model calls: 12 | ~prompt tokens: 5842 | ~avg/call: 486
+  edit      6 calls  ~503 tok/call
+  inspect   5 calls  ~471 tok/call
+  route     1 calls  ~464 tok/call

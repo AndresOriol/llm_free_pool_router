@@ -24,7 +24,7 @@ INVESTIGATE = Role(
     prompt=f"{_COMMON}\nYou find the code a task concerns and report what must "
            "change. You do not edit anything.",
     tools=("find_files", "search_code", "read_lines"),
-    sections=("task", "files", "test"),
+    sections=("task", "files", "exec"),
     max_rounds=4,
     instruction="Find and read the code this task concerns. Then state, in under "
                 "100 words: the file, the exact current lines that are wrong, and "
@@ -46,6 +46,9 @@ class Variant:
 
     name: str
     note: str
+    # "pipeline": fixed locate -> inspect -> edit -> [test] -> route.
+    # "orchestrated": hub and spoke, an orchestrator chooses every step.
+    topology: str = "pipeline"
     locate: Role = LOCATE
     inspect: Role = INSPECT
     edit: Role = EDIT
@@ -59,6 +62,23 @@ class Variant:
     # The common case after a near-miss edit is another edit, and paying a model
     # call to be told so is waste.
     fast_retries: int = 0
+    # Spend the role's last round with no tools bound, so a role that used every
+    # round on tool calls is still forced to say what it found. Without this a
+    # role can do all its work and report nothing: the loop ends holding a
+    # tool-calling response, whose text content is empty.
+    force_summary: bool = False
+    # Refuse to enter `edit` with an empty `notes` section. An edit role with
+    # write tools and nothing to act on improvises -- in one observed run it
+    # created a junk `read_files.py` to explore with, because exploring was the
+    # only thing left to do with the tools it had.
+    require_note: bool = False
+    # Orchestrated only: refuse a `DONE` that no successful run backs up. An
+    # unverified `done` is the `stopping` failure class wearing a confident
+    # face, and one deterministic push-back is cheaper than a lost run.
+    verify_before_done: bool = True
+    # Orchestrated runs spend a cycle per decision, not per edit-test round, so
+    # they need a larger budget to reach the same amount of work.
+    max_cycles_hint: int = 0
 
 
 V1 = Variant(
@@ -93,7 +113,29 @@ V5 = Variant(
     fast_retries=1,
 )
 
-VARIANTS = {v.name: v for v in (V1, V2, V3, V4, V5)}
+V6 = Variant(
+    name="v6-guarded",
+    note="v5 plus a forced summary round and a no-note guard on edit. Targets the "
+         "observed 'inspect reports nothing, edit then improvises' cycle.",
+    locate=LOCATE_LEAN,
+    seed_threshold=25,
+    fast_retries=1,
+    force_summary=True,
+    require_note=True,
+)
+
+V7 = Variant(
+    name="v7-orchestrated",
+    note="Hub and spoke: an orchestrator with the widest view routes to explore, "
+         "plan, edit or execute after every step. Execution becomes an agent "
+         "rather than a fixed step, so the run can check things other than the "
+         "test suite and can replan when a result surprises it.",
+    topology="orchestrated",
+    force_summary=True,
+    max_cycles_hint=12,
+)
+
+VARIANTS = {v.name: v for v in (V1, V2, V3, V4, V5, V6, V7)}
 DEFAULT = V1.name
 
 

@@ -14,7 +14,7 @@ from agent.harness.loop import (Stats, run_role, seed_files, solve, _parse_route
                                 _harvest_paths, RoleResult)
 from agent.harness.roles import ROLES
 from agent.harness.tools import make_tools
-from agent.harness.variants import V1, V2, V3, V4, V5, VARIANTS, get
+from agent.harness.variants import V1, V2, V3, V4, V5, V6, V7, VARIANTS, get
 from agent.restricted_backend import RestrictedShellBackend
 
 BROKEN = "def add(a, b):\n    return a - b\n"
@@ -71,7 +71,7 @@ def test_blackboard_caps():
     check("files deduped", bb.files.count("/a.py") == 1)
 
     # A role only ever sees the sections it declares.
-    bb.set_test("boom", False)
+    bb.set_exec("boom", False)
     rendered = bb.render(("task", "files"))
     check("undeclared section absent", "boom" not in rendered)
     check("declared section present", "/a.py" in rendered)
@@ -143,7 +143,7 @@ def test_failing_edit_routes():
     bb, stats, outcome = solve(model, backend, toolset, "fix it", max_cycles=3)
     check(f"outcome was {outcome}", outcome == "giveup")
     check("route was consulted", "route" in stats.by_role)
-    check("a failing test was recorded", bb.test_passed is False)
+    check("a failing test was recorded", bb.exec_ok is False)
 
 
 def test_prompt_stays_small():
@@ -156,7 +156,7 @@ def test_prompt_stays_small():
         bb.add_note(f"finding number {i} " + "y" * 400)
         bb.add_files([f"/mod{i}.py"])
         bb.add_edit(f"ok: edit {i}")
-    bb.set_test("E   assert 1 == 3\n" * 400, False)
+    bb.set_exec("E   assert 1 == 3\n" * 400, False)
 
     worst = 0
     for name in ("locate", "inspect", "edit", "route"):
@@ -226,7 +226,11 @@ def test_variant_call_counts():
     """The point of each variant is its call count. Model behaviour is held
     constant; only the architecture differs, so this table isolates it."""
     rows = {}
+    # Pipeline variants only: the orchestrated topology has different roles and
+    # its own test, and a role-keyed fake built for one cannot drive the other.
     for name, variant in VARIANTS.items():
+        if variant.topology != "pipeline":
+            continue
         root = seed_project()
         backend = RestrictedShellBackend(root_dir=str(root))
         toolset = make_tools(backend)
@@ -269,6 +273,68 @@ def test_fast_retry():
     check("retry recorded", any("retry" in line for line in bb.log))
 
 
+def test_orchestrated_topology():
+    """Hub and spoke: the orchestrator picks each worker, holds no tools, and
+    a DONE it cannot back with a successful run is refused once."""
+    root = seed_project()
+    backend = RestrictedShellBackend(root_dir=str(root))
+    toolset = make_tools(backend)
+
+    # Claim DONE immediately. The guard must force an execute first; that run
+    # fails (the bug is still there), so the next DONE must not end the task.
+    script = [ai("DONE"),                                        # orchestrate
+              ai(calls=[("run_tests", {"command": "python -m pytest"})]),
+              ai("it failed"),                                   # execute wrap-up
+              ai("EDIT"),                                        # orchestrate
+              ai(calls=[("replace_in_file", {"file_path": "/calc.py",
+                                             "old_text": "return a - b",
+                                             "new_text": "return a + b"})]),
+              ai("done"),
+              ai("EXECUTE"),                                     # orchestrate
+              ai(calls=[("run_tests", {"command": "python -m pytest"})]),
+              ai("passed"),
+              ai("DONE")]                                        # orchestrate
+    model = ScriptedModel(script)
+    bb, stats, outcome = solve(model, backend, toolset, "add() is wrong",
+                               max_cycles=8, variant=V7)
+
+    check(f"outcome was {outcome}", outcome == "pass")
+    check("file fixed", (root / "calc.py").read_text() == FIXED)
+    check("orchestrator ran repeatedly", stats.by_role["orchestrate"]["calls"] >= 3)
+    check("execute is its own role", "execute" in stats.by_role)
+    check("unverified done was refused",
+          any("nothing has run" in line for line in bb.log))
+    # The orchestrator must never hold tools, in any topology. `bind_tools` is
+    # not called at all for a tool-less role, so `tools` stays None -- a
+    # stronger guarantee than binding an empty list.
+    check("orchestrator had no tools", any(not s["tools"] for s in model.seen))
+
+
+def test_execute_trusts_exit_code_not_the_model():
+    """A model claiming success about a failing run must not end the task."""
+    root = seed_project()
+    backend = RestrictedShellBackend(root_dir=str(root))
+    toolset = make_tools(backend)
+    model = ScriptedModel([
+        ai("EXECUTE"),
+        ai(calls=[("run_tests", {"command": "python -m pytest"})]),
+        ai("Everything passes, we are done!"),   # false claim about a failing run
+        ai("DONE"),
+    ])
+    bb, stats, outcome = solve(model, backend, toolset, "fix", max_cycles=3, variant=V7)
+    check("exit code beats the model's summary", bb.exec_ok is False)
+    check("task not marked pass", outcome != "pass")
+
+
+def test_orchestrator_fallback_is_read_only():
+    """An unintelligible orchestrator must fall back to the read-only worker."""
+    from agent.harness.loop import _parse_action
+    bb = Blackboard(task="t")
+    check("plain", _parse_action("EDIT", bb) == "edit")
+    check("chatty", _parse_action("Let's EXECUTE the suite now", bb) == "execute")
+    check("garbage falls back to explore", _parse_action("uhh", bb) == "explore")
+
+
 def test_variant_lookup():
     check("default", get(None) is V1)
     check("by name", get("v5-lean") is V5)
@@ -288,6 +354,9 @@ if __name__ == "__main__":
     test_failing_edit_routes()
     test_seeding()
     test_fast_retry()
+    test_orchestrated_topology()
+    test_execute_trusts_exit_code_not_the_model()
+    test_orchestrator_fallback_is_read_only()
     test_variant_lookup()
     rows = test_variant_call_counts()
     worst = test_prompt_stays_small()

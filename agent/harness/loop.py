@@ -25,7 +25,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from llm_router.base_provider import estimate_tokens
 from agent.harness.blackboard import Blackboard
-from agent.harness.roles import ROUTE_CHOICES
+from agent.harness.roles import ACTIONS, EXECUTE, EXPLORE, ORCHESTRATE, PLAN, ROUTE_CHOICES
 from agent.harness.variants import V1, Variant
 
 logger = logging.getLogger("harness")
@@ -61,14 +61,21 @@ class RoleResult:
 
 
 def run_role(model, role, toolset, bb: Blackboard, config: dict,
-             stats: Stats) -> RoleResult:
+             stats: Stats, force_summary: bool = False) -> RoleResult:
     """Run one role to completion and throw away its conversation.
 
     Only the return value reaches the blackboard. The messages built here are
     local to the call, which is what keeps step 40 as cheap as step 1.
+
+    `force_summary` spends the final round with no tools bound. A role that
+    used every round on tool calls otherwise ends holding a tool-calling
+    response, whose text is empty -- so it does all the work and reports
+    nothing, and the next role gets an empty blackboard section.
     """
     tools = [toolset[name] for name in role.tools if name in toolset]
     bound = model.bind_tools(tools) if tools else model
+    # Forcing a summary is only meaningful when there is a round to spare.
+    forcing = force_summary and tools and role.max_rounds >= 2
 
     messages = [
         SystemMessage(content=role.prompt),
@@ -76,7 +83,15 @@ def run_role(model, role, toolset, bb: Blackboard, config: dict,
     ]
 
     outputs, text = [], ""
-    for _ in range(role.max_rounds):
+    for round_no in range(role.max_rounds):
+        final = round_no == role.max_rounds - 1
+        if forcing and final:
+            messages.append(HumanMessage(
+                content="No more tool calls. Answer now, in plain text."))
+            stats.add(role.name, estimate_tokens(messages, None))
+            text = _text_of(model.invoke(messages, config=config))
+            break
+
         stats.add(role.name, estimate_tokens(messages, tools))
         response = bound.invoke(messages, config=config)
         text = _text_of(response)
@@ -146,6 +161,115 @@ def solve(model, backend, toolset, task: str, config=None,
 
     `variant` selects the architecture; see agent/harness/variants.py.
     """
+    if variant.topology == "orchestrated":
+        return solve_orchestrated(model, backend, toolset, task, config,
+                                  test_cmd, max_cycles, variant)
+    return solve_pipeline(model, backend, toolset, task, config,
+                          test_cmd, max_cycles, variant)
+
+
+def solve_orchestrated(model, backend, toolset, task, config, test_cmd,
+                       max_cycles, variant):
+    """Hub and spoke: an orchestrator picks the next worker, every time.
+
+        ┌──────────────► orchestrate ◄──────────────┐
+        │              (no tools, sees all)         │
+        │        ┌────────┬────┴───┬─────────┐      │
+        └── explore    plan      edit     execute ──┘
+
+    The trade against the fixed pipeline is explicit: this spends a model call
+    on every decision and hands the orchestrator the widest prompt in the
+    system, in exchange for being able to do things the pipeline cannot --
+    replan, explore again after a surprising result, or run something other
+    than the test suite. The orchestrator still holds no tools, so deciding and
+    acting stay in different calls.
+    """
+    config = config or {}
+    bb = Blackboard(task=task)
+    stats = Stats()
+    workers = {"explore": EXPLORE, "plan": PLAN, "edit": variant.edit,
+               "execute": EXECUTE}
+
+    while bb.cycles < max_cycles:
+        bb.cycles += 1
+        decision = run_role(model, ORCHESTRATE, toolset, bb, config, stats)
+        action = _parse_action(decision.text, bb)
+
+        if action == "giveup":
+            bb.record("orchestrate", "-> giveup")
+            return bb, stats, "giveup"
+
+        if action == "done":
+            # A `done` that was never backed by a successful run is the
+            # `stopping` failure class wearing a confident face. Push back once,
+            # deterministically, instead of taking the claim on trust.
+            if variant.verify_before_done and not bb.exec_ok:
+                bb.record("orchestrate", "-> done, but nothing has run; executing first")
+                action = "execute"
+            else:
+                bb.record("orchestrate", "-> done")
+                return bb, stats, "pass" if bb.exec_ok else "done-unverified"
+        else:
+            bb.record("orchestrate", f"-> {action}")
+
+        result = run_role(model, workers[action], toolset, bb, config, stats,
+                          force_summary=variant.force_summary)
+        _absorb(action, result, bb, backend)
+
+    return bb, stats, "exhausted"
+
+
+def _absorb(action, result, bb, backend) -> None:
+    """Fold a worker's output into the blackboard. This is the only channel
+    between workers -- nothing else survives a role returning."""
+    if action == "explore":
+        bb.add_files(_harvest_paths(result))
+        if result.text:
+            bb.add_note(result.text)
+        bb.record("explore", result.text or "nothing reported")
+
+    elif action == "plan":
+        if result.text:
+            bb.set_plan(result.text)
+        bb.record("plan", result.text or "no plan produced")
+
+    elif action == "edit":
+        applied = [out for _, out in result.outputs if out.startswith("ok:")]
+        for line in applied:
+            bb.add_edit(line)
+        bb.record("edit", applied[-1] if applied
+                  else "no edit applied: " + (result.text[:80] or "?"))
+
+    elif action == "execute":
+        # Trust the tool's exit code, not the model's summary of it: a model
+        # that reports "tests pass" about a failing run would otherwise end the
+        # task. The tool output carries `exit=N` from tools.run_tests.
+        outputs = [out for name, out in result.outputs if name == "run_tests"]
+        if outputs:
+            bb.set_exec(outputs[-1], outputs[-1].lstrip().startswith("exit=0"))
+        else:
+            bb.set_exec(result.text or "the execute role ran nothing", False)
+        bb.record("execute", "succeeded" if bb.exec_ok else "failed")
+
+
+def _parse_action(text: str, bb: Blackboard) -> str:
+    """Map the orchestrator's word to a worker, tolerating chattiness.
+
+    Falls back to `explore`: when the orchestrator is unintelligible the safe
+    move is the read-only worker, never one that writes or runs.
+    """
+    upper = (text or "").upper()
+    for word, action in ACTIONS.items():
+        if re.search(rf"\b{word}\b", upper):
+            return action
+    logger.warning("orchestrator returned no recognised action (%r); exploring",
+                   (text or "")[:80])
+    return "explore"
+
+
+def solve_pipeline(model, backend, toolset, task, config, test_cmd,
+                   max_cycles, variant):
+    """The fixed pipeline: locate -> inspect -> edit -> [test] -> route."""
     config = config or {}
     bb = Blackboard(task=task)
     stats = Stats()
@@ -163,14 +287,16 @@ def solve(model, backend, toolset, task: str, config=None,
 
     while bb.cycles < max_cycles:
         if state == "locate":
-            result = run_role(model, variant.locate, toolset, bb, config, stats)
+            result = run_role(model, variant.locate, toolset, bb, config, stats,
+                              force_summary=variant.force_summary)
             bb.add_files(_harvest_paths(result))
             bb.record("locate", ", ".join(bb.files[:4]) or "nothing found")
             state = "inspect"
 
         elif state == "inspect":
             # In a merged variant this role also does the finding.
-            result = run_role(model, variant.inspect, toolset, bb, config, stats)
+            result = run_role(model, variant.inspect, toolset, bb, config, stats,
+                              force_summary=variant.force_summary)
             bb.add_files(_harvest_paths(result))
             if result.text:
                 bb.add_note(result.text)
@@ -178,6 +304,11 @@ def solve(model, backend, toolset, task: str, config=None,
             state = "edit"
 
         elif state == "edit":
+            # An edit role with write tools and no finding to act on improvises.
+            if variant.require_note and not bb.notes:
+                bb.record("edit", "skipped: no finding to act on")
+                state = "inspect"
+                continue
             result = run_role(model, variant.edit, toolset, bb, config, stats)
             applied = [out for _, out in result.outputs if out.startswith("ok:")]
             for line in applied:
@@ -189,7 +320,7 @@ def solve(model, backend, toolset, task: str, config=None,
         elif state == "test":
             # Deterministic: no model call, no tokens.
             output, passed = run_tests(backend, test_cmd)
-            bb.set_test(output, passed)
+            bb.set_exec(output, passed)
             bb.record("test", "passed" if passed else "failed")
             if passed:
                 return bb, stats, "pass"

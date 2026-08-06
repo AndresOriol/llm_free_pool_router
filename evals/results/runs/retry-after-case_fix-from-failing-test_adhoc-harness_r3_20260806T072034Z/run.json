@@ -1,0 +1,59 @@
+{
+  "run_id": "retry-after-case_fix-from-failing-test_adhoc-harness_r3_20260806T072034Z",
+  "ts": "2026-08-06T07:20:55.151582+00:00",
+  "scenario": "retry-after-case",
+  "scenario_tag": "scenario/http-headers/retry-after-case",
+  "topic": "http-headers",
+  "withheld_files": 8,
+  "difficulty": "L0",
+  "category": "bugfix",
+  "context_mode": "none",
+  "task": "fix-from-failing-test",
+  "task_tags": [
+    "bugfix",
+    "test-driven",
+    "L0"
+  ],
+  "config": "adhoc-harness",
+  "config_sha": "59f26fec3cb46cdd216d123890153bb49d8b6445",
+  "config_fingerprint": "259257f3a79e",
+  "rep": 3,
+  "outcome": "pass",
+  "tampered_files": [],
+  "exit_code": 1,
+  "wall_time_s": 16.8,
+  "f2p_passed": 1,
+  "f2p_total": 1,
+  "p2p_passed": 2,
+  "p2p_total": 2,
+  "f2p_ratio": 1.0,
+  "p2p_ratio": 1.0,
+  "verified": true,
+  "steps": 11,
+  "provider_calls": 14,
+  "failover_bounces": 3,
+  "tokens_in": 12090,
+  "tokens_out": 1794,
+  "tool_calls": 10,
+  "bad_tool_calls": 0,
+  "models_used": [
+    "gemini-3.5-flash",
+    "llama-3.3-70b-versatile",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b"
+  ],
+  "ran_own_tests": false,
+  "self_corrected": false,
+  "files_touched": 1,
+  "diff_lines": 7,
+  "diff_added": 6,
+  "diff_removed": 1,
+  "diff_files": [
+    "retry.py"
+  ],
+  "gold_files": [
+    "retry.py"
+  ],
+  "found_gold_file": true,
+  "failure_class": ""
+}

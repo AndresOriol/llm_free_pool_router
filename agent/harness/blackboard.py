@@ -20,9 +20,10 @@ MAX_FILES = 12
 MAX_NOTES = 6
 MAX_NOTE_CHARS = 500
 MAX_EDITS = 8
-# Test output is tail-clipped, not head-clipped: pytest puts the failure
+# Command output is tail-clipped, not head-clipped: pytest puts the failure
 # summary at the end, which is the part a model needs to react to.
-MAX_TEST_CHARS = 1_500
+MAX_EXEC_CHARS = 1_500
+MAX_PLAN_CHARS = 700
 MAX_LOG = 10
 
 
@@ -41,8 +42,12 @@ class Blackboard:
     files: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     edits: list[str] = field(default_factory=list)
-    last_test: str = ""
-    test_passed: bool | None = None
+    # The most recent command run and how it went. Named for execution rather
+    # than for testing: an orchestrated run may execute things that are not the
+    # test suite, and calling it `last_test` would mislead whoever reads it.
+    last_exec: str = ""
+    exec_ok: bool | None = None
+    plan: str = ""
     log: list[str] = field(default_factory=list)
     cycles: int = 0
 
@@ -67,9 +72,12 @@ class Blackboard:
         self.log.append(f"{role}: {_clip(outcome, 120)}")
         del self.log[:-MAX_LOG]
 
-    def set_test(self, output: str, passed: bool) -> None:
-        self.last_test = _clip(output, MAX_TEST_CHARS, tail=True)
-        self.test_passed = passed
+    def set_exec(self, output: str, ok: bool) -> None:
+        self.last_exec = _clip(output, MAX_EXEC_CHARS, tail=True)
+        self.exec_ok = ok
+
+    def set_plan(self, plan: str) -> None:
+        self.plan = _clip(plan, MAX_PLAN_CHARS)
 
     # -- rendering -------------------------------------------------------
 
@@ -106,11 +114,15 @@ def _s_edits(bb: Blackboard) -> str:
     return "# Edits already applied\n" + "\n".join(f"- {e}" for e in bb.edits)
 
 
-def _s_test(bb: Blackboard) -> str:
-    if not bb.last_test:
+def _s_exec(bb: Blackboard) -> str:
+    if not bb.last_exec:
         return ""
-    verdict = {True: "PASSED", False: "FAILED", None: "not run"}[bb.test_passed]
-    return f"# Last test run ({verdict})\n```\n{bb.last_test}\n```"
+    verdict = {True: "SUCCEEDED", False: "FAILED", None: "not run"}[bb.exec_ok]
+    return f"# Last command run ({verdict})\n```\n{bb.last_exec}\n```"
+
+
+def _s_plan(bb: Blackboard) -> str:
+    return f"# Plan\n{bb.plan}" if bb.plan else ""
 
 
 def _s_log(bb: Blackboard) -> str:
@@ -121,9 +133,10 @@ def _s_log(bb: Blackboard) -> str:
 
 _SECTIONS = {
     "task": _s_task,
+    "plan": _s_plan,
     "files": _s_files,
     "notes": _s_notes,
     "edits": _s_edits,
-    "test": _s_test,
+    "exec": _s_exec,
     "log": _s_log,
 }

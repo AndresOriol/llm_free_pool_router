@@ -1,0 +1,60 @@
+== fail_to_pass ==
+evaluation/tests/test_retry.py::test_matches_header_case_insensitively: exit 1
+F                                                                        [100%]
+================================== FAILURES ===================================
+___________________ test_matches_header_case_insensitively ____________________
+
+    def test_matches_header_case_insensitively():
+>       assert parse_retry_after({"Retry-After": "30"}) == 30
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+evaluation\tests\test_retry.py:12: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+headers = {'Retry-After': '30'}
+
+    def parse_retry_after(headers):
+        """Seconds to wait before retrying, or None if the header is absent."""
+        value = headers.get("retry-after")
+        if value is None:
+>           return int(value)
+                   ^^^^^^^^^^
+E           TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+
+retry.py:12: TypeError
+=========================== short test summary info ===========================
+FAILED evaluation/tests/test_retry.py::test_matches_header_case_insensitively
+1 failed in 0.12s
+
+
+== pass_to_pass ==
+evaluation/tests/test_retry.py::test_missing_header_returns_none: exit 1
+F                                                                        [100%]
+================================== FAILURES ===================================
+______________________ test_missing_header_returns_none _______________________
+
+    def test_missing_header_returns_none():
+>       assert parse_retry_after({}) is None
+               ^^^^^^^^^^^^^^^^^^^^^
+
+evaluation\tests\test_retry.py:17: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+headers = {}
+
+    def parse_retry_after(headers):
+        """Seconds to wait before retrying, or None if the header is absent."""
+        value = headers.get("retry-after")
+        if value is None:
+>           return int(value)
+                   ^^^^^^^^^^
+E           TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+
+retry.py:12: TypeError
+=========================== short test summary info ===========================
+FAILED evaluation/tests/test_retry.py::test_missing_header_returns_none - Typ...
+1 failed in 0.12s
+
+evaluation/tests/test_retry.py::test_plain_integer_seconds: exit 0
+.                                                                        [100%]
+1 passed in 0.01s

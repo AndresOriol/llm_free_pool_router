@@ -462,6 +462,81 @@ zero. An unmeasurable harness cannot be promoted, so `RouterChatModel` gained an
 opt-in `provider_config`, defaulting to `None`, which leaves the deep-agents
 path byte-identical. See [7.3](07-observability.md#73-the-local-trace).
 
+## 6.13 What the comparison actually showed
+
+n=3, interleaved, one L0 scenario, both configurations drawing from an
+identical pool (`llm_router/config.eval.yaml`).
+
+| | baseline | ad-hoc harness |
+| --- | ---: | ---: |
+| pass | **3 / 3** | 2 / 3 |
+| mean provider calls | 18.3 | **13.3** |
+| mean failover bounces | 5.7 | **2.8** |
+| mean `tokens_in` | 214,814 | **12,388** |
+| mean wall time | 44s | **28s** |
+| per-rep `tokens_in` | 190,734 / 238,082 / 215,626 | 16,784 / 8,290 / 12,090 |
+
+**The token result is real; the pass-rate result is not.** A 17× gap that held
+on every rep is far outside any plausible noise. 3/3 against 2/3 at n=3 is
+inside it — [8.6](08-evaluation-method.md#86-fair-comparison) puts the noise
+floor near 15 points at ten times this sample. Nothing here promotes the
+harness, and nothing here rules it out.
+
+By the letter of the promotion rule the harness is arguably promotable — no task
+regressed by more than one trial, success rate is statistically flat, and two
+secondary metrics improved materially. That is exactly the situation the rule's
+"a draw keeps the simpler configuration" clause exists for. **One L0 scenario
+cannot settle this**, which is why scenario authoring, not more reps, is the
+blocking item ([11.5](11-eval-status.md#115-what-to-do-next)).
+
+### 6.13.1 The one failure is the interesting part
+
+The failing rep did produce a fix, and its own tests passed:
+
+```diff
+-    value = headers.get("retry-after")
++    value = headers.get("Retry-After")
+```
+
+The scenario is about **case-insensitive** header lookup. The agent flipped the
+case to satisfy the test it could see, and the hidden `fail_to_pass` set — which
+checks other casings — failed it. Classified `reasoning`, correctly.
+
+This is the failure mode the withheld-test design exists to catch
+([9.3](09-scenarios.md#93-anatomy)), and it is *not* a token-budget problem. It
+says something the token numbers cannot: the harness closes its own loop
+faithfully against the visible tests, and closing that loop is not the same as
+being right. A cheaper agent reaches this failure mode sooner, not later.
+
+Reading the same run's role log shows the second-order cost: the first `inspect`
+returned "no finding" and the first `edit` applied nothing, burning a whole
+cycle before `route` sent it back to `inspect`, which then succeeded. Roughly a
+third of that run's calls bought nothing — the motivation for the variants in
+[6.14](#614-architecture-variants-tried).
+
+### 6.13.2 Three bugs the comparison surfaced
+
+None of these were the thing being measured, and all three mattered more than it:
+
+**Two dead models, not one.** Groq 404s on `qwen3-32b` as well as
+`llama-4-scout`. Probing every pool member directly found both in one pass —
+worth doing instead of discovering them one crash at a time.
+
+**Cheaper agents trip landmines that expensive ones never reach.** The harness
+crashed on `qwen3-32b` where the baseline never did, and not because it is more
+fragile: a dead model is only reached if a request is small enough to pass the
+size filter. `qwen3-32b`'s 6,000-token ceiling meant the deep-agents loop was
+*never* routed to it. Shrinking requests un-hid it. Expect any efficiency work
+to expose pool members that were previously unreachable, and audit the pool
+before reading the results.
+
+**A crash after the work was done.** A model emitted a narrow no-break space in
+its finding; printing the run summary raised `UnicodeEncodeError` against the
+Windows console codepage. The fix had already been applied and verified, but the
+process lost its diagnostics and exited non-zero. Found by noticing that a run
+scored `pass` had a `stdout.log` that stopped mid-summary — the kind of thing
+only visible if you read the evidence rather than the score.
+
 ---
 
 **Previous:** [← 5. Providers and limits](05-providers.md) · **Next:** [7. Observability →](07-observability.md)

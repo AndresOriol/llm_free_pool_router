@@ -5,16 +5,17 @@
 *The running state. This is the one page in the wiki expected to change often —
 everything else describes design; this describes today.*
 
-**Last updated: 2026-07-29.** Update it when a phase lands, a scenario is added,
+**Last updated: 2026-08-06.** Update it when a phase lands, a scenario is added,
 or a comparison is decided. A status page nobody updates is worse than none.
 
 ## 11.1 One-paragraph summary
 
-The pipeline works end to end. It has **one scenario**, at the easiest
-difficulty level, so it cannot yet compare two configurations — and half of the
-runs so far crashed on an unrelated infrastructure bug. Nothing measured today
-says anything about the agent's capability. The next moves are: fix the crash,
-author scenarios, re-baseline.
+The pipeline works end to end and has now run its first real comparison. Two
+decommissioned Groq models were the cause of the old 50% crash rate; with them
+removed from the eval pool the baseline passes **3/3**. It still has **one
+scenario**, at the easiest difficulty level, so a 3/3-vs-2/3 result is far
+inside the noise floor — the comparison machinery is trustworthy now, the
+sample size is not. The next move is authoring scenarios at L1 and L2.
 
 ## 11.2 What's built
 
@@ -29,57 +30,51 @@ author scenarios, re-baseline.
 
 ## 11.3 Where the numbers stand
 
-**One scenario, one configuration, n=2.** This establishes the pipeline works
-end to end. It is not yet a measurement of anything about the agent — see
-[8.6](08-evaluation-method.md#86-fair-comparison) for why nothing should be
-concluded at this sample size.
+**One scenario, two configurations, n=3, interleaved on an identical pool.**
 
-| config | runs | pass | rate | calls | bounces | failure classes |
-| --- | --- | --- | --- | --- | --- | --- |
-| `baseline` | 2 | 1 | 50% | 10.5 | 6.5 | stopping=1 |
+| config | runs | pass | rate | calls | bounces | `tokens_in` | failure classes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `baseline` | 3 | 3 | 100% | 18.3 | 5.7 | ~215,000 | — |
+| `adhoc-harness` | 3 | 2 | 67% | 13.3 | 3.0 | ~13,000 | reasoning=1 |
 
-Per-run detail:
+Raw evidence in `evals/results/runs/`; the ledger is in
+[evals/CONFIGS.md](../evals/CONFIGS.md); the architecture is
+[6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness).
 
-| | rep 1 | rep 2 |
-| --- | --- | --- |
-| outcome | pass | crash (`stopping`) |
-| steps | 6 | 5 |
-| provider calls | 11 | 10 |
-| failover bounces | 4 | 8 |
-| tokens in | 89,260 | 55,126 |
-| distinct models | 5 | 7 |
-| wall time | 21.6s | 12.7s |
+Three observations:
 
-Raw evidence in `evals/results/runs/`; the ledger row is in
-[evals/CONFIGS.md](../evals/CONFIGS.md).
-
-Two observations, both n=2, and both about the **harness** rather than the
-agent:
-
-1. **The one failure was infrastructure, not capability** — see blockers below.
-2. **A one-line fix costs ~10 provider calls across 5–7 distinct models and tens
-   of thousands of input tokens.** Failover works, but the pool is walked hard
-   for trivial work. Worth understanding before reading anything into efficiency
-   numbers.
+1. **The old 50% crash rate was two dead models, not the agent.** Groq 404s on
+   `llama-4-scout` and `qwen3-32b`, and a 404 is not transient, so it killed the
+   run. With both dropped from the eval pool the baseline goes 3/3. Every
+   earlier number on this page was measuring that bug.
+2. **3/3 versus 2/3 is not a result.** At n=3 the Wilson intervals overlap
+   almost entirely; [8.6](08-evaluation-method.md#86-fair-comparison) puts the
+   noise floor around 15 points at ten times this sample size. What the
+   comparison establishes is that the machinery is trustworthy, not which
+   configuration is better.
+3. **The token gap is far outside the noise.** ~13,000 against ~215,000 input
+   tokens for the same task is a 16× difference that held on every rep. Whether
+   it buys anything is a different question — see the failure mode in
+   [6.13](06-agent.md#613-what-the-comparison-actually-showed).
 
 ## 11.4 Blockers
 
 | Issue | Impact | State |
 | --- | --- | --- |
-| Groq returns `404 model_not_found` for `meta-llama/llama-4-scout-17b-16e-instruct`; 404 isn't in the router's transient set, so it propagates and kills the run | ~50% of runs crash for a reason unrelated to the task, which makes any pass rate meaningless | Flagged as separate work; fix on a branch and measure it ([4.6](04-failover.md#46-known-gaps)) |
-| Only one scenario, at L0 | Nothing to compare configurations on. L0 is a canary, not a comparison instrument ([9.7](09-scenarios.md#97-the-difficulty-ladder)) | P4 |
+| Only one scenario, at L0 | **The main gap.** Nothing can be compared on it: L0 is a canary, not a comparison instrument ([9.7](09-scenarios.md#97-the-difficulty-ladder)) | P4 |
+| `404 model_not_found` still propagates and kills a run | Worked around for evals via `llm_router/config.eval.yaml`, not fixed. Any run on the default pool still dies on it | [13.2](13-roadmap.md#132-what-to-do-next) |
 | `agent_evals` local history has diverged from its GitHub remote after the restructure | Scenarios aren't backed up | Needs a force-push decision |
 
 ## 11.5 What to do next
 
-1. **Fix the dead-model crash.** Nothing measured is trustworthy while half the
-   runs die on it. It's a candidate change like any other: branch, add a
-   configuration, measure against baseline.
-2. **Author scenarios** — L1 and L2, across the categories in
-   [9.6](09-scenarios.md#96-categories-to-cover). The comparison instrument is
-   whatever currently lands between roughly 20% and 80% pass rate; L0 alone
-   can't distinguish two configurations.
-3. **Re-baseline at n=5** once those two are done, and record it in the ledger.
+1. **Author scenarios** — L1 and L2, across the categories in
+   [9.6](09-scenarios.md#96-categories-to-cover). Now the single blocking item:
+   with one L0 task, no comparison can reach significance no matter how many
+   reps it is given.
+2. **Fix the dead-model crash properly.** The eval pool works around it; the
+   shipping pool still dies on it. A decommissioned model should be disabled
+   permanently, the way a rate-limited one is benched temporarily.
+3. **Re-baseline at n=5** once scenarios exist, and record it in the ledger.
 4. **P2, the judge** — worth building only once there are enough scenarios that
    reading diffs by hand hurts.
 

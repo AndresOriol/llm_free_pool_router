@@ -1,0 +1,45 @@
+2026-08-06 09:28:52,142 - INFO - Writing eval trace to C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\results\runs\retry-after-case_fix-from-failing-test_harness-v5-lean_r3_20260806T072847Z\trace.jsonl
+2026-08-06 09:28:52,155 - INFO - Variant: v5-lean -- v2 + v4 + a two-tool locate. The combination worth shipping if each part holds.
+2026-08-06 09:28:52,823 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~283 tok).
+2026-08-06 09:28:54,087 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 400 Bad Request"
+2026-08-06 09:28:54,104 - WARNING - Llama3_70b_groq_1 transient failure; rerouting. code=tool_use_failed; message=tool call validation failed: attempted to call tool 'search_code {"pattern": "def retry"}' which was not in request.tools; failed_generation=<function=search_code {"pattern": "def retry"}></function>
+
+2026-08-06 09:28:54,104 - WARNING - Llama3_70b_groq_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-06 09:28:54,105 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~283 tok).
+2026-08-06 09:28:54,464 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:28:54,496 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~366 tok).
+2026-08-06 09:28:54,857 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:28:54,875 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~472 tok).
+2026-08-06 09:29:54,062 - WARNING - GptOss120b_groq_1 transient failure; rerouting. APIConnectionError('Connection error.')
+2026-08-06 09:29:54,062 - WARNING - GptOss120b_groq_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-06 09:29:54,062 - INFO - Llama3_70b_groq_1 has finished its cooldown and is available again.
+2026-08-06 09:29:54,062 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~472 tok).
+2026-08-06 09:29:54,721 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:29:54,739 - INFO - ripgrep ('rg') not found on PATH; using Python grep fallback. Install ripgrep for faster searches and automatic .gitignore handling.
+2026-08-06 09:29:54,746 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~266 tok).
+2026-08-06 09:29:55,500 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:29:55,509 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~364 tok).
+2026-08-06 09:29:56,114 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:29:57,419 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~547 tok).
+2026-08-06 09:29:57,748 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:29:57,757 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~565 tok).
+2026-08-06 09:29:58,012 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:29:58,986 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~464 tok).
+2026-08-06 09:29:59,172 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:29:59,182 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~564 tok).
+2026-08-06 09:29:59,479 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 400 Bad Request"
+2026-08-06 09:29:59,489 - WARNING - Llama3_70b_groq_1 transient failure; rerouting. code=tool_use_failed; message=Failed to call a function. Please adjust your prompt. See 'failed_generation' for more details.; failed_generation=<function=read_lines {"file_path": "/retry.py", "offset": 0}</function>
+
+2026-08-06 09:29:59,489 - WARNING - Llama3_70b_groq_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-06 09:29:59,489 - INFO - Routing to Gemini_3_5_Flash_gemini_1 (model=gemini-3.5-flash, ~564 tok).
+2026-08-06 09:30:00,009 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-08-06 09:30:00,026 - WARNING - Gemini_3_5_Flash_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-3.5-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash\\nPlease retry in 2.573384ms.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '0s'}]}}")
+2026-08-06 09:30:00,027 - WARNING - Gemini_3_5_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-06 09:30:00,027 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~564 tok).
+2026-08-06 09:30:00,542 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:30:00,561 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~670 tok).
+2026-08-06 09:30:02,629 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:30:02,644 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~635 tok).
+2026-08-06 09:30:03,743 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-06 09:30:03,757 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~646 tok).
+2026-08-06 09:30:06,341 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"

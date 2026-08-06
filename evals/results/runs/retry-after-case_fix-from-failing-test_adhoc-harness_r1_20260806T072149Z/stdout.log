@@ -1,0 +1,21 @@
+
+=== PASS after 1 cycle(s) [v1-pipeline] ===
+  locate: /retry.py, /tests/test_retry.py
+  inspect: File **retry.py** â€“ linesâ€¯10â€‘13 are wrong.  
+
+Current code:  
+```python
+    value = headers.get("retry-after")
+    if va
+...(clipped)
+  edit: no edit applied: ?
+  test: failed
+  route: -> edit
+  edit: ok: replaced 1 occurrence(s) in retry.py
+  test: passed
+
+model calls: 11 | ~prompt tokens: 4917 | ~avg/call: 447
+  edit      4 calls  ~544 tok/call
+  inspect   3 calls  ~381 tok/call
+  locate    3 calls  ~330 tok/call
+  route     1 calls  ~604 tok/call
