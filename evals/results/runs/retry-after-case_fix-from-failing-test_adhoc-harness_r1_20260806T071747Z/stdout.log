@@ -1,0 +1,21 @@
+
+=== PASS after 1 cycle(s) ===
+  locate: /retry.py, /tests/test_retry.py
+  inspect: no finding
+  edit: no edit applied: ?
+  test: failed
+  route: -> inspect
+  inspect: The file is retry.py. The exact current lines that are wrong are:
+```python
+value = headers.get("retry-after")
+```
+It sh
+...(clipped)
+  edit: ok: replaced 1 occurrence(s) in retry.py
+  test: passed
+
+model calls: 13 | ~prompt tokens: 5792 | ~avg/call: 445
+  edit      4 calls  ~474 tok/call
+  inspect   5 calls  ~492 tok/call
+  locate    3 calls  ~330 tok/call
+  route     1 calls  ~445 tok/call

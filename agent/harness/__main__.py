@@ -21,6 +21,16 @@ from agent.trace import tracer_from_env
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logging.getLogger("LLMRouter").setLevel(logging.INFO)
 
+# Models emit characters the Windows console codepage cannot encode (a narrow
+# no-break space was enough), and an unencodable character in the run summary
+# raised UnicodeEncodeError *after* the work was done -- losing the diagnostics
+# and exiting non-zero on a run that had actually passed.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):  # not a reconfigurable stream
+        pass
+
 
 def build(workdir: Path, config=None):
     providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG") or None)
