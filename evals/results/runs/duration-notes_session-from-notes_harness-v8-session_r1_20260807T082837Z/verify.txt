@@ -1,0 +1,34 @@
+== fail_to_pass ==
+evaluation/tests/test_durations_hidden.py::test_spelled_out_minutes: exit 0
+.                                                                        [100%]
+1 passed in 0.02s
+
+evaluation/tests/test_durations_hidden.py::test_spelled_out_seconds: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_durations_hidden.py::test_spelled_out_hours_plural: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_durations_hidden.py::test_word_unit_without_a_space: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_durations_hidden.py::test_readme_drops_the_claim_that_is_now_false: exit 0
+.                                                                        [100%]
+1 passed in 0.04s
+
+evaluation/tests/test_durations_hidden.py::test_readme_shows_a_spelled_out_example: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+
+== pass_to_pass ==
+evaluation/tests/test_durations_hidden.py::test_compact_form_still_works: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_durations_hidden.py::test_unknown_unit_is_still_rejected: exit 0
+.                                                                        [100%]
+1 passed in 0.01s

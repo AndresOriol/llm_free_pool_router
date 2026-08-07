@@ -1,0 +1,80 @@
+== fail_to_pass ==
+evaluation/tests/test_durations_hidden.py::test_spelled_out_minutes: exit 0
+.                                                                        [100%]
+1 passed in 0.02s
+
+evaluation/tests/test_durations_hidden.py::test_spelled_out_seconds: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_durations_hidden.py::test_spelled_out_hours_plural: exit 1
+F                                                                        [100%]
+================================== FAILURES ===================================
+________________________ test_spelled_out_hours_plural ________________________
+
+    def test_spelled_out_hours_plural():
+>       assert parse_duration("2 hours") == 7200
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+evaluation\tests\test_durations_hidden.py:25: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+text = '2 hours'
+
+    def parse_duration(text):
+        """Parse a duration string into seconds.
+    
+        Accepts formats like '30s', '5m', '2h', as well as spelled-out units
+        with optional space, e.g., '30 sec', '5 min', '2 hour'.
+        """
+        text = text.strip().lower()
+        if not text:
+            raise ValueError("empty duration")
+        # Match a number followed by optional whitespace and a unit string.
+        m = re.fullmatch(r"(\d+)\s*([a-z]+)", text)
+        if not m:
+            raise ValueError(f"invalid duration format: {text!r}")
+        value_str, unit = m.groups()
+        if unit not in UNITS:
+>           raise ValueError(f"unknown unit in {text!r}")
+E           ValueError: unknown unit in '2 hours'
+
+durations.py:35: ValueError
+=========================== short test summary info ===========================
+FAILED evaluation/tests/test_durations_hidden.py::test_spelled_out_hours_plural
+1 failed in 0.12s
+
+evaluation/tests/test_durations_hidden.py::test_word_unit_without_a_space: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_durations_hidden.py::test_readme_drops_the_claim_that_is_now_false: exit 0
+.                                                                        [100%]
+1 passed in 0.03s
+
+evaluation/tests/test_durations_hidden.py::test_readme_shows_a_spelled_out_example: exit 1
+F                                                                        [100%]
+================================== FAILURES ===================================
+___________________ test_readme_shows_a_spelled_out_example ___________________
+
+    def test_readme_shows_a_spelled_out_example():
+        text = Path("README.md").read_text(encoding="utf-8").lower()
+>       assert any(example in text for example in ("5 min", "30 sec", "2 hours",
+                                                   "5min", "30sec", "2hours"))
+E       assert False
+E        +  where False = any(<generator object test_readme_shows_a_spelled_out_example.<locals>.<genexpr> at 0x000001C9DE89FCA0>)
+
+evaluation\tests\test_durations_hidden.py:39: AssertionError
+=========================== short test summary info ===========================
+FAILED evaluation/tests/test_durations_hidden.py::test_readme_shows_a_spelled_out_example
+1 failed in 0.14s
+
+
+== pass_to_pass ==
+evaluation/tests/test_durations_hidden.py::test_compact_form_still_works: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_durations_hidden.py::test_unknown_unit_is_still_rejected: exit 0
+.                                                                        [100%]
+1 passed in 0.01s

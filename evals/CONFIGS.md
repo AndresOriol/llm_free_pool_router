@@ -20,6 +20,22 @@ the simpler configuration.
 | `harness-v5-lean` | `harness/adhoc-router` | Seeded files + edit retry + two-tool locate | L0, n=3 | 1/3 | **dropped** |
 | `harness-v2-seeded` | `harness/adhoc-router` | Glob the file list, skip `locate` | L0, n=3 | 0/3 | **dropped** |
 | `harness-v7-orchestrated` | `harness/adhoc-router` | Hub and spoke; execution as an agent | L0, n=3 | 0/3, most calls | **dropped for this task shape** |
+| `harness-v8-session` | `harness/adhoc-router` | A session: briefed roles, journal, branch, docs and rationale as deliverables | L1+L2 `session`, n=2 | 2/4 | **no verdict** — ran alone, no baseline |
+
+### harness-v8-session, first batch (2026-08-07)
+
+Full analysis in
+[results/reports/2026-08-07-first-session-batch.md](results/reports/2026-08-07-first-session-batch.md).
+
+Not a promotion decision: one configuration, no interleaved comparison. What it
+established is that **both new scenarios discriminate** — each passed once and
+failed once, which is precisely what `retry-after-case` stopped being able to do.
+
+Three defects in the *instrument* were found by reading the evidence: `.git`
+survived the diff prune (read-only objects, Windows), a clean "exhausted" was
+recorded as `crash`, and every rationale reported "Files changed: 0". All fixed.
+**No diff-derived metric from this batch is usable**; the hidden-test ratios and
+the journals are.
 
 ### The harness family, 2026-08-06
 

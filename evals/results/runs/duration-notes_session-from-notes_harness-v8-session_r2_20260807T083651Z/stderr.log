@@ -1,0 +1,143 @@
+2026-08-07 10:36:56,942 - INFO - Writing eval trace to C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\results\runs\duration-notes_session-from-notes_harness-v8-session_r2_20260807T083651Z\trace.jsonl
+2026-08-07 10:36:56,967 - INFO - Variant: v8-session -- A session rather than a task: an orchestrator briefs explore/write/execute/document/review, the run commits incrementally on its own branch, journals every step so a crash resumes, and ends by updating the docs and writing a rationale into the project's notes.
+2026-08-07 10:36:57,376 - INFO - Routing to Gemini_3_5_Flash_gemini_1 (model=gemini-3.5-flash, ~452 tok).
+2026-08-07 10:36:57,458 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:36:57,709 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-08-07 10:36:57,734 - WARNING - Gemini_3_5_Flash_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-3.5-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash\\nPlease retry in 1.515750177s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '1s'}]}}")
+2026-08-07 10:36:57,734 - WARNING - Gemini_3_5_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-07 10:36:57,734 - INFO - Routing to Gemini_3_Flash_gemini_1 (model=gemini-3-flash-preview, ~452 tok).
+2026-08-07 10:36:57,795 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:36:58,267 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 503 Service Unavailable"
+2026-08-07 10:36:58,278 - WARNING - Gemini_3_Flash_gemini_1 transient failure; rerouting. code=503; message=This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.
+2026-08-07 10:36:58,279 - WARNING - Gemini_3_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-07 10:36:58,279 - INFO - Routing to Gemini_2_5_Flash_gemini_1 (model=gemini-2.5-flash, ~452 tok).
+2026-08-07 10:36:58,345 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:36:58,640 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-08-07 10:36:58,652 - WARNING - Gemini_2_5_Flash_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-2.5-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\\nPlease retry in 549.565148ms.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '0s'}]}}")
+2026-08-07 10:36:58,652 - WARNING - Gemini_2_5_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-07 10:36:58,652 - INFO - Routing to Gemini_3_1_FlashLite_gemini_1 (model=gemini-3.1-flash-lite, ~452 tok).
+2026-08-07 10:36:58,721 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:36:59,738 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:36:59,762 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~799 tok).
+2026-08-07 10:37:01,198 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 400 Bad Request"
+2026-08-07 10:37:01,216 - WARNING - Llama3_70b_groq_1 transient failure; rerouting. code=tool_use_failed; message=tool call validation failed: attempted to call tool 'search_code {"pattern": "def parse_duration"}' which was not in request.tools; failed_generation=<function=search_code {"pattern": "def parse_duration"}></function>
+
+2026-08-07 10:37:01,216 - WARNING - Llama3_70b_groq_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-07 10:37:01,216 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~799 tok).
+2026-08-07 10:37:01,743 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:01,777 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~809 tok).
+2026-08-07 10:37:02,166 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:02,192 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~761 tok).
+2026-08-07 10:37:02,756 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:02,773 - INFO - Routing to Gemini_3_1_FlashLite_gemini_1 (model=gemini-3.1-flash-lite, ~585 tok).
+2026-08-07 10:37:02,776 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:37:03,897 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:03,914 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~753 tok).
+2026-08-07 10:37:05,338 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:05,364 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~907 tok).
+2026-08-07 10:37:07,086 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:07,109 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~918 tok).
+2026-08-07 10:37:07,602 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-08-07 10:37:07,613 - WARNING - GptOss120b_groq_1 transient failure; rerouting. code=rate_limit_exceeded; message=Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kx94z78jfwhb1d0bqyftkajf` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 7268, Requested 1589. Please try again in 6.4275s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing
+2026-08-07 10:37:07,613 - WARNING - GptOss120b_groq_1 exhausted/failed. Entering cooldown for 7s.
+2026-08-07 10:37:07,613 - INFO - Routing to Qwen3_6_27b_groq_1 (model=qwen/qwen3.6-27b, ~918 tok).
+2026-08-07 10:37:08,574 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 400 Bad Request"
+2026-08-07 10:37:08,588 - WARNING - Qwen3_6_27b_groq_1 transient failure; rerouting. code=tool_use_failed; message=tool call validation failed: attempted to call tool 'run_tests' which was not in request.tools; failed_generation=<tool_call>
+<function=run_tests>
+</function>
+</tool_call>
+2026-08-07 10:37:08,589 - WARNING - Qwen3_6_27b_groq_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-07 10:37:08,589 - INFO - Routing to GptOss20b_groq_1 (model=openai/gpt-oss-20b, ~918 tok).
+2026-08-07 10:37:09,322 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:09,351 - INFO - Routing to GptOss20b_groq_1 (model=openai/gpt-oss-20b, ~1013 tok).
+2026-08-07 10:37:09,986 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:10,281 - INFO - Routing to GptOss20b_groq_1 (model=openai/gpt-oss-20b, ~645 tok).
+2026-08-07 10:37:10,763 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:10,781 - INFO - Routing to GptOss20b_groq_1 (model=openai/gpt-oss-20b, ~676 tok).
+2026-08-07 10:37:11,185 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:13,199 - INFO - Routing to GptOss20b_groq_1 (model=openai/gpt-oss-20b, ~783 tok).
+2026-08-07 10:37:13,767 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:13,793 - INFO - Routing to Gemini_3_1_FlashLite_gemini_1 (model=gemini-3.1-flash-lite, ~1391 tok).
+2026-08-07 10:37:13,795 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:37:14,927 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:14,944 - INFO - GptOss120b_groq_1 has finished its cooldown and is available again.
+2026-08-07 10:37:14,944 - INFO - Routing to Gemini_3_1_FlashLite_gemini_1 (model=gemini-3.1-flash-lite, ~1376 tok).
+2026-08-07 10:37:15,486 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:15,504 - INFO - Routing to Gemini_3_1_FlashLite_gemini_1 (model=gemini-3.1-flash-lite, ~1471 tok).
+2026-08-07 10:37:16,185 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:16,211 - INFO - Routing to Gemini_3_1_FlashLite_gemini_1 (model=gemini-3.1-flash-lite, ~1482 tok).
+2026-08-07 10:37:17,003 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:17,031 - INFO - Routing to Gemini_3_1_FlashLite_gemini_1 (model=gemini-3.1-flash-lite, ~1489 tok).
+2026-08-07 10:37:17,154 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-08-07 10:37:17,165 - WARNING - Gemini_3_1_FlashLite_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-3.1-flash-lite' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.1-flash-lite\\nPlease retry in 42.039083686s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.1-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '42s'}]}}")
+2026-08-07 10:37:17,165 - WARNING - Gemini_3_1_FlashLite_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-07 10:37:17,165 - INFO - Routing to Gemini_2_5_FlashLite_gemini_1 (model=gemini-2.5-flash-lite, ~1489 tok).
+2026-08-07 10:37:18,076 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:18,397 - INFO - Routing to Gemini_2_5_FlashLite_gemini_1 (model=gemini-2.5-flash-lite, ~1794 tok).
+2026-08-07 10:37:18,400 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:37:19,411 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:19,426 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~707 tok).
+2026-08-07 10:37:20,104 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:20,130 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~736 tok).
+2026-08-07 10:37:20,699 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:22,378 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~763 tok).
+2026-08-07 10:37:22,657 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:22,670 - INFO - Routing to Gemini_2_5_FlashLite_gemini_1 (model=gemini-2.5-flash-lite, ~1739 tok).
+2026-08-07 10:37:22,674 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:37:23,772 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:23,791 - INFO - Routing to GptOss120b_groq_1 (model=openai/gpt-oss-120b, ~717 tok).
+2026-08-07 10:37:23,864 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-08-07 10:37:23,871 - WARNING - GptOss120b_groq_1 transient failure; rerouting. code=rate_limit_exceeded; message=Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kx94z78jfwhb1d0bqyftkajf` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 7508, Requested 806. Please try again in 2.355s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing
+2026-08-07 10:37:23,872 - WARNING - GptOss120b_groq_1 exhausted/failed. Entering cooldown for 3s.
+2026-08-07 10:37:23,872 - INFO - Routing to GptOss20b_groq_1 (model=openai/gpt-oss-20b, ~717 tok).
+2026-08-07 10:37:24,184 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:25,813 - INFO - Routing to GptOss20b_groq_1 (model=openai/gpt-oss-20b, ~824 tok).
+2026-08-07 10:37:26,232 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:26,246 - INFO - Routing to Gemini_2_5_FlashLite_gemini_1 (model=gemini-2.5-flash-lite, ~1843 tok).
+2026-08-07 10:37:26,249 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:37:29,397 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:29,416 - INFO - GptOss120b_groq_1 has finished its cooldown and is available again.
+2026-08-07 10:37:29,416 - INFO - Gemini_3_5_Flash_gemini_1 has finished its cooldown and is available again.
+2026-08-07 10:37:29,417 - INFO - Gemini_3_Flash_gemini_1 has finished its cooldown and is available again.
+2026-08-07 10:37:29,417 - INFO - Gemini_2_5_Flash_gemini_1 has finished its cooldown and is available again.
+2026-08-07 10:37:29,417 - INFO - Routing to Gemini_3_5_Flash_gemini_1 (model=gemini-3.5-flash, ~2114 tok).
+2026-08-07 10:37:29,666 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-08-07 10:37:29,677 - WARNING - Gemini_3_5_Flash_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-3.5-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash\\nPlease retry in 29.522741726s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '29s'}]}}")
+2026-08-07 10:37:29,678 - WARNING - Gemini_3_5_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-07 10:37:29,678 - INFO - Routing to Gemini_3_Flash_gemini_1 (model=gemini-3-flash-preview, ~2114 tok).
+2026-08-07 10:37:39,274 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 503 Service Unavailable"
+2026-08-07 10:37:39,290 - WARNING - Gemini_3_Flash_gemini_1 transient failure; rerouting. code=503; message=This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.
+2026-08-07 10:37:39,291 - WARNING - Gemini_3_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-07 10:37:39,291 - INFO - Llama3_70b_groq_1 has finished its cooldown and is available again.
+2026-08-07 10:37:39,291 - INFO - Qwen3_6_27b_groq_1 has finished its cooldown and is available again.
+2026-08-07 10:37:39,291 - INFO - Routing to Gemini_2_5_Flash_gemini_1 (model=gemini-2.5-flash, ~2114 tok).
+2026-08-07 10:37:39,498 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-08-07 10:37:39,513 - WARNING - Gemini_2_5_Flash_gemini_1 transient failure; rerouting. ChatGoogleGenerativeAIError("Error calling model 'gemini-2.5-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash\\nPlease retry in 19.675766421s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '19s'}]}}")
+2026-08-07 10:37:39,513 - WARNING - Gemini_2_5_Flash_gemini_1 exhausted/failed. Entering cooldown for 30s.
+2026-08-07 10:37:39,513 - INFO - Routing to Gemini_2_5_FlashLite_gemini_1 (model=gemini-2.5-flash-lite, ~2114 tok).
+2026-08-07 10:37:40,410 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:40,429 - INFO - Routing to Gemini_2_5_FlashLite_gemini_1 (model=gemini-2.5-flash-lite, ~1839 tok).
+2026-08-07 10:37:40,432 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:37:41,479 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:41,498 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~739 tok).
+2026-08-07 10:37:41,996 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:43,537 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~846 tok).
+2026-08-07 10:37:43,835 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:43,846 - INFO - Routing to Gemini_2_5_FlashLite_gemini_1 (model=gemini-2.5-flash-lite, ~1848 tok).
+2026-08-07 10:37:43,848 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:37:44,785 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:44,803 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~706 tok).
+2026-08-07 10:37:45,268 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:45,295 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~1095 tok).
+2026-08-07 10:37:45,684 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:45,696 - INFO - Routing to Gemini_2_5_FlashLite_gemini_1 (model=gemini-2.5-flash-lite, ~1872 tok).
+2026-08-07 10:37:45,699 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:37:46,699 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-08-07 10:37:46,716 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~711 tok).
+2026-08-07 10:37:47,107 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:48,793 - INFO - Gemini_3_1_FlashLite_gemini_1 has finished its cooldown and is available again.
+2026-08-07 10:37:48,793 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~818 tok).
+2026-08-07 10:37:49,055 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-07 10:37:49,068 - INFO - Routing to Gemini_3_1_FlashLite_gemini_1 (model=gemini-3.1-flash-lite, ~1882 tok).
+2026-08-07 10:37:49,070 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-07 10:37:50,077 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 200 OK"

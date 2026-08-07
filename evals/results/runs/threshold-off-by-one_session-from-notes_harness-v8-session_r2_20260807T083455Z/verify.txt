@@ -1,0 +1,30 @@
+== fail_to_pass ==
+evaluation/tests/test_alerts_hidden.py::test_equal_does_not_alert: exit 0
+.                                                                        [100%]
+1 passed in 0.04s
+
+evaluation/tests/test_alerts_hidden.py::test_unit_is_appended: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_alerts_hidden.py::test_docs_no_longer_promise_greater_or_equal: exit 0
+.                                                                        [100%]
+1 passed in 0.02s
+
+evaluation/tests/test_alerts_hidden.py::test_docs_mention_the_unit: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+
+== pass_to_pass ==
+evaluation/tests/test_alerts_hidden.py::test_just_above_still_alerts: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_alerts_hidden.py::test_below_still_quiet: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
+
+evaluation/tests/test_alerts_hidden.py::test_unit_stays_optional: exit 0
+.                                                                        [100%]
+1 passed in 0.01s
