@@ -7,8 +7,10 @@ by a process start per entry, but it gives an unambiguous per-entry result
 without parsing pytest's console summary, which is not a stable interface.
 """
 
+import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from pathlib import Path
@@ -38,6 +40,20 @@ ARTIFACT_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
                  ".git", ".harness"}
 
 
+def _force_writable(func, path, _exc) -> None:
+    """Retry a deletion after clearing the read-only bit.
+
+    Git marks everything under `.git/objects` read-only, and on Windows that
+    makes it undeletable. `rmtree(..., ignore_errors=True)` swallowed the
+    failure, so a session's own repository survived the prune and every git
+    object landed in the diff -- inflating `files_touched`, corrupting the
+    `touched` set the failure taxonomy is derived from, and burying the actual
+    change in a wall of binary blobs.
+    """
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
 def prune_artifacts(root: Path) -> None:
     """Delete test/build caches before diffing.
 
@@ -48,7 +64,7 @@ def prune_artifacts(root: Path) -> None:
     """
     for path in sorted(root.rglob("*"), key=lambda p: -len(p.parts)):
         if path.is_dir() and path.name in ARTIFACT_DIRS:
-            shutil.rmtree(path, ignore_errors=True)
+            shutil.rmtree(path, onexc=_force_writable)
         elif path.is_file() and path.suffix == ".pyc":
             path.unlink(missing_ok=True)
 

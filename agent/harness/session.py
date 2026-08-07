@@ -300,6 +300,17 @@ def _paths(result) -> list:
 # The rationale: what the human actually reads.
 # ---------------------------------------------------------------------------
 
+def _changed_files(diff: str) -> set:
+    """Paths a unified diff touches.
+
+    Kept out of the f-string it used to live in: the doubled escaping there
+    (`\\\\+` inside a raw string) made the pattern match a literal backslash, so
+    every rationale ever written reported "Files changed: 0" while the diff
+    plainly listed files. A number nobody can check is worse than no number.
+    """
+    return set(re.findall(r"^\+\+\+ b/(.+)$", diff or "", re.MULTILINE))
+
+
 def write_rationale(path: Path, session_id: str, task: str, steps: list,
                     outcome: str, diff: str, branch: str) -> str:
     """Build the session's account of itself, from the journal.
@@ -318,7 +329,7 @@ def write_rationale(path: Path, session_id: str, task: str, steps: list,
         f"- **Outcome:** {outcome}",
         f"- **Branch:** {branch or '(not a git repo)'}",
         f"- **Steps:** {len(steps)}",
-        f"- **Files changed:** {len(set(re.findall(r'^\\+\\+\\+ b/(.+)$', diff, re.MULTILINE)))}",
+        f"- **Files changed:** {len(_changed_files(diff))}",
         "",
         "## What was asked",
         "",

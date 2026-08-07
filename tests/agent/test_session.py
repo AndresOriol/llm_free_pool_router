@@ -212,6 +212,9 @@ def test_rationale_is_built_from_the_journal():
     text = write_rationale(root / "r.md", "s1", "fix the header lookup", steps,
                            "done", "+++ b/r.py\n", "session/s1")
     check("the outcome is stated", "done" in text)
+    # Reported 0 for every session ever written, because the pattern lived in an
+    # f-string and its escaping was doubled.
+    check("changed files are counted", "**Files changed:** 1" in text)
     check("commands are cited with their exit codes", "`python -m pytest` → exit 0" in text)
     check("no open questions when there are none", "None recorded" in text)
 

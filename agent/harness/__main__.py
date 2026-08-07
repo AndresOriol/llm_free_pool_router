@@ -83,9 +83,13 @@ def main() -> None:
             model, backend, toolset, task, workdir, config=config,
             max_steps=variant.max_cycles_hint or MAX_STEPS)
         _summary(outcome, bb, stats, variant, len(steps))
-        # A session that ran out of budget or got stuck still wrote its
-        # rationale, so this exit code says "needs a human", not "lost".
-        sys.exit(0 if outcome == "done" else 1)
+        # Exit 0 for any *clean* end -- done, gave up, or out of budget. All
+        # three wrote a rationale and left the branch reviewable, which is what
+        # R3 asks of a session that gets stuck. Exiting non-zero made the eval
+        # runner record an orderly "exhausted" as `crash`, which is the one
+        # outcome that means the opposite: that nothing was reported at all.
+        # Whether the work was any good is the hidden tests' verdict, not this.
+        sys.exit(0)
 
     bb, stats, outcome = solve(model, backend, toolset, task, config=config,
                                test_cmd=os.environ.get("HARNESS_TEST_CMD")
