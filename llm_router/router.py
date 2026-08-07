@@ -22,7 +22,8 @@ class AutonomousLLMRouter:
     def __init__(self, providers: List[LLMProvider]):
         self.providers = providers
 
-    def get_best_provider(self, estimated_tokens: Optional[int] = None) -> Optional[LLMProvider]:
+    def get_best_provider(self, estimated_tokens: Optional[int] = None,
+                          min_context: Optional[int] = None) -> Optional[LLMProvider]:
         """Return the highest-priority available provider that fits the request.
 
         `estimated_tokens` (from `estimate_tokens`) filters out providers whose
@@ -32,10 +33,29 @@ class AutonomousLLMRouter:
         (`max_input_tokens is None`) is never filtered out. When nothing fits,
         fall back to the largest window available -- better to attempt the call
         (and surface the too-large error) than to stall.
+
+        `min_context` is the *caller's* claim about what the job needs, not the
+        request's size. Some work cannot be done well on a narrow view even when
+        it happens to fit: deciding what to do next, or checking a change against
+        a whole codebase, degrade into guessing when the input is trimmed to fit
+        a 6,000-token member. Such a caller demands a floor, and the pool honours
+        it -- the wide-context members exist for exactly this and should not be
+        spent on work that would have run anywhere.
+
+        The floor is a preference, not a guarantee: if nothing that wide is
+        available right now, fall through to the normal rules rather than stall
+        an unattended run behind a busy account.
         """
         available = [p for p in self.providers if p.check_availability()]
         if not available:
             return None
+
+        if min_context:
+            wide = [p for p in available
+                    if p.max_input_tokens is None or p.max_input_tokens >= min_context]
+            if wide:
+                available = wide
+
         if estimated_tokens is None:
             return min(available, key=lambda p: p.priority)
 

@@ -49,6 +49,15 @@ class RouterChatModel(BaseChatModel):
     # its config here, which would silently cost the eval metrics that count
     # provider calls and failover bounces.
     provider_config: Optional[dict] = None
+    # Minimum context window this caller wants, in tokens. A role whose job is
+    # judgement rather than mechanics declares one so the pool routes it to a
+    # wide-context member instead of whichever narrow account happens to be
+    # warm. None (the default) leaves routing exactly as it was.
+    min_context: Optional[int] = None
+
+    def for_context(self, min_context: Optional[int]) -> "RouterChatModel":
+        """A copy of this model that demands a context floor."""
+        return self.model_copy(update={"min_context": min_context})
 
     @property
     def _llm_type(self) -> str:
@@ -78,7 +87,7 @@ class RouterChatModel(BaseChatModel):
         # Size the request once so routing can skip models it would overflow.
         estimated = estimate_tokens(messages, self.bound_tools)
         for _ in range(self.max_retries):
-            provider = self.router.get_best_provider(estimated)
+            provider = self.router.get_best_provider(estimated, self.min_context)
             if provider is None:
                 if self._wait_for_cooldown():
                     continue
