@@ -355,16 +355,23 @@ most and is the least defined.
 
 ## 8. The roles
 
-Draft. Six roles named so far; the next session refines them.
+**Built** as `HARNESS_VARIANT=v8-session`
+([session.py](../../agent/harness/session.py), [roles.py](../../agent/harness/roles.py)).
 
-| Role | Job | Tier (C2) |
-| --- | --- | --- |
-| **Orchestrator** | Decides who acts next, and hands them the context they need. Holds no tools | Wide — it cannot decide on a narrowed view, and it is the only role that curates for the others |
-| **Explorer** | Finds and reads the relevant code | Small; may split further later |
-| **Writer** | Applies the change | Small |
-| **Executor** | Decides *what to run* to prove the code works, writes throwaway probe scripts, reports evidence | Small, but it holds the shell (§4.2) and it does think — this is not a fixed test step |
-| **Documenter** | Updates the docs from the diff (R6) | Wide — it needs the diff *and* the docs |
-| **Reviewer** | Checks the work before it is called done | Wide; the role most likely to split into several |
+| Role | Job | Tools | Tier (C2) |
+| --- | --- | --- | --- |
+| **Orchestrator** | Decides who acts next and writes their brief | none | Wide — it cannot decide on a narrowed view, and it is the only role that curates for the others |
+| **Explorer** | Finds and reads the relevant code | find, search, read, list | any |
+| **Writer** | Applies the change | read, replace, create | any |
+| **Executor** | Decides *what to run* to prove the code works, writes throwaway probe scripts | run_command, create | any; holds the shell (§4.2) |
+| **Documenter** | Updates the docs from the diff (R6) | read, find, replace, create | Wide — needs the diff *and* the docs |
+| **Reviewer** | Checks the work before it is called done | read, search | Wide; most likely to split further |
+
+Three edges are deterministic, and each one is a model call not spent on a
+decision that only has one right answer: **after an applied edit, run the code**;
+**a `DONE` with nothing executed is refused**; **a `DONE` with nothing reviewed
+is refused**. Commits, the journal and the diff are likewise driven by the
+session rather than by a role that could forget.
 
 The Executor is a deliberate reversal of the current design, where the test step
 runs no model at all ([6.12.1](../06-agent.md#6121-the-roles-and-the-transitions)).
@@ -419,11 +426,37 @@ whole cycle ([6.13.1](../06-agent.md#6131-the-one-failure-is-the-interesting-par
 A role must be able to say "you didn't give me enough, and here is what is
 missing" — that turns a wasted cycle into a cheap, informative one.
 
-Open before this is built: whether the envelope is prose or JSON (JSON is
-checkable but small models fumble structure — the `write_todos` lesson in
-[6.5](../06-agent.md#65-the-librarys-prompts-and-what-they-cost-us)), how
-`context` is capped, and whether the Orchestrator writes it itself or assembles
-it from the blackboard mechanically.
+**Built as labelled plain text, not JSON** — `ACTION:` / `GOAL:` / `CONTEXT:` /
+`DONE_WHEN:` down, `STATUS:` / `FINDING:` up, parsed leniently with a
+deterministic fallback. JSON is checkable, but the `write_todos` lesson
+([6.5](../06-agent.md#65-the-librarys-prompts-and-what-they-cost-us)) is that
+small models fumble structure, and a session must not end because a model wrote
+a sentence where a word was asked for.
+
+### 8.2 What the first live run showed
+
+The first run against the real pool ended in none of the ways the unit tests
+cover, which is the argument for running it. Three faults, all now fixed and
+each with a regression test:
+
+- **Labels were only parsed at the start of a line.** Models put the whole reply
+  on one line — `STATUS: DONE | FINDING: ...` — so every finding in the journal
+  began with the literal text of its own status label.
+- **The Writer could not read.** `replace_in_file` needs `old_text` to match
+  exactly, and the role had no read tool, on the theory that applying a change
+  needs no search. It reported, verbatim: *"no tool for reading files is
+  provided"*. Reading is now in its tool set; searching still is not.
+- **The orchestrator explored forever.** Nine of twelve steps were `explore`,
+  re-reading the same four files. Reading is the move an orchestrator can always
+  justify, so a third consecutive one is now refused once files are known.
+
+And one finding that is *not* a bug, and matters more than the three that were.
+An `explore` role — holding no edit tool and no shell — reported: *"Implemented
+support for spelled-out units… All tests pass (4 passed)."* Nothing had been
+implemented and nothing had run. This is C4/C5 arriving on schedule, in the
+first live run, from a role structurally incapable of doing what it claimed. It
+is the reason acting roles are judged by their tool effects and the rationale is
+built from the journal rather than from what anyone said.
 
 ---
 
