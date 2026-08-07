@@ -51,6 +51,30 @@ def test_brief_survives_a_chatty_orchestrator():
     check("missing fields are empty, not fatal", partial.done_when == "")
 
 
+def test_labels_parse_when_they_share_a_line():
+    """Observed on the first live run: models write the whole reply on one line.
+
+    Requiring a line start swallowed the status into the finding, so every
+    finding in the journal began with the literal text `STATUS: DONE | FINDING:`.
+    """
+    report = parse_report("STATUS: DONE | FINDING: fixed the parser")
+    check("status", report.status == "DONE")
+    check("finding is clean", report.finding == "fixed the parser")
+
+    brief = parse_brief("ACTION: WRITE | GOAL: fix it | CONTEXT: line 4 | "
+                        "DONE_WHEN: the edit applies")
+    check("action", brief.action == "WRITE")
+    check("goal is clean", brief.goal == "fix it")
+    check("context is clean", brief.context == "line 4")
+
+
+def test_the_writer_can_read():
+    """`replace_in_file` needs an exact `old_text`. A writer that cannot look
+    reported BLOCKED with 'no tool for reading files is provided'."""
+    check("write can read", "read_lines" in SESSION_ROLES["write"].tools)
+    check("but still cannot search", "search_code" not in SESSION_ROLES["write"].tools)
+
+
 def test_report_never_invents_success():
     """An unparseable reply is PARTIAL. Only an explicit DONE is DONE."""
     check("no status line", parse_report("I did some stuff").status == "PARTIAL")
@@ -278,6 +302,34 @@ def test_session_end_to_end():
     check("the orchestrator held no tools",
           any(s["tools"] is None for s in model.seen))
     return stats
+
+
+def test_endless_exploration_is_refused():
+    """Nine of twelve steps on the first live run were `explore`, re-reading the
+    same files. Reading is the move an orchestrator can always justify."""
+    root = seed_project()
+    backend = RestrictedShellBackend(root_dir=str(root), allow_git=True)
+    toolset = make_tools(backend)
+    explore_forever = [
+        ai("ACTION: EXPLORE\nGOAL: look again\nCONTEXT: \nDONE_WHEN: understood"),
+        ai(calls=[("search_code", {"pattern": "def add"})]),
+        ai("STATUS: DONE\nFINDING: /calc.py returns a - b"),
+    ]
+    model = ScriptedModel(explore_forever * 2 + [
+        # The third EXPLORE is overridden, so the next call is the writer's.
+        ai("ACTION: EXPLORE\nGOAL: look yet again\nCONTEXT: \nDONE_WHEN: x"),
+        ai(calls=[("replace_in_file", {"file_path": "/calc.py",
+                                       "old_text": "return a - b",
+                                       "new_text": "return a + b"})]),
+        ai("applied"),
+    ] + [ai("ACTION: GIVEUP")] * 6)
+
+    bb, stats, outcome, steps = run_session(model, backend, toolset,
+                                            "add() is wrong", root, max_steps=6)
+    actions = [s["action"] for s in steps]
+    check(f"a write was forced, got {actions}", "write" in actions)
+    check("and it is recorded as a refusal",
+          any("EXPLORE refused" in line for line in bb.log))
 
 
 def test_a_session_that_gets_stuck_still_reports():

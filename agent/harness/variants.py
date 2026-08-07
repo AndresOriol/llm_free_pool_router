@@ -147,7 +147,10 @@ V8 = Variant(
          "branch, journals every step so a crash resumes, and ends by updating "
          "the docs and writing a rationale into the project's notes.",
     topology="session",
-    max_cycles_hint=24,
+    # Steps cost roughly half a minute each against the real pool, so this is
+    # set by the scenario timeout rather than by how much work a session could
+    # usefully do. Raise it with the timeout, not on its own.
+    max_cycles_hint=14,
 )
 
 VARIANTS = {v.name: v for v in (V1, V2, V3, V4, V5, V6, V7, V8)}

@@ -32,13 +32,22 @@ _DEFAULT_ACTION = "EXPLORE"  # read-only: the safe move when nothing parses
 _DEFAULT_STATUS = "PARTIAL"  # never assume success from an unparseable reply
 
 
+# Every label either direction can carry. Used as the terminator for the field
+# before it, so a model that puts the whole reply on one line -- observed:
+# `STATUS: DONE | FINDING: ...` -- still parses. Requiring a line start here
+# silently swallowed the status into the finding.
+_LABELS = ("ACTION", "GOAL", "CONTEXT", "DONE_WHEN", "STATUS", "FINDING")
+_NEXT_LABEL = r"(?=\b(?:" + "|".join(_LABELS) + r")\s*:|\Z)"
+
+
 def _field(text: str, name: str, limit: int = _FIELD_CAP) -> str:
-    """Everything after `NAME:` up to the next labelled line."""
-    pattern = rf"^\s*{name}\s*:\s*(.*?)(?=^\s*[A-Z_]{{3,}}\s*:|\Z)"
-    match = re.search(pattern, text or "", re.MULTILINE | re.DOTALL | re.IGNORECASE)
+    """Everything after `NAME:` up to the next label, wherever it appears."""
+    match = re.search(rf"\b{name}\s*:\s*(.*?){_NEXT_LABEL}", text or "",
+                      re.DOTALL | re.IGNORECASE)
     if not match:
         return ""
-    return match.group(1).strip()[:limit]
+    # Trailing separators are common when the labels share a line.
+    return match.group(1).strip().strip("|-").strip()[:limit]
 
 
 def _keyword(text: str, allowed, default: str) -> str:

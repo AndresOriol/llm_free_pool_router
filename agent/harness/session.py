@@ -47,6 +47,11 @@ NOTES_FILENAMES = ("NOTES.md", "notes.md")
 MAX_STEPS = 24
 # Roles whose value is what they *say*; the rest are judged by what they did.
 _REPORTING = {"explore", "review"}
+# Consecutive explores tolerated once the files are known. Observed on the
+# first live run: nine of twelve steps were `explore`, re-reading the same four
+# files, because reading is the move an orchestrator can always justify. At some
+# point somebody has to write something.
+MAX_CONSECUTIVE_EXPLORE = 2
 _EXIT_RE = re.compile(r"^exit=(-?\d+)", re.MULTILINE)
 
 
@@ -385,6 +390,7 @@ def run_session(model, backend, toolset, task: str, workdir: Path, config=None,
     step_no = resumed
     reviewed = False
     forced = None
+    recent = []
     outcome = "exhausted"
 
     while step_no < max_steps:
@@ -416,6 +422,16 @@ def run_session(model, backend, toolset, task: str, workdir: Path, config=None,
                 outcome = "done"
                 break
 
+        if (brief.action == "EXPLORE" and bb.files
+                and recent[-MAX_CONSECUTIVE_EXPLORE:].count("explore")
+                >= MAX_CONSECUTIVE_EXPLORE):
+            bb.record("orchestrate", "EXPLORE refused: already explored twice")
+            brief = Brief(
+                action="WRITE",
+                goal="Apply the change the task asks for.",
+                context=(brief.context or "") + "\n" + "\n".join(bb.notes[-2:]),
+                done_when="An edit has been applied to a file.")
+
         role = SESSION_ROLES.get(brief.action.lower())
         if role is None:
             bb.record("orchestrate", f"unknown action {brief.action!r}; exploring")
@@ -426,6 +442,7 @@ def run_session(model, backend, toolset, task: str, workdir: Path, config=None,
         result = run_role(model, role, toolset, bb, config, stats,
                           force_summary=role.reports, brief=brief)
         report = build_report(role.name, result)
+        recent.append(role.name)
         _absorb(role.name, report, result, bb)
         journal.append(Step(n=step_no, action=role.name, goal=brief.goal,
                             status=report.status, finding=report.finding,

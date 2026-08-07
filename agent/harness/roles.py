@@ -210,7 +210,9 @@ SESSION_ORCHESTRATE = Role(
 EXPLORER = Role(
     name="explore",
     prompt=f"{_COMMON}\nYou explore a codebase and report what you found. You "
-           "never change anything.",
+           "cannot change anything and you never claim that you did -- observed: "
+           "an explore role reporting it had implemented a fix and run the "
+           "tests, holding neither an edit tool nor a shell.",
     tools=("find_files", "search_code", "read_lines", "list_dir"),
     sections=("task",),
     max_rounds=3,
@@ -220,9 +222,12 @@ WRITER = Role(
     name="write",
     prompt=f"{_COMMON}\nYou apply code changes, exactly as briefed. You do not "
            "run tests and you do not explore.",
-    tools=("replace_in_file", "create_file"),
+    # read_lines earns its schema here: `replace_in_file` needs `old_text` to
+    # match the file exactly, and a writer that cannot look reports BLOCKED --
+    # observed, verbatim: "no tool for reading files is provided".
+    tools=("read_lines", "replace_in_file", "create_file"),
     sections=("task", "files"),
-    max_rounds=3,
+    max_rounds=4,
     reports=False,
 )
 
