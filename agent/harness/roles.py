@@ -38,6 +38,13 @@ class Role:
     # an edit role given two rounds, one of them tool-less, spent the first
     # thinking and then could only describe the fix it never applied.
     reports: bool = True
+    # Minimum context window this role needs, in tokens. 0 means "anything in
+    # the pool will do". A role whose job is judgement over a wide view --
+    # deciding what happens next, or checking a change against the codebase --
+    # sets a floor, and the router honours it (llm_router/router.py). Splitting
+    # work to fit the narrowest member is what makes the harness cheap; doing it
+    # to a role that needs breadth is what makes it stupid.
+    min_context: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +172,96 @@ ROUTE = Role(
                 "GIVEUP - the task cannot be completed\n"
                 "One word only.",
 )
+
+# ---------------------------------------------------------------------------
+# Session roles. These drive a long unattended run rather than a single task,
+# so they differ from the pipeline roles in two ways: the orchestrator hands
+# each worker a written brief instead of the worker reading the blackboard raw
+# (agent/harness/envelope.py), and the roles whose job is judgement declare a
+# context floor instead of taking whichever account happens to be warm.
+# ---------------------------------------------------------------------------
+
+# Only the wide-context members of the pool clear this. Groq tops out at 12,000.
+WIDE = 50_000
+
+SESSION_ORCHESTRATE = Role(
+    name="orchestrate",
+    prompt="You direct a team of coding agents working on one project. You have "
+           "no tools; the others do the work. Your only job is to choose who "
+           "acts next and to tell them what they need to know.",
+    tools=(),
+    sections=("task", "plan", "files", "notes", "edits", "diff", "exec", "log"),
+    max_rounds=1,
+    min_context=WIDE,
+    instruction="Choose the next action and write the brief for it. Reply in "
+                "exactly this form:\n\n"
+                "ACTION: EXPLORE | WRITE | EXECUTE | DOCUMENT | REVIEW | DONE | GIVEUP\n"
+                "GOAL: <one sentence: what this step must achieve>\n"
+                "CONTEXT: <the facts that step needs, copied out in full -- it "
+                "cannot see anything you do not write here>\n"
+                "DONE_WHEN: <how that step knows it has finished>\n\n"
+                "EXPLORE finds and reads code. WRITE changes it. EXECUTE runs "
+                "things to check whether it works. DOCUMENT updates the "
+                "documentation to match the change. REVIEW checks the work is "
+                "right before finishing. DONE only after a successful run and a "
+                "review.",
+)
+
+EXPLORER = Role(
+    name="explore",
+    prompt=f"{_COMMON}\nYou explore a codebase and report what you found. You "
+           "never change anything.",
+    tools=("find_files", "search_code", "read_lines", "list_dir"),
+    sections=("task",),
+    max_rounds=3,
+)
+
+WRITER = Role(
+    name="write",
+    prompt=f"{_COMMON}\nYou apply code changes, exactly as briefed. You do not "
+           "run tests and you do not explore.",
+    tools=("replace_in_file", "create_file"),
+    sections=("task", "files"),
+    max_rounds=3,
+    reports=False,
+)
+
+EXECUTOR = Role(
+    name="execute",
+    prompt=f"{_COMMON}\nYou decide what to run to find out whether the code "
+           "works, and you run it. Prefer the project's own tests. When they "
+           "do not cover the question, write a small throwaway script and run "
+           "that. You never edit the project's own files.",
+    tools=("run_command", "create_file"),
+    sections=("task", "edits"),
+    max_rounds=3,
+    reports=False,
+)
+
+DOCUMENTER = Role(
+    name="document",
+    prompt=f"{_COMMON}\nYou keep documentation true to the code. You read the "
+           "change that was made and update the docs that the change makes "
+           "wrong. You never change code.",
+    tools=("read_lines", "find_files", "replace_in_file", "create_file"),
+    sections=("task", "diff", "edits"),
+    max_rounds=4,
+    min_context=WIDE,
+    reports=False,
+)
+
+REVIEWER = Role(
+    name="review",
+    prompt=f"{_COMMON}\nYou review a change before it is called done. You judge "
+           "whether it does what the task asked, not whether it is elegant. You "
+           "never change anything.",
+    tools=("read_lines", "search_code"),
+    sections=("task", "diff", "notes", "exec"),
+    max_rounds=3,
+    min_context=WIDE,
+)
+
+SESSION_ROLES = {r.name: r for r in (EXPLORER, WRITER, EXECUTOR, DOCUMENTER, REVIEWER)}
 
 ROLES = {r.name: r for r in (LOCATE, INSPECT, EDIT, ROUTE,
                              EXPLORE, EXECUTE, PLAN, ORCHESTRATE)}

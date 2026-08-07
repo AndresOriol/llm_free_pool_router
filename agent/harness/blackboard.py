@@ -25,6 +25,10 @@ MAX_EDITS = 8
 MAX_EXEC_CHARS = 1_500
 MAX_PLAN_CHARS = 700
 MAX_LOG = 10
+# The session's own diff, shown to the roles that judge it (document, review).
+# Both of those are routed to wide-context members, so this cap is generous
+# compared with the rest -- it is the one section whose whole value is detail.
+MAX_DIFF_CHARS = 6_000
 
 
 def _clip(text: str, limit: int, *, tail: bool = False) -> str:
@@ -50,6 +54,10 @@ class Blackboard:
     plan: str = ""
     log: list[str] = field(default_factory=list)
     cycles: int = 0
+    # What this session has changed so far, as a unified diff. Written by the
+    # session from git, never by a model: a role that judges a change must see
+    # the change that exists, not the actor's account of it.
+    diff: str = ""
 
     def add_files(self, paths) -> None:
         """Record candidate paths, newest first, deduped and capped."""
@@ -78,6 +86,9 @@ class Blackboard:
 
     def set_plan(self, plan: str) -> None:
         self.plan = _clip(plan, MAX_PLAN_CHARS)
+
+    def set_diff(self, diff: str) -> None:
+        self.diff = _clip(diff, MAX_DIFF_CHARS)
 
     # -- rendering -------------------------------------------------------
 
@@ -131,8 +142,15 @@ def _s_log(bb: Blackboard) -> str:
     return "# Steps so far\n" + "\n".join(f"- {line}" for line in bb.log)
 
 
+def _s_diff(bb: Blackboard) -> str:
+    if not bb.diff:
+        return ""
+    return f"# The change made so far\n```diff\n{bb.diff}\n```"
+
+
 _SECTIONS = {
     "task": _s_task,
+    "diff": _s_diff,
     "plan": _s_plan,
     "files": _s_files,
     "notes": _s_notes,

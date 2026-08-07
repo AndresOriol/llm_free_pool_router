@@ -23,8 +23,15 @@ def _clip(text: str, limit: int = MAX_TOOL_OUTPUT) -> str:
     return text if len(text) <= limit else text[:limit] + "\n...(truncated)"
 
 
-def make_tools(backend) -> dict:
-    """Build the tool set bound to one backend. Returns name -> tool."""
+def make_tools(backend, shell: bool = False) -> dict:
+    """Build the tool set bound to one backend. Returns name -> tool.
+
+    `shell` only changes what `run_command`'s description promises. The backend
+    is what actually enforces the limit, and a description that advertises
+    capabilities the backend rejects is a measured cause of failed tool calls
+    (docs/06-agent.md#65) -- so the two are kept in step here rather than left
+    to agree by luck.
+    """
 
     def find_files(pattern: str) -> str:
         """Find files by glob, e.g. '**/*.py'. Returns paths."""
@@ -80,8 +87,22 @@ def make_tools(backend) -> dict:
         return "\n".join(("%s%s" % (e["path"], "/" if e.get("is_dir") else ""))
                          for e in res.entries[:60]) or "empty"
 
+    def run_command(command: str) -> str:
+        """Run a command and return its exit code and output."""
+        res = backend.execute(command)
+        return _clip(f"exit={res.exit_code}\n{res.output}")
+
+    run_command.__doc__ = (
+        "Run a shell command and return its exit code and output. Pipes, "
+        "chaining and redirection all work."
+        if shell else
+        "Run a command and return its exit code and output. Only `python` and "
+        "`pytest` work, named bare; there is no shell, so no pipes, no &&, no "
+        "cd. To check something the tests do not cover, write a script with "
+        "create_file and run it with `python <file>`.")
+
     fns = [find_files, search_code, read_lines, replace_in_file,
-           create_file, run_tests, list_dir]
+           create_file, run_tests, list_dir, run_command]
     return {f.__name__: StructuredTool.from_function(f, name=f.__name__,
                                                      description=f.__doc__)
             for f in fns}

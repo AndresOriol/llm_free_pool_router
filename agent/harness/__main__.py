@@ -13,6 +13,7 @@ from pathlib import Path
 from llm_router import AutonomousLLMRouter, load_providers_from_config
 from agent.harness import variants
 from agent.harness.loop import DEFAULT_TEST_CMD, MAX_CYCLES, solve
+from agent.harness.session import MAX_STEPS, run_session
 from agent.harness.tools import make_tools
 from agent.restricted_backend import RestrictedShellBackend
 from agent.router_chat_model import RouterChatModel
@@ -42,8 +43,17 @@ def build(workdir: Path, config=None):
     # only the wrapper and report zero provider calls.
     model = RouterChatModel(router=router, max_retries=len(providers) + 3,
                             provider_config=config or None)
-    backend = RestrictedShellBackend(root_dir=str(workdir))
-    return model, backend, make_tools(backend)
+    # Off by default. The Executor role is more capable with a real shell, but
+    # this process is not contained, so widening the blast radius is the
+    # operator's decision to make rather than a default to inherit
+    # (docs/design/long-run-harness.md#42-bash-for-the-executor).
+    shell = os.environ.get("HARNESS_SHELL") == "1"
+    backend = RestrictedShellBackend(root_dir=str(workdir), allow_git=True,
+                                     allow_shell=shell)
+    if shell:
+        logging.warning("HARNESS_SHELL=1: the Executor has an unrestricted shell. "
+                        "Run this inside a container.")
+    return model, backend, make_tools(backend, shell=shell)
 
 
 def main() -> None:
@@ -68,22 +78,34 @@ def main() -> None:
     variant = variants.get(os.environ.get("HARNESS_VARIANT"))
     logging.info(f"Variant: {variant.name} -- {variant.note}")
 
+    if variant.topology == "session":
+        bb, stats, outcome, steps = run_session(
+            model, backend, toolset, task, workdir, config=config,
+            max_steps=variant.max_cycles_hint or MAX_STEPS)
+        _summary(outcome, bb, stats, variant, len(steps))
+        # A session that ran out of budget or got stuck still wrote its
+        # rationale, so this exit code says "needs a human", not "lost".
+        sys.exit(0 if outcome == "done" else 1)
+
     bb, stats, outcome = solve(model, backend, toolset, task, config=config,
                                test_cmd=os.environ.get("HARNESS_TEST_CMD")
                                or DEFAULT_TEST_CMD,
                                max_cycles=variant.max_cycles_hint or MAX_CYCLES,
                                variant=variant)
 
-    print(f"\n=== {outcome.upper()} after {bb.cycles} cycle(s) [{variant.name}] ===")
+    _summary(outcome, bb, stats, variant, bb.cycles)
+    sys.exit(0 if outcome == "pass" else 1)
+
+
+def _summary(outcome, bb, stats, variant, units) -> None:
+    print(f"\n=== {outcome.upper()} after {units} step(s) [{variant.name}] ===")
     for line in bb.log:
         print(f"  {line}")
     avg = stats.prompt_tokens // stats.calls if stats.calls else 0
     print(f"\nmodel calls: {stats.calls} | ~prompt tokens: {stats.prompt_tokens} "
           f"| ~avg/call: {avg}")
     for role, s in sorted(stats.by_role.items()):
-        print(f"  {role:<8} {s['calls']:>2} calls  ~{s['tokens'] // max(s['calls'], 1)} tok/call")
-
-    sys.exit(0 if outcome == "pass" else 1)
+        print(f"  {role:<10} {s['calls']:>2} calls  ~{s['tokens'] // max(s['calls'], 1)} tok/call")
 
 
 if __name__ == "__main__":

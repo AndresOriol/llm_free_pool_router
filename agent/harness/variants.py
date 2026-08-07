@@ -140,7 +140,17 @@ V7 = Variant(
     max_cycles_hint=12,
 )
 
-VARIANTS = {v.name: v for v in (V1, V2, V3, V4, V5, V6, V7)}
+V8 = Variant(
+    name="v8-session",
+    note="A session rather than a task: an orchestrator briefs explore/write/"
+         "execute/document/review, the run commits incrementally on its own "
+         "branch, journals every step so a crash resumes, and ends by updating "
+         "the docs and writing a rationale into the project's notes.",
+    topology="session",
+    max_cycles_hint=24,
+)
+
+VARIANTS = {v.name: v for v in (V1, V2, V3, V4, V5, V6, V7, V8)}
 DEFAULT = V1.name
 
 

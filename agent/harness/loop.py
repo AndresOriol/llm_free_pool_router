@@ -58,10 +58,14 @@ class Stats:
 class RoleResult:
     text: str
     outputs: list
+    # The same tool calls with their arguments kept. `outputs` is enough to
+    # decide what happened; `calls` is what lets a session say *which command*
+    # produced an exit code, which is the substrate a rationale has to cite.
+    calls: list = field(default_factory=list)
 
 
 def run_role(model, role, toolset, bb: Blackboard, config: dict,
-             stats: Stats, force_summary: bool = False) -> RoleResult:
+             stats: Stats, force_summary: bool = False, brief=None) -> RoleResult:
     """Run one role to completion and throw away its conversation.
 
     Only the return value reaches the blackboard. The messages built here are
@@ -71,7 +75,17 @@ def run_role(model, role, toolset, bb: Blackboard, config: dict,
     used every round on tool calls otherwise ends holding a tool-calling
     response, whose text is empty -- so it does all the work and reports
     nothing, and the next role gets an empty blackboard section.
+
+    `brief` replaces the role's static instruction with one written for this
+    step by the orchestrator (agent/harness/envelope.py). The role still sees
+    only its declared blackboard sections, so the brief adds context rather than
+    replacing the budget that bounds it.
     """
+    # A role that declares a context floor is asking to be routed to a
+    # wide-context member. Applied before bind_tools so the copy carries both.
+    if role.min_context and hasattr(model, "for_context"):
+        model = model.for_context(role.min_context)
+
     tools = [toolset[name] for name in role.tools if name in toolset]
     bound = model.bind_tools(tools) if tools else model
     # Only worth forcing on a role whose value is what it says, and only when
@@ -79,12 +93,13 @@ def run_role(model, role, toolset, bb: Blackboard, config: dict,
     # needed to act (see Role.reports).
     forcing = force_summary and role.reports and tools and role.max_rounds >= 2
 
+    ask = brief.render() if brief is not None else f"# Your job\n{role.instruction}"
     messages = [
         SystemMessage(content=role.prompt),
-        HumanMessage(content=f"{bb.render(role.sections)}\n\n# Your job\n{role.instruction}"),
+        HumanMessage(content=f"{bb.render(role.sections)}\n\n{ask}"),
     ]
 
-    outputs, text = [], ""
+    outputs, calls_made, text = [], [], ""
     for round_no in range(role.max_rounds):
         final = round_no == role.max_rounds - 1
         if forcing and final:
@@ -106,9 +121,11 @@ def run_role(model, role, toolset, bb: Blackboard, config: dict,
         for call in calls:
             out = _invoke_tool(toolset, call, config)
             outputs.append((call.get("name", "?"), out))
+            calls_made.append({"name": call.get("name", "?"),
+                               "args": call.get("args") or {}, "output": out})
             messages.append(ToolMessage(content=out, tool_call_id=call.get("id", "")))
 
-    return RoleResult(text=text, outputs=outputs)
+    return RoleResult(text=text, outputs=outputs, calls=calls_made)
 
 
 def _text_of(response) -> str:
