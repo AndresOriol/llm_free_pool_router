@@ -1,0 +1,22 @@
+# The session harness: a project-day rather than a task.
+#
+# An orchestrator on a wide-context member briefs narrow workers, the run
+# commits incrementally on its own branch, journals every step so a crash
+# resumes, and finishes by updating the docs and appending its rationale to the
+# project's notes.
+#
+# Differs from `adhoc-harness` only by HARNESS_VARIANT, so a comparison between
+# them isolates the architecture from everything else.
+#
+# HARNESS_SHELL is deliberately absent: the Executor is more capable with a real
+# shell, but eval runs are not containerized, and the default must not widen the
+# blast radius silently (docs/design/long-run-harness.md#42-bash-for-the-executor).
+name: harness-v8-session
+repo: ../..
+ref: harness/adhoc-router
+env_file: ../../llm_router/.env
+agent_cmd: ["python", "-m", "agent.harness", "{workdir}"]
+overrides:
+  router_config: llm_router/config.eval.yaml
+  env:
+    HARNESS_VARIANT: v8-session

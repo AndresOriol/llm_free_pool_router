@@ -50,6 +50,17 @@ def _execute(config, workdir: Path, prompt: str, trace_path: Path,
                 "timed_out": True}
 
 
+def _collect_session_artifacts(workdir: Path, out_dir: Path) -> None:
+    """Keep what a session wrote about itself. No-op for a task-shaped agent."""
+    state = workdir / ".harness"
+    journal = state / "journal.jsonl"
+    if journal.is_file():
+        shutil.copyfile(journal, out_dir / "journal.jsonl")
+    reports = sorted((state / "reports").glob("session-*.md"))
+    if reports:
+        shutil.copyfile(reports[-1], out_dir / "rationale.md")
+
+
 def _outcome(execution: dict, verification: dict, tampered: list) -> str:
     if tampered:
         return "tampered"
@@ -92,6 +103,11 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
                              out_dir / "trace.jsonl", scenario.timeout_s)
 
         tampered = verify_mod.check_integrity(before, workdir)
+        # Before pruning: a session writes its rationale and journal into the
+        # workdir's .harness/, which prune_artifacts deletes. Those two files
+        # are the deliverable under a review model where nobody reads the code,
+        # so losing them would leave the judge grading the diff alone.
+        _collect_session_artifacts(workdir, out_dir)
         verify_mod.prune_artifacts(workdir)
         patch = verify_mod.make_diff(seed, workdir)
         verification = verify_mod.verify(repo, scenario, workdir, base / "verified")

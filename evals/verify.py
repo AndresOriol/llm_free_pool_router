@@ -30,7 +30,12 @@ def _normalize(patch_text: str) -> str:
     return _DIFF_PREFIX.sub(r"\1/", patch_text)
 
 
-ARTIFACT_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+ARTIFACT_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                 # A session initializes a repo to commit into and journals its
+                 # steps beside it. Both are the harness's own bookkeeping, not
+                 # the change under test, and left in they would dominate the
+                 # diff the judge reads.
+                 ".git", ".harness"}
 
 
 def prune_artifacts(root: Path) -> None:
