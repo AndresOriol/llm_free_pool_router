@@ -1,12 +1,15 @@
-"""A deepagents backend that lets the agent run its OWN tests, but only that.
+"""The filesystem jail, plus enough `execute` for the agent to run its own tests.
 
-`FilesystemBackend` (the default jail) exposes no `execute`, so the agent can
-write code but never run it -- it can't close its own loop (write a test, run
-it, react to the result). `LocalShellBackend` grants an *unrestricted* host
-shell, which an unattended small model could misuse (`rm -rf`, network calls,
-git pushes).
+Built on deepagents' `FilesystemBackend`, which is where the path-jailed
+`glob`/`grep`/`read`/`write` come from. That is the only thing this project uses
+deepagents for; its agent loop is not used.
 
-This backend is the middle ground chosen for the eval loop: it satisfies
+`FilesystemBackend` alone exposes no `execute`, so an agent on it can write code
+but never run it -- it cannot close its own loop (write a test, run it, react to
+the result). `LocalShellBackend` grants an *unrestricted* host shell, which an
+unattended small model could misuse (`rm -rf`, network calls, git pushes).
+
+This backend is the middle ground: it satisfies
 `SandboxBackendProtocol` (so the `execute` tool is enabled) but the shell is
 constrained so the blast radius is small:
 

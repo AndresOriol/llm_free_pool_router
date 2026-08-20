@@ -1,8 +1,7 @@
 """CLI: python -m agent.harness [workdir] < brief.md
 
-Same contract as `agent.coding_agent` -- workdir argument, task on stdin -- so
-an eval configuration can swap one for the other by setting `agent_cmd` and
-nothing else.
+Workdir as an argument, task on stdin. An eval configuration launches this and
+nothing else (evals/agent_config.py).
 """
 
 import logging
