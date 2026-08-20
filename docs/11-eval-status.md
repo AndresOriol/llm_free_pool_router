@@ -49,7 +49,11 @@ configuration has been run against those more than n=2.
 
 Raw evidence in `evals/results/runs/`; the ledger is in
 [evals/CONFIGS.md](../evals/CONFIGS.md); the architecture is
-[6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness).
+[6.1](06-agent.md#61-what-it-is).
+
+**None of these configurations still exists.** They collapsed into one when the
+harness was reduced to a single architecture; the rows stay because the
+measurements are the project's data, and `git log` has the code each one names.
 
 Four observations:
 
@@ -60,14 +64,14 @@ Four observations:
 2. **The pass column is noise, demonstrably.** `harness-v3-merged` scored 3/3 in
    one batch and 1/3 in the next on an identical configuration, hours apart. Any
    ranking read off these rates would be invented — see
-   [6.14.1](06-agent.md#6141-the-pass-column-is-noise-and-i-can-prove-it).
+   [6.14.1](06-agent.md#682-the-pass-column-is-noise).
 3. **The cost result is real and replicated.** 5,756 against 226,854 input
    tokens for the same task, stable across every rep and batch, with
    between-configuration spread far exceeding within-configuration variance.
 4. **Every failure is `reasoning`** — 12 of 13, with zero `retrieval` and zero
    `tooling`. Every configuration found the file, edited it and ran the tests,
    then got the fix conceptually wrong. No change of topology can move that
-   ([6.14.2](06-agent.md#6142-every-failure-is-reasoning-and-that-reframes-the-whole-exercise)).
+   ([6.14.2](06-agent.md#683-every-failure-is-reasoning)).
 
 ## 11.4 Blockers
 

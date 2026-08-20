@@ -11,6 +11,12 @@ rate improves beyond interval overlap, or success rate holds flat while a
 secondary metric improves materially. Anything else is a draw, and a draw keeps
 the simpler configuration.
 
+> **The configurations in this table no longer exist as files.** The harness was
+> reduced to one architecture — `evals/configs/session.yaml` — and the deep-agents
+> baseline and seven variants were deleted. These rows stay because a ledger of
+> what was tried and what it showed is the point of the file; `git log` has the
+> code behind each name.
+
 | Config | Ref / SHA | Change | Suite | Result | Verdict |
 | --- | --- | --- | --- | --- | --- |
 | `baseline` | `master` | — | L0 `retry-after-case`, n=3 | 3/3 | reference point |
@@ -40,7 +46,7 @@ the journals are.
 ### The harness family, 2026-08-06
 
 Full write-up in
-[docs/06-agent.md](../docs/06-agent.md#614-architecture-variants-tried). Three
+[docs/06-agent.md](../docs/06-agent.md#68-why-it-is-shaped-this-way). Three
 things worth carrying forward:
 
 **No promotion.** Nothing beat baseline on the gating axis, and nothing is

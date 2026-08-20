@@ -28,11 +28,12 @@ python tests/llm_router/smoke_test.py
 
 ## Coding agent
 
-Run a [deepagents](https://github.com/langchain-ai/deepagents) coding agent on
-the pool — it keeps working through free-tier limits by switching model mid-task:
+Point the agent at a project and give it a task on stdin. It works the project
+unattended on its own branch, and keeps going through free-tier limits by
+switching model mid-task:
 
 ```bash
-python -m agent.coding_agent [workdir]
+echo "Read NOTES.md and do what the newest feedback asks for" | python -m agent.harness ../my-project
 ```
 
 See [docs/06-agent.md](docs/06-agent.md).

@@ -28,7 +28,7 @@ In order. The ordering is the argument.
    scenario is *exhausted as an instrument*: seven configurations were run
    against it and none could be distinguished from another, with one
    configuration scoring 3/3 and 1/3 on consecutive batches
-   ([6.14.1](06-agent.md#6141-the-pass-column-is-noise-and-i-can-prove-it)).
+   ([6.14.1](06-agent.md#682-the-pass-column-is-noise)).
    More reps cannot fix that — only a task that discriminates can. Until this
    lands, every proposed improvement is back to being decided by argument.
 2. **Fix the dead-model crash properly.** `404 model_not_found` propagates and
@@ -36,39 +36,33 @@ In order. The ordering is the argument.
    a trimmed pool (`llm_router/config.eval.yaml`); the shipping pool still dies
    on it. A decommissioned model should be disabled *permanently*, the way a
    rate-limited one is benched *temporarily*.
-3. **Decide the fate of the ad-hoc harness branch** — see
-   [13.2.1](#1321-the-open-question-on-the-branch) below.
-4. **Re-baseline at n=5** once scenarios exist, and record it in the ledger.
-5. **Then** the judge (P2), then compare/report (P3).
+3. **Re-baseline at n=5** now that scenarios exist, and record it in the ledger.
+4. **Then** the judge (P2), then compare/report (P3).
 
-### 13.2.1 The open question on the branch
+### 13.2.1 What the architecture work settled, and what it did not
 
-`harness/adhoc-router` holds a complete alternative agent architecture
-([6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness)–[6.14](06-agent.md#614-architecture-variants-tried)).
-It is **not merged and should not be merged on current evidence** — nothing beat
-baseline on the gating axis, and a draw keeps the simpler configuration.
+`harness/adhoc-router` holds the agent ([6.1](06-agent.md#61-what-it-is)). Seven
+variants and a conversational baseline were measured before it; all of them are
+in `git log` now. What that measurement established, and what a fresh session
+should not redo:
 
-What the measurement did establish, and what a fresh session should not redo:
-
-- **Cost replicated: 7.3 calls and 5,756 input tokens against baseline's 20.0
-  and 226,854.** A 39× reduction, stable across every rep and batch.
-- **Pass rates on L0 are noise.** Do not re-run those seven configurations
-  against `retry-after-case`; the answer will be a different random ordering.
+- **Cost replicated: 7.3 calls and 5,756 input tokens against the conversational
+  loop's 20.0 and 226,854.** A 39× reduction, stable across every rep and batch.
+  This is why the architecture is what it is.
+- **Pass rates on L0 are noise.** Do not re-run configurations against
+  `retry-after-case`; the answer will be a different random ordering
+  ([6.8.2](06-agent.md#682-the-pass-column-is-noise)).
 - **Every failure was `reasoning`** — 12 of 13, zero `retrieval`, zero
   `tooling`. Each configuration found the file, edited it, ran the tests, and
   got the fix conceptually wrong
-  ([6.14.2](06-agent.md#6142-every-failure-is-reasoning-and-that-reframes-the-whole-exercise)).
+  ([6.8.3](06-agent.md#683-every-failure-is-reasoning)).
   **This is the load-bearing result**: topology changes address retrieval,
   tooling and stopping, and none of those is the bottleneck. Further
   architecture work has close to nothing left to give on correctness.
 
-So the branch is a *cost* win awaiting a scenario set that can price its
-*correctness*. The decision needs step 1 first, not more topologies.
-
-Note also that the two paths are independent: [6.9](06-agent.md#69-proposed-strategies)
-proposes making the deep-agents loop cheaper via a harness profile (verified to
-work, never built), while the branch replaces that loop entirely. Neither
-supersedes the other, and only one of them has been measured.
+So the architecture is a *cost* win whose *correctness* is still unpriced. What
+prices it is a scenario set and a diagnosis of what actually goes wrong inside a
+run, not more topologies.
 
 ### Evaluation build order
 
@@ -92,8 +86,9 @@ plan that ignores one of them is wrong.
   *accounts* buys real capacity ([3.4](03-pool-model.md#34-priority-tiers)).
 - **Gemini's shape is the mirror image**: huge token budgets, very few requests
   per day. The pool only works because the two shapes complement each other.
-- **A one-line fix costs ~20 provider calls and ~227,000 input tokens** on the
-  deep-agents loop. Throughput is the binding constraint on long tasks — though
+- **A one-line fix cost ~20 provider calls and ~227,000 input tokens** on the
+  conversational loop this replaced. Throughput is the binding constraint on
+  long tasks — though
   on the one scenario measured so far, *correctness* failures were all
   `reasoning`, so throughput and capability are separate problems and only the
   first has been solved.
@@ -119,8 +114,7 @@ Live, unresolved, and worth deciding when the evidence arrives — not before.
 | How does a free-pool judge get validated? | It must agree with the Claude judge on a labelled set before its scores can be trusted. |
 | Where does shared cooldown state live, if it ever needs to be shared across processes? | A second concurrent consumer actually existing. |
 | Where do per-provider curated docs live once the provider list grows? | The provider list growing past what one page holds ([5. Providers](05-providers.md)). |
-| Should deepagents' summarization be tuned for the pool's real (much smaller) context windows? | It's a candidate change like any other — measure it. Proposed as S5 in [6.9](06-agent.md#69-proposed-strategies). |
-| Should the agent keep the `task`/subagent tool at all? It costs 31% of the per-step budget and is never configured. | An L2 multi-file scenario run with and without it. See the tension in [6.9.1](06-agent.md#691-the-one-real-tension). |
+| Should a role's blackboard slice grow when the pool has the room, or stay narrow on principle? | An L2 scenario run with `write` given the `notes` and `exec` sections. The recorded failure it targets is a writer acting on a brief that carried nothing ([6.5](06-agent.md#65-what-each-role-sees)). |
 
 ## 13.5 Settled decisions
 

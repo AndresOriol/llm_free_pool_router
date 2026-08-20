@@ -50,7 +50,7 @@ is attached explicitly by the router's failure handler
 Set `EVAL_TRACE_FILE` and the agent appends one JSON object per LLM/tool event:
 
 ```bash
-EVAL_TRACE_FILE=run.jsonl python -m agent.coding_agent workdir < brief.md
+EVAL_TRACE_FILE=run.jsonl python -m agent.harness workdir < brief.md
 ```
 
 Unset, nothing is attached and the agent behaves exactly as before. Zero cost
@@ -79,7 +79,7 @@ nest under. A caller driving `RouterChatModel` directly — no graph, so no
 ambient context — silently gets wrapper events only, and every provider-level
 metric reads zero. Such callers must pass their config via the model's
 `provider_config` field; it defaults to `None`, which is exactly the
-inherit-from-the-graph behaviour the deep-agents path depends on.
+inherit-from-the-graph behaviour a LangGraph caller depends on.
 
 `llm_end` carries `text`, the model's reply, clipped like everything else.
 It is the per-*attempt* view, so a malformed reply is attributable to the pool
@@ -124,7 +124,7 @@ The trace answers *what happened*. A session harness run also has to answer
 | `reports/session-*.md` | session | The rationale, built from the journal — the artefact a human reviews instead of the code |
 
 The split is a cost decision. The journal is the crash-resume substrate
-([6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness)),
+([6.12](06-agent.md#61-what-it-is)),
 re-read line by line every time a killed session resumes, so the bulk stays out
 of it. The transcript runs to a few kilobytes per turn and is only opened when a
 step needs explaining.

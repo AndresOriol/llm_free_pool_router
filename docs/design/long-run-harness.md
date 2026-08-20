@@ -65,7 +65,7 @@ roles that would have fit anywhere.
 
 **C3 — The measured bottleneck is judgement, and only execution can check it.**
 12 of 13 recorded failures were `reasoning`; zero `retrieval`, zero `tooling`
-([6.14.2](../06-agent.md#6142-every-failure-is-reasoning-and-that-reframes-the-whole-exercise)).
+([6.14.2](../06-agent.md#683-every-failure-is-reasoning)).
 Every variant found the file, edited it, ran the tests — and was conceptually
 wrong, usually the same way. So more attempts help only if something *tells them
 apart*, and that discriminator has to be stronger than what it judges. Inside a
@@ -79,7 +79,7 @@ R6 exist to answer this.
 
 **C5 — The current measuring instrument cannot see any of this.** One L0
 single-file bugfix, exhausted as a discriminator
-([6.14.1](../06-agent.md#6141-the-pass-column-is-noise-and-i-can-prove-it)).
+([6.14.1](../06-agent.md#682-the-pass-column-is-noise)).
 
 ## 3. What "helpful" requires (draft — v3)
 
@@ -143,7 +143,7 @@ convenience — and the honest response is the one that page already names:
 prerequisite the day sessions run unattended overnight, not a nicety.
 
 Two rules survive from what the variants already taught
-([6.14.5](../06-agent.md#6145-v7-orchestrated-hub-and-spoke)):
+([6.14.5](../06-agent.md#64-the-graph)):
 
 - **Verdicts come from exit codes, not from the Executor's summary of them.** A
   model reporting "everything passes" about a failing run would otherwise end a
@@ -273,7 +273,7 @@ properties matter more than any structure:
   becoming a list of plausible ideas.
 - **What the evidence cannot support gets said out loud.** The claims J2 wanted
   to make and couldn't. Without this, an automated analysis drifts into confident
-  storytelling — and the pass-rate story that [6.14.1](../06-agent.md#6141-the-pass-column-is-noise-and-i-can-prove-it)
+  storytelling — and the pass-rate story that [6.14.1](../06-agent.md#682-the-pass-column-is-noise)
   had to retract is the local proof that it happens here.
 
 The one mechanical part is the **verdict** — promote / draw / reject, computed
@@ -305,7 +305,7 @@ run is short and either works or doesn't. Three additions follow from §1:
   to an end-state pass/fail.
 - **Spec-gaming gap** — visible tests passing while hidden tests fail. This
   project has already produced a textbook instance
-  ([6.13.1](../06-agent.md#6131-the-one-failure-is-the-interesting-part)), and
+  ([6.13.1](../06-agent.md#684-closing-the-loop-is-not-the-same-as-being-right)), and
   under a prose-only review model it acquires a second face: a rationale that
   reads better than the diff deserves. J1's `faithful` verdict is the probe for
   it.
@@ -359,8 +359,8 @@ most and is the least defined.
 
 ## 8. The roles
 
-**Built** as `HARNESS_VARIANT=v8-session`
-([session.py](../../agent/harness/session.py), [roles.py](../../agent/harness/roles.py)).
+**Built**, and now the only architecture
+([graph.py](../../agent/harness/graph.py), [roles.py](../../agent/harness/roles.py)).
 
 | Role | Job | Tools | Tier (C2) |
 | --- | --- | --- | --- |
@@ -378,7 +378,7 @@ is refused**. Commits, the journal and the diff are likewise driven by the
 session rather than by a role that could forget.
 
 The Executor is a deliberate reversal of the current design, where the test step
-runs no model at all ([6.12.1](../06-agent.md#6121-the-roles-and-the-transitions)).
+runs no model at all ([6.12.1](../06-agent.md#64-the-graph)).
 That was right when the only check was a fixed test command. It is wrong once
 verification means *deciding what would convince you* — which is a judgement, and
 the one place a model earns its call.
@@ -411,7 +411,7 @@ and every field earns its place by naming a failure already seen:
 | `inputs` | Concrete pointers: paths, symbols, prior findings | Re-deriving what an earlier role already found |
 | `constraints` | What not to touch | Scope creep, which J1 scores as `in_scope` |
 | `done_when` | The check that ends this step — for the Executor, a command and its expected exit | "Done" meaning "I stopped" |
-| `report_back` | What the Orchestrator expects returned, and in what shape | A role that works and reports nothing — an observed bug ([6.14.4](../06-agent.md#6144-two-bugs-the-variants-exposed)) |
+| `report_back` | What the Orchestrator expects returned, and in what shape | A role that works and reports nothing — an observed bug ([6.14.4](../06-agent.md#66-one-role-call)) |
 
 And the return path, which matters as much as the outbound one:
 
@@ -426,14 +426,14 @@ And the return path, which matters as much as the outbound one:
 Orchestrator a single point of failure for every role's quality — curate badly
 and the role is blind. Today a blind role *guesses*, and there is a recorded run
 where `inspect` returned no finding and `edit` then applied nothing, burning a
-whole cycle ([6.13.1](../06-agent.md#6131-the-one-failure-is-the-interesting-part)).
+whole cycle ([6.13.1](../06-agent.md#684-closing-the-loop-is-not-the-same-as-being-right)).
 A role must be able to say "you didn't give me enough, and here is what is
 missing" — that turns a wasted cycle into a cheap, informative one.
 
 **Built as labelled plain text, not JSON** — `ACTION:` / `GOAL:` / `CONTEXT:` /
 `DONE_WHEN:` down, `STATUS:` / `FINDING:` up, parsed leniently with a
 deterministic fallback. JSON is checkable, but the `write_todos` lesson
-([6.5](../06-agent.md#65-the-librarys-prompts-and-what-they-cost-us)) is that
+([6.5](../06-agent.md#61-what-it-is)) is that
 small models fumble structure, and a session must not end because a model wrote
 a sentence where a word was asked for.
 
@@ -535,7 +535,7 @@ Three additions, none of which touches a decision the harness makes:
   given, the prompt it received, its raw reply, and its tool calls with their
   outputs. The orchestrator's own turns are included: its reply *is* the brief,
   so the decision and its inputs sit in one file. Written by `Transcript` in
-  [session.py](../../agent/harness/session.py); a resumed session continues the
+  [record.py](../../agent/harness/record.py); a resumed session continues the
   numbering rather than overwriting the turns that preceded the crash.
 - **`journal.jsonl` carries the whole brief** — `context` and `done_when`
   alongside `goal`, so the cheap artifact stays sufficient for counting and the

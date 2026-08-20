@@ -29,22 +29,22 @@ Selection and state. Never makes an API call itself.
 | File | The question it answers |
 | --- | --- |
 | [router_chat_model.py](../agent/router_chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
-| [coding_agent.py](../agent/coding_agent.py) | *How is the pool wired into an agent loop?* — builds the deepagents graph, the CLI entry point |
-| [restricted_backend.py](../agent/restricted_backend.py) | *What is the agent allowed to execute?* — `FilesystemBackend` + an `execute` allowlist of `python`/`pytest` |
+| [restricted_backend.py](../agent/restricted_backend.py) | *What is the agent allowed to execute?* — a filesystem jail plus an `execute` allowlist of `python`/`pytest`/`git` |
 | [trace.py](../agent/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
 
-`agent/harness/` is an alternative agent loop — one role per job over a shared
-blackboard — living unmerged on `harness/adhoc-router`. See
-[6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness).
+`agent/harness/` is the agent itself: a LangGraph state machine of narrow roles
+over a shared blackboard. See [6.4](06-agent.md#64-the-graph).
 
 | File | The question it answers |
 | --- | --- |
 | [blackboard.py](../agent/harness/blackboard.py) | *What does a role get to see?* — the shared state, and the per-section caps that **are** the context budget |
 | [roles.py](../agent/harness/roles.py) | *Who does what, with which tools?* — one Role per job, each declaring its tools and its blackboard sections |
 | [tools.py](../agent/harness/tools.py) | *What can a role actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
-| [loop.py](../agent/harness/loop.py) | *What happens when?* — the state machines: fixed pipeline, and hub-and-spoke orchestration |
-| [variants.py](../agent/harness/variants.py) | *Which architecture is this run?* — named variants selected by `HARNESS_VARIANT` |
-| [`__main__.py`](../agent/harness/__main__.py) | CLI, same contract as `agent.coding_agent` |
+| [graph.py](../agent/harness/graph.py) | *What happens when, and what is the model not allowed to decide?* — the LangGraph state machine and every deterministic veto |
+| [runner.py](../agent/harness/runner.py) | *What does one role call look like?* — build the prompt, a few tool rounds, throw the conversation away |
+| [envelope.py](../agent/harness/envelope.py) | *How does context get from the orchestrator to a role?* — the brief down, the report back |
+| [record.py](../agent/harness/record.py) | *What does a session leave behind?* — git, the journal, the per-turn transcript, the rationale |
+| [`__main__.py`](../agent/harness/__main__.py) | CLI: workdir as an argument, task on stdin |
 
 ## 2.4 `evals/` — the measurement harness
 
@@ -73,7 +73,7 @@ Code lives with the code it measures; scenario *data* does not (see
 | [README.md](../README.md) | Human entry point: quick start and links out. Also short on purpose. |
 | `docs/` | This wiki. The place to understand the system without reading source. |
 | [.claude/settings.json](../.claude/settings.json) | The `Stop` hook that keeps this wiki from drifting ([12.4](12-development-harness.md#124-how-the-docs-stay-current)) |
-| [.claude/reports/](../.claude/reports/) | Deep one-off investigations, kept verbatim. Currently: the deepagents internals report. |
+| [.claude/reports/](../.claude/reports/) | Deep one-off investigations, kept verbatim. |
 | `tests/` | `llm_router/` and `agent/` unit tests, plus `smoke_test.py` — a single real prompt through the pool to check keys and config are wired |
 
 ## 2.6 Related repos

@@ -45,7 +45,7 @@ The repo is three layers, each usable on its own, stacked:
 | Layer | What it owns | Read |
 | --- | --- | --- |
 | **The pool** (`llm_router/`) | Which free account/model should serve the next request, and which ones are currently benched. Selection only — it never makes a call. | [3](03-pool-model.md), [4](04-failover.md), [5](05-providers.md) |
-| **The agent** (`agent/`) | A [deepagents](https://github.com/langchain-ai/deepagents) coding loop whose single model is the pool. It reads and edits a jailed working directory and can run its own tests. | [6](06-agent.md), [7](07-observability.md) |
+| **The agent** (`agent/`) | A LangGraph state machine of narrow roles whose single model is the pool. It reads and edits a jailed working directory, runs its own tests, and commits to its own branch. | [6](06-agent.md), [7](07-observability.md) |
 | **The evaluation** (`evals/`) | Deciding whether a change to either of the above actually helped, by running scenarios and comparing distributions — not by argument. | [8](08-evaluation-method.md), [9](09-scenarios.md), [10](10-metrics.md), [11](11-eval-status.md) |
 
 The layering is one-directional: `evals` drives `agent`, `agent` uses
@@ -76,9 +76,10 @@ needs a reason, not an opportunity.
 
 Honest summary, as of the last update to [11. Evaluation status](11-eval-status.md):
 
-- The pool works and fails over in practice. A trivial one-line fix costs the
-  deep-agents loop ~20 provider calls and ~227,000 input tokens — failover
-  functions, but the pool gets walked hard.
+- The pool works and fails over in practice. A trivial one-line fix cost the
+  conversational loop this replaced ~20 provider calls and ~227,000 input
+  tokens — failover functions, but the pool gets walked hard, which is the whole
+  reason the agent is shaped the way it is.
 - The agent runs real tasks end to end, writes files, and runs its own tests.
 - The evaluation harness runs end to end and has run its first real comparison.
   It still has **one scenario**, at the easiest level, and that scenario is now
@@ -91,7 +92,7 @@ Honest summary, as of the last update to [11. Evaluation status](11-eval-status.
   pool; the shipping pool does not.
 - An alternative agent architecture lives unmerged on `harness/adhoc-router`:
   same task for 39× fewer tokens, but no demonstrated correctness gain
-  ([6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness)).
+  ([6.12](06-agent.md#61-what-it-is)).
 
 **Work in progress lives on a branch, not on `master`.** Check `git branch` before
 assuming what is present.
