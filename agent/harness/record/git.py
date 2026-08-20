@@ -20,6 +20,14 @@ logger = logging.getLogger("harness")
 # and the transcript are written into.
 STATE_DIR = ".harness"
 
+# Never the session's work, always noise in its diff. `.harness/` is the
+# session's own bookkeeping; the rest is what running the tests leaves behind,
+# and the harness now runs them itself before the first edit
+# (agent/harness/gate.py). Staged by `add -A`, they land in the commits a human
+# reviews, in the diff the reviewer and the documenter are shown, and in the
+# `files_touched` the eval metrics count.
+EXCLUDED = (f"/{STATE_DIR}/", ".pytest_cache/", "__pycache__/", "*.pyc")
+
 
 class Git:
     """The session's git, scoped to the workdir."""
@@ -78,7 +86,7 @@ class Git:
         return result.stdout.strip() if result.returncode == 0 else ""
 
     def _exclude_state(self) -> None:
-        """Keep `.harness/` out of the session's git.
+        """Keep the session's bookkeeping and test droppings out of its git.
 
         The journal and the per-turn transcript live inside the workdir, so
         `add -A` stages them: they land in the commits a human reviews, and in
@@ -87,6 +95,11 @@ class Git:
         characters -- and in a recorded run it was 100% `.harness/`, clipping
         out before it reached the one edited source file. The orchestrator read
         its own transcript where the code should have been.
+
+        `.pytest_cache/` and `__pycache__/` are the same failure with a
+        different author: the session runs the suite at least twice now, once
+        before the first edit and once at the gate, so without this every
+        session would report itself as having touched files it only ever read.
 
         `.git/info/exclude` rather than a `.gitignore`: the workdir is somebody
         else's project and the harness does not get to leave files in it.
@@ -97,10 +110,12 @@ class Git:
         path = self.workdir / git_dir / "info" / "exclude"
         path.parent.mkdir(parents=True, exist_ok=True)
         existing = path.read_text(encoding="utf-8") if path.is_file() else ""
-        if f"/{STATE_DIR}/" not in existing:
+        missing = [p for p in EXCLUDED if p not in existing]
+        if missing:
             with path.open("a", encoding="utf-8") as handle:
-                handle.write(f"\n# The session's own bookkeeping, not its work.\n"
-                             f"/{STATE_DIR}/\n")
+                handle.write("\n# Not the session's work: its bookkeeping, and "
+                             "what running the tests leaves behind.\n")
+                handle.write("\n".join(missing) + "\n")
 
     def _commit(self, message: str) -> bool:
         # Identity may be unset on a fresh machine; -c keeps it out of global

@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agent.harness.gate import Suite
 from agent.harness.log import Log
 from agent.harness.graph import MAX_STEPS, build
 from agent.harness.nodes import Stats
@@ -45,9 +46,23 @@ def run_session(model, toolset, task: str, workdir: Path, config=None,
     git.start(session_id)
     log.diff(git.diff())
 
+    # Before anything is edited: what already fails, so that what this session
+    # breaks can be told apart from what it was asked to fix
+    # (agent/harness/gate.py). A suite that cannot be run leaves the gate quiet
+    # rather than blocking, so this is safe on a project that has no tests.
+    gate = Suite(toolset["run_command"]) if "run_command" in toolset else None
+    if gate is not None:
+        gate.take_baseline()
+        described = gate.describe()
+        if described:
+            logger.info(described)
+            log.note("gate", described)
+        else:
+            logger.info("No usable test suite; the regression gate is off.")
+
     stats = Stats()
     graph = build(model, toolset, log, journal, transcript, git, config, stats,
-                  max_steps=max_steps)
+                  max_steps=max_steps, gate=gate)
 
     # The step budget is enforced in the orchestrate node. This is the backstop
     # for a loop the step counter cannot see -- two supersteps per step, plus

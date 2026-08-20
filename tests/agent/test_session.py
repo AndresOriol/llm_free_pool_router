@@ -14,7 +14,8 @@ from pathlib import Path
 
 from agent.harness.log import Log
 from agent.harness.protocol import Brief, parse_brief, parse_report
-from agent.harness.graph import mermaid
+from agent.harness.gate import Suite
+from agent.harness.graph import _veto, mermaid
 from agent.harness.session import run_session
 from agent.harness.record import (Git, Journal, Step, Transcript,
                                   append_to_notes, read_notes, replay,
@@ -485,6 +486,103 @@ def test_a_session_that_gets_stuck_still_reports():
     rationale = next((root / ".harness" / "reports").glob("session-*.md")).read_text()
     check("the open question is written down", "no file was named" in rationale)
     check("the notes were still updated", (root / "NOTES.md").is_file())
+
+
+# --- the regression gate ---------------------------------------------------
+
+
+class FakeRun:
+    """Stands in for the agent's `run_command` tool. Returns scripted output."""
+
+    def __init__(self, *outputs):
+        self.outputs = list(outputs)
+        self.calls = 0
+
+    def invoke(self, args):
+        self.calls += 1
+        return self.outputs[min(self.calls - 1, len(self.outputs) - 1)]
+
+
+def _pytest_output(exit_code, *failed):
+    lines = [f"exit={exit_code}"]
+    lines += [f"FAILED {name} - AssertionError" for name in failed]
+    lines.append(f"{len(failed)} failed, 3 passed in 0.04s")
+    return "\n".join(lines)
+
+
+def test_gate_reads_which_tests_fail():
+    run = FakeRun(_pytest_output(1, "tests/test_a.py::test_one",
+                                 "tests/test_b.py::test_two"))
+    gate = Suite(run)
+    check("both failures found",
+          gate.snapshot() == frozenset({"tests/test_a.py::test_one",
+                                        "tests/test_b.py::test_two"}))
+
+
+def test_a_test_that_was_already_failing_is_not_a_regression():
+    """The scenario that opens red is the normal case. Demanding green would
+    refuse the very fix the session was asked to make."""
+    run = FakeRun(_pytest_output(1, "tests/test_a.py::test_broken"),
+                  _pytest_output(1, "tests/test_a.py::test_broken"))
+    gate = Suite(run)
+    gate.take_baseline()
+    check("still-failing is not new", gate.regressions() == [])
+
+
+def test_a_newly_broken_test_is_a_regression():
+    run = FakeRun(_pytest_output(1, "tests/test_a.py::test_broken"),
+                  _pytest_output(1, "tests/test_a.py::test_broken",
+                                 "tests/test_b.py::test_was_fine"))
+    gate = Suite(run)
+    gate.take_baseline()
+    check("the new failure is named",
+          gate.regressions() == ["tests/test_b.py::test_was_fine"])
+
+
+def test_a_suite_that_cannot_run_leaves_the_gate_quiet():
+    """A gate that cannot see the tests must not have an opinion about them."""
+    for output in ("exit=4\nERROR: file or directory not found: tests",
+                   "exit=5\nno tests ran in 0.01s",
+                   "exit=2\nINTERNALERROR"):
+        gate = Suite(FakeRun(output))
+        check(f"unusable suite is not a baseline ({output[:6]})",
+              gate.take_baseline() is None)
+        check("and blocks nothing", gate.regressions() == [])
+
+
+def test_done_is_refused_when_the_session_broke_something():
+    """The refusal the harness could not make before: it had no idea what used
+    to work. Observed on scenario/ledger/count-and-share, where the notes ask
+    for a change the project's own tests forbid."""
+    log = Log(task="add a count to the summary")
+    log.ran("execute", "1 failed", False)
+    log.add("exec", "execute", "(SUCCEEDED)", ok=True)
+
+    run = FakeRun(_pytest_output(0),
+                  _pytest_output(1, "tests/test_ledger.py::test_entries_untouched"))
+    gate = Suite(run)
+    gate.take_baseline()
+
+    brief, action = _veto(Brief(action="DONE"), {"reviewed": True}, log, gate)
+    check("DONE is refused", action == "write")
+    check("the broken test is named in the brief",
+          "test_entries_untouched" in brief.context)
+    check("and the writer is told not to edit the test away",
+          "without" in brief.done_when and "editing the tests" in brief.done_when)
+
+    # Same session, nothing broken: the gate gets out of the way.
+    clean = Suite(FakeRun(_pytest_output(0), _pytest_output(0)))
+    clean.take_baseline()
+    _, ok_action = _veto(Brief(action="DONE"), {"reviewed": True}, log, clean)
+    check("a clean run still finishes", ok_action == "done")
+
+
+def test_the_writer_sees_the_evidence_against_its_own_work():
+    """It applies the changes, so it is the node that has to react to them
+    failing. It used to read only the task and a file list."""
+    reads = WORKERS["write"].reads
+    for kind in ("exec", "notes", "diff", "edits"):
+        check(f"write can see {kind}", kind in reads)
 
 
 if __name__ == "__main__":

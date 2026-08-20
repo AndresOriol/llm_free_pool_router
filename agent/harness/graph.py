@@ -22,6 +22,7 @@ there is one place to read them:
 | --- | --- |
 | `DONE` with nothing executed becomes `EXECUTE` | An unverified "done" is the `stopping` failure wearing a confident face |
 | `DONE` with nothing reviewed becomes `REVIEW` | Nobody else is going to look |
+| `DONE` that broke a passing test becomes `WRITE` | The one refusal the session could not make before: it had no idea what used to work (agent/harness/gate.py) |
 | A third consecutive `EXPLORE` becomes `WRITE` | Observed: nine of twelve steps were `explore`, re-reading the same four files. Reading is the move an orchestrator can always justify |
 | An unparseable action becomes `EXPLORE` | The read-only worker is the safe default, never one that writes |
 | An applied edit goes straight to `EXECUTE` | "Check what you just changed" has one right answer |
@@ -49,8 +50,11 @@ from agent.harness.record import Git, Journal, Step, Transcript
 
 # Steps cost roughly half a minute each against the real pool, so this is set by
 # the scenario timeout rather than by how much work a session could usefully do.
-# Raise it with the timeout, not on its own.
-MAX_STEPS = 14
+# Raise it with the timeout, not on its own. Raised from 14 with the regression
+# gate, which can send a session that thought it had finished back to WRITE:
+# recorded sessions run ~150s against a 1800s scenario timeout, so the budget
+# was nowhere near the binding constraint.
+MAX_STEPS = 20
 # Consecutive explores tolerated once the files are known.
 MAX_CONSECUTIVE_EXPLORE = 2
 
@@ -71,7 +75,7 @@ class SessionState(TypedDict, total=False):
 # The vetoes. Every one of them is a decision the orchestrator does not get.
 # ---------------------------------------------------------------------------
 
-def _veto(brief: Brief, state: SessionState, log: Log) -> tuple:
+def _veto(brief: Brief, state: SessionState, log: Log, gate=None) -> tuple:
     """(brief, action) after the deterministic push-backs. See the module table."""
     action = brief.action
 
@@ -91,6 +95,27 @@ def _veto(brief: Brief, state: SessionState, log: Log) -> tuple:
                           done_when="You have judged the change correct or named "
                                     "what is wrong."),
                     "review")
+        # Last, because it is the only refusal that costs a test run. By here
+        # the session believes it is finished, so paying for the suite once is
+        # cheap next to shipping a regression nobody looked for.
+        broken = gate.regressions() if gate is not None else []
+        if broken:
+            named = ", ".join(broken)
+            log.step("orchestrate", f"DONE refused: broke {len(broken)} passing test(s)")
+            log.note("gate", f"These tests passed before this session and fail now: "
+                             f"{named}. They are a regression introduced by this "
+                             f"session's own changes, not part of the task.")
+            return (Brief(action="WRITE",
+                          goal="Repair the tests this session broke.",
+                          context=f"These tests passed before any change was made "
+                                  f"and fail now: {named}. Something applied during "
+                                  f"this session broke them. Keep what the task "
+                                  f"asked for, and stop breaking these. If the task "
+                                  f"as written cannot be done without breaking them, "
+                                  f"do the part that can be and say so.",
+                          done_when="The tests named above pass again, without "
+                                    "editing the tests themselves."),
+                    "write")
         return brief, "done"
 
     if action == "GIVEUP":
@@ -121,7 +146,7 @@ def _veto(brief: Brief, state: SessionState, log: Log) -> tuple:
 
 def build(model, toolset, log: Log, journal: Journal,
           transcript: Transcript, git: Git, config: dict, stats: Stats,
-          max_steps: int = MAX_STEPS):
+          max_steps: int = MAX_STEPS, gate=None):
     """Compile the session graph. Nodes close over the session's collaborators."""
 
     def orchestrate(state: SessionState) -> dict:
@@ -132,7 +157,7 @@ def build(model, toolset, log: Log, journal: Journal,
             return {"action": "exhausted", "outcome": "exhausted"}
         decision = run_node(model, ORCHESTRATOR, toolset, log, config, stats)
         transcript.write("orchestrate", decision)
-        brief, action = _veto(parse_brief(decision.text), state, log)
+        brief, action = _veto(parse_brief(decision.text), state, log, gate)
         if action in {"done", "giveup"}:
             return {"action": action, "brief": brief, "outcome": action}
         return {"action": action, "brief": brief}
