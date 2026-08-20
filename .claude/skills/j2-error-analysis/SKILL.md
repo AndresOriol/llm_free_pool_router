@@ -24,13 +24,26 @@ failures-first and every section is labelled with its `run_id`.
 
 Open individual files under `evals/results/runs/<run_id>/` when the bundle's
 clip hides something you need — `trace.jsonl` for what the model actually did,
-`journal.jsonl` and `rationale.md` for a session's own account of itself.
+`journal.jsonl` and `rationale.md` for a session's own account of itself, and
+`steps/NN-<role>.md` for what a role was handed and what it replied.
+
+**Read `evals/results/reviews/<run_id>.md` first, where one exists.** Those are
+per-run post-mortems written by the `trace-reviewer` subagent: the trajectory,
+the turn a run could not recover from, and what context that turn had. They are
+the open-coding notes for the runs they cover, done properly and against the
+full evidence rather than the bundle's clip.
+
+A review is a claim, not a fact. Where you disagree with one, say so and cite
+what it missed — and if a run in this batch has no review, spawn
+`trace-reviewer` for it rather than substituting the bundle's clip.
 
 ## 2. Open-code every failure
 
 One note per failed run, in your own words, before any categorising. Say what
 went wrong *specifically* — not "reasoning error" but "changed the header string
-instead of making the lookup case-insensitive".
+instead of making the lookup case-insensitive". Where a review exists, its
+"Where it turned" section is that note; your job is to check it against the
+evidence and carry it forward, not to redo it.
 
 Read **every** failure, not a sample. Industry practice samples ~100 traces out
 of thousands; here runs are scarce and expensive, so the ratio inverts and the
