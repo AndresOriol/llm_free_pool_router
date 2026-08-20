@@ -26,24 +26,28 @@ Selection and state. Never makes an API call itself.
 
 ## 2.3 `agent/` — the coding agent
 
+`agent/runtime/` is the substrate anything agentic runs on. Nothing in it knows
+what a session is.
+
 | File | The question it answers |
 | --- | --- |
-| [router_chat_model.py](../agent/router_chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
-| [restricted_backend.py](../agent/restricted_backend.py) | *What is the agent allowed to execute?* — a filesystem jail plus an `execute` allowlist of `python`/`pytest`/`git` |
-| [trace.py](../agent/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
+| [chat_model.py](../agent/runtime/chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
+| [backend.py](../agent/runtime/backend.py) | *What is the agent allowed to execute?* — a filesystem jail plus an `execute` allowlist of `python`/`pytest`/`git` |
+| [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
+| [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
 
-`agent/harness/` is the agent itself: a LangGraph state machine of narrow roles
+`agent/harness/` is the agent itself: a LangGraph state machine of narrow nodes
 over a shared blackboard. See [6.4](06-agent.md#64-the-graph).
 
 | File | The question it answers |
 | --- | --- |
-| [blackboard.py](../agent/harness/blackboard.py) | *What does a role get to see?* — the shared state, and the per-section caps that **are** the context budget |
-| [roles.py](../agent/harness/roles.py) | *Who does what, with which tools?* — one Role per job, each declaring its tools and its blackboard sections |
-| [tools.py](../agent/harness/tools.py) | *What can a role actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
-| [graph.py](../agent/harness/graph.py) | *What happens when, and what is the model not allowed to decide?* — the LangGraph state machine and every deterministic veto |
-| [runner.py](../agent/harness/runner.py) | *What does one role call look like?* — build the prompt, a few tool rounds, throw the conversation away |
-| [envelope.py](../agent/harness/envelope.py) | *How does context get from the orchestrator to a role?* — the brief down, the report back |
-| [record.py](../agent/harness/record.py) | *What does a session leave behind?* — git, the journal, the per-turn transcript, the rationale |
+| [nodes/](../agent/harness/nodes/) | *Who does what, with which tools, and how is it judged?* — one file per node, each declaring its prompt, its tools, its blackboard sections, and how its result is read |
+| [nodes/base.py](../agent/harness/nodes/base.py) | *What is a node, and what does one call look like?* — the `Node` fields, then build the prompt, a few tool rounds, throw the conversation away |
+| [graph.py](../agent/harness/graph.py) | *What happens when, and what is the model not allowed to decide?* — the edges between nodes and every deterministic veto |
+| [blackboard.py](../agent/harness/blackboard.py) | *What does a node get to see?* — the shared state, and the per-section caps that **are** the context budget |
+| [protocol.py](../agent/harness/protocol.py) | *How does context get from the orchestrator to a node?* — the brief down, the report back |
+| [record/](../agent/harness/record/) | *What does a session leave behind?* — git, the journal, the per-turn transcript, the rationale, the notes file |
+| [session.py](../agent/harness/session.py) | *What is one run, start to finish?* — wiring, the step budget, resume, and the account it writes |
 | [`__main__.py`](../agent/harness/__main__.py) | CLI: workdir as an argument, task on stdin |
 
 ## 2.4 `evals/` — the measurement harness

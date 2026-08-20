@@ -62,7 +62,7 @@ def _model_name(serialized, metadata, invocation_params) -> str:
 
 def _reply(response) -> Optional[str]:
     """The model's text, clipped. Separates "the model wrote nonsense" from
-    "the parser mangled it" -- indistinguishable once envelope.py has run, and
+    "the parser mangled it" -- indistinguishable once protocol.py has run, and
     one recorded failure class (`<think>` blocks landing in findings) is only
     visible here, at the provider that emitted them.
     """

@@ -1,0 +1,79 @@
+"""One session, start to finish: wiring, budget, resume, and the account it leaves.
+
+The graph decides what happens (agent/harness/graph.py) and the record package
+holds what survives it (agent/harness/record/). This is the file that puts the
+two together for one run over one workdir -- and it is where the guarantee that
+a session never ends silently is actually implemented.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+
+from agent.harness.blackboard import Blackboard
+from agent.harness.graph import MAX_STEPS, build
+from agent.harness.nodes import Stats
+from agent.harness.record import (STATE_DIR, Git, Journal, Transcript,
+                                  append_to_notes, read_notes, replay,
+                                  summarize, write_rationale)
+
+logger = logging.getLogger("harness")
+
+__all__ = ["MAX_STEPS", "run_session"]
+
+
+def run_session(model, backend, toolset, task: str, workdir: Path, config=None,
+                max_steps: int = MAX_STEPS, session_id: str = "") -> tuple:
+    """Run one session. Returns (blackboard, stats, outcome, steps)."""
+    config = dict(config or {})
+    workdir = Path(workdir)
+    session_id = session_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    notes = read_notes(workdir)
+    full_task = task if not notes else f"{task}\n\n# Project notes\n{notes}"
+    bb = Blackboard(task=full_task)
+
+    journal = Journal(workdir / STATE_DIR / "journal.jsonl")
+    transcript = Transcript(workdir / STATE_DIR / "steps")
+    resumed = replay(journal, bb)
+    if resumed:
+        logger.info(f"Resuming: {resumed} step(s) replayed from the journal.")
+
+    git = Git(workdir)
+    git.start(session_id)
+    bb.set_diff(git.diff())
+
+    stats = Stats()
+    graph = build(model, toolset, bb, journal, transcript, git, config, stats,
+                  max_steps=max_steps)
+
+    # The step budget is enforced in the orchestrate node. This is the backstop
+    # for a loop the step counter cannot see -- two supersteps per step, plus
+    # headroom for the forced write -> execute edge, which adds a worker without
+    # a decision in between.
+    budget = dict(config)
+    budget["recursion_limit"] = max(2, max_steps - resumed) * 2 + 8
+
+    outcome = "exhausted"
+    try:
+        final = graph.invoke({"step": resumed, "recent": [], "reviewed": False}, budget)
+        outcome = final.get("outcome", "exhausted")
+    except Exception as exc:  # noqa: BLE001 - a budget end is not a crash
+        if type(exc).__name__ != "GraphRecursionError":
+            raise
+        # R3: a session that runs out of road says so in writing rather than
+        # dying. Everything it learned is on disk already, which is why the
+        # journal and the blackboard are not graph state.
+        logger.info("Step budget reached; writing the rationale and stopping.")
+
+    steps = journal.read()
+    rationale_path = workdir / STATE_DIR / "reports" / f"session-{session_id}.md"
+    bb.set_diff(git.diff())
+    write_rationale(rationale_path, session_id, full_task, steps, outcome,
+                    bb.diff, git.branch)
+    append_to_notes(workdir, session_id, outcome, rationale_path,
+                    summarize(steps, outcome))
+    git.commit(f"session {session_id}: {outcome}")
+    return bb, stats, outcome, steps

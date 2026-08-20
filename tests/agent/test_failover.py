@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from agent.router_chat_model import RouterChatModel
+from agent.runtime.chat_model import RouterChatModel
 from langchain_core.messages import AIMessage
 from llm_router.base_provider import LLMProvider
 from llm_router.router import AutonomousLLMRouter

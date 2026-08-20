@@ -45,7 +45,7 @@ agent to write at `/`, not at a host path.
 
 **Execution allowlist.** Only `python` and `pytest` (plus `git`, below), named
 bare with no path, `shell=False`, secrets stripped from the child environment,
-and a 300s timeout ([restricted_backend.py](../agent/restricted_backend.py)).
+and a 300s timeout ([backend.py](../agent/runtime/backend.py)).
 Shell syntax is *refused* rather than passed through as a literal argument —
 accepting it silently once cost a run 900 seconds in heredocs that hung until
 the timeout.
@@ -132,7 +132,7 @@ reasoned about in.
 
 This is the mechanism, and the one table worth memorising. A role is rendered
 exactly the blackboard sections it declares
-([roles.py](../agent/harness/roles.py), [blackboard.py](../agent/harness/blackboard.py)),
+([nodes/](../agent/harness/nodes/), [blackboard.py](../agent/harness/blackboard.py)),
 each capped in characters:
 
 | role | task | files | notes | edits | exec | diff | plan | log | tier |
@@ -165,18 +165,18 @@ breadth is what makes it stupid.
 
 ## 6.6 One role call
 
-[`run_role`](../agent/harness/runner.py) is the inside of every node, and it is
-three lines of idea:
+[`run_node`](../agent/harness/nodes/base.py) is the inside of every node, and it
+is three lines of idea:
 
 ```python
-messages = [SystemMessage(role.prompt),
-            HumanMessage(bb.render(role.sections) + "\n\n" + ask)]
-# ... up to role.max_rounds of tool calls ...
-return RoleResult(text=..., outputs=..., calls=..., prompt=...)
+messages = [SystemMessage(node.prompt),
+            HumanMessage(bb.render(node.sections) + "\n\n" + ask)]
+# ... up to node.max_rounds of tool calls ...
+return NodeResult(text=..., outputs=..., calls=..., prompt=...)
 ```
 
 `ask` is the orchestrator's brief. Then **the message list is discarded.** Only
-the `RoleResult` escapes, and only what the graph folds into the blackboard
+the `NodeResult` escapes, and only what the graph folds into the blackboard
 survives into the next step. No role ever sees another role's conversation.
 
 That is what bounds a prompt by the role's declaration rather than by how long

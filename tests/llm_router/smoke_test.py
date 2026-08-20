@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from llm_router import load_providers_from_config, AutonomousLLMRouter
-from agent.router_chat_model import RouterChatModel
+from agent.runtime.chat_model import RouterChatModel
 
 logging.basicConfig(
     level=logging.INFO,

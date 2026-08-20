@@ -22,7 +22,7 @@ raise "all providers exhausted"
 ```
 
 Selection lives in [router.py](../llm_router/router.py); the loop lives in
-[router_chat_model.py](../agent/router_chat_model.py). The split is deliberate:
+[chat_model.py](../agent/runtime/chat_model.py). The split is deliberate:
 the router only *chooses*, and has no `.generate()` of its own — giving it one
 would force `llm_router` to import `agent` and invert the layering.
 

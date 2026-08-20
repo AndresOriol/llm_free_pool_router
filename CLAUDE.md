@@ -39,10 +39,15 @@ task, replicated. It is deleted, not disabled — `git log` is the record.
   filters to the ones available and large enough for the request, and returns
   the highest-priority one. Selection only; it never makes a call.
   Configured via [llm_router/config.yaml](llm_router/config.yaml).
-- [agent](agent/) — `RouterChatModel` (the failover loop, as a LangChain
-  `BaseChatModel`) plus the harness that runs on it: a LangGraph state machine
-  of narrow roles, each seeing one slice of a shared blackboard, jailed to a
-  workdir with `python`/`pytest`/`git` execution.
+- [agent/runtime](agent/runtime/) — the substrate: `RouterChatModel` (the
+  failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
+  `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
+  nothing about sessions.
+- [agent/harness](agent/harness/) — the agent itself: a LangGraph state machine
+  of narrow nodes, each seeing one slice of a shared blackboard. One file per
+  node in [nodes/](agent/harness/nodes/); the edges and the vetoes in
+  [graph.py](agent/harness/graph.py); what a session leaves behind in
+  [record/](agent/harness/record/).
 - [evals](evals/) — the harness that decides whether a change to either of the
   above helped. Scenarios live in the separate `agent_evals` repo.
 - Providers today: Groq, Gemini. Expect more free-tier providers (Cerebras,

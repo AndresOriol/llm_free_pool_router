@@ -360,7 +360,7 @@ most and is the least defined.
 ## 8. The roles
 
 **Built**, and now the only architecture
-([graph.py](../../agent/harness/graph.py), [roles.py](../../agent/harness/roles.py)).
+([graph.py](../../agent/harness/graph.py), [nodes/](../../agent/harness/nodes/)).
 
 | Role | Job | Tools | Tier (C2) |
 | --- | --- | --- | --- |
@@ -515,7 +515,7 @@ Three gaps, all in the same direction:
 | --- | --- |
 | The brief's `CONTEXT` and `DONE_WHEN` — `Step` kept only `goal` | The orchestrator pushing context down is the entire mechanism of §8.1. It was the one variable not being logged |
 | The prompt a role actually received | Which blackboard sections rendered, and what got clipped out of them. Whether a role was blind is not inferable from its reply |
-| The model's reply before `envelope.py` parsed it | A model that wrote nonsense and a parser that mangled sense are indistinguishable afterwards. `think-leakage` was found by luck, from text that happened to survive into a finding |
+| The model's reply before `protocol.py` parsed it | A model that wrote nonsense and a parser that mangled sense are indistinguishable afterwards. `think-leakage` was found by luck, from text that happened to survive into a finding |
 
 The consequence is precise: on this evidence a review can say *"step 7 invented
 `alerts/formatter.py` instead of editing `alerts/message.py`"* — which J2 already
@@ -535,7 +535,7 @@ Three additions, none of which touches a decision the harness makes:
   given, the prompt it received, its raw reply, and its tool calls with their
   outputs. The orchestrator's own turns are included: its reply *is* the brief,
   so the decision and its inputs sit in one file. Written by `Transcript` in
-  [record.py](../../agent/harness/record.py); a resumed session continues the
+  [record/journal.py](../../agent/harness/record/journal.py); a resumed session continues the
   numbering rather than overwriting the turns that preceded the crash.
 - **`journal.jsonl` carries the whole brief** — `context` and `done_when`
   alongside `goal`, so the cheap artifact stays sufficient for counting and the

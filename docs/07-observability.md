@@ -63,7 +63,7 @@ Event shape:
 ```
 
 Two producers write to one file: a LangChain callback handler
-([trace.py](../agent/trace.py)) for LLM start/end and tool start/end, and the
+([trace.py](../agent/runtime/trace.py)) for LLM start/end and tool start/end, and the
 router's own logging for routing and failover lines as structured records
 rather than prose.
 

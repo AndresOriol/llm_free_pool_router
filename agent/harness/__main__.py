@@ -10,11 +10,11 @@ import sys
 from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
-from agent.harness.graph import MAX_STEPS, run_session
-from agent.harness.tools import make_tools
-from agent.restricted_backend import RestrictedShellBackend
-from agent.router_chat_model import RouterChatModel
-from agent.trace import tracer_from_env
+from agent.harness.session import MAX_STEPS, run_session
+from agent.runtime.backend import RestrictedShellBackend
+from agent.runtime.chat_model import RouterChatModel
+from agent.runtime.tools import make_tools
+from agent.runtime.trace import tracer_from_env
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logging.getLogger("LLMRouter").setLevel(logging.INFO)
@@ -40,7 +40,7 @@ def build(workdir: Path, config=None):
     # only the wrapper and report zero provider calls.
     model = RouterChatModel(router=router, max_retries=len(providers) + 3,
                             provider_config=config or None)
-    # Off by default. The Executor role is more capable with a real shell, but
+    # Off by default. The Executor node is more capable with a real shell, but
     # this process is not contained, so widening the blast radius is the
     # operator's decision to make rather than a default to inherit
     # (docs/design/long-run-harness.md#42-bash-for-the-executor).

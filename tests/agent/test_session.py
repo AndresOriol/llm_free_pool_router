@@ -13,15 +13,15 @@ import tempfile
 from pathlib import Path
 
 from agent.harness.blackboard import Blackboard
-from agent.harness.envelope import Brief, parse_brief, parse_report
-from agent.harness.graph import build_report, mermaid, run_session
+from agent.harness.protocol import Brief, parse_brief, parse_report
+from agent.harness.graph import mermaid
+from agent.harness.session import run_session
 from agent.harness.record import (Git, Journal, Step, Transcript,
                                   append_to_notes, read_notes, replay,
                                   write_rationale)
-from agent.harness.roles import ORCHESTRATE, ROLES
-from agent.harness.runner import RoleResult, Stats, run_role
-from agent.harness.tools import make_tools
-from agent.restricted_backend import RestrictedShellBackend
+from agent.harness.nodes import NodeResult, ORCHESTRATOR, Stats, WORKERS, run_node
+from agent.runtime.tools import make_tools
+from agent.runtime.backend import RestrictedShellBackend
 from tests.agent.test_harness import FIXED, ScriptedModel, ai, check, seed_project
 
 
@@ -72,8 +72,8 @@ def test_labels_parse_when_they_share_a_line():
 def test_the_writer_can_read():
     """`replace_in_file` needs an exact `old_text`. A writer that cannot look
     reported BLOCKED with 'no tool for reading files is provided'."""
-    check("write can read", "read_lines" in ROLES["write"].tools)
-    check("but still cannot search", "search_code" not in ROLES["write"].tools)
+    check("write can read", "read_lines" in WORKERS["write"].tools)
+    check("but still cannot search", "search_code" not in WORKERS["write"].tools)
 
 
 def test_report_never_invents_success():
@@ -94,45 +94,45 @@ def test_report_never_invents_success():
 def test_execute_status_comes_from_the_exit_code():
     """The load-bearing rule: a model claiming success about a failing run must
     not be able to end a session, least of all under prose-only review."""
-    result = RoleResult(
+    result = NodeResult(
         text="Everything passes, we are done!",
         outputs=[("run_command", "exit=1\nE   assert 1 == 3")],
         calls=[{"name": "run_command", "args": {"command": "python -m pytest"},
                 "output": "exit=1\nE   assert 1 == 3"}])
-    report = build_report("execute", result)
+    report = WORKERS["execute"].report(result)
     check("failure is not DONE", report.status != "DONE")
     check("the command is on the record",
           report.evidence == [["python -m pytest", 1]])
 
-    ok = RoleResult(text="", outputs=[("run_command", "exit=0\n2 passed")],
+    ok = NodeResult(text="", outputs=[("run_command", "exit=0\n2 passed")],
                     calls=[{"name": "run_command", "args": {"command": "python -m pytest"},
                             "output": "exit=0\n2 passed"}])
-    check("success is DONE", build_report("execute", ok).status == "DONE")
+    check("success is DONE", WORKERS["execute"].report(ok).status == "DONE")
 
 
 def test_writer_is_judged_by_what_it_applied():
-    described = RoleResult(text="I would change line 4 to lowercase the key.",
+    described = NodeResult(text="I would change line 4 to lowercase the key.",
                            outputs=[], calls=[])
     check("describing an edit is not making one",
-          build_report("write", described).status == "PARTIAL")
+          WORKERS["write"].report(described).status == "PARTIAL")
 
-    applied = RoleResult(text="", outputs=[("replace_in_file", "ok: replaced 1 in /r.py")],
+    applied = NodeResult(text="", outputs=[("replace_in_file", "ok: replaced 1 in /r.py")],
                          calls=[])
-    check("an applied edit is DONE", build_report("write", applied).status == "DONE")
+    check("an applied edit is DONE", WORKERS["write"].report(applied).status == "DONE")
 
 
 def test_a_role_can_refuse_to_guess():
     """The return path that turns a wasted cycle into an informative one."""
-    result = RoleResult(text="STATUS: INSUFFICIENT_CONTEXT\nFINDING: no file named",
+    result = NodeResult(text="STATUS: INSUFFICIENT_CONTEXT\nFINDING: no file named",
                         outputs=[], calls=[])
-    report = build_report("write", result)
+    report = WORKERS["write"].report(result)
     check("status survives from an acting role", report.needs_context)
     check("what is missing is carried up", "no file named" in report.finding)
 
     # ...but it must never overwrite a demonstrated success.
-    did_both = RoleResult(text="INSUFFICIENT_CONTEXT",
+    did_both = NodeResult(text="INSUFFICIENT_CONTEXT",
                           outputs=[("replace_in_file", "ok: replaced 1 in /r.py")], calls=[])
-    check("evidence of success wins", build_report("write", did_both).status == "DONE")
+    check("evidence of success wins", WORKERS["write"].report(did_both).status == "DONE")
 
 
 # --- git -------------------------------------------------------------------
@@ -233,11 +233,11 @@ def test_rationale_is_built_from_the_journal():
 
 def test_judgement_roles_declare_a_context_floor():
     check("the orchestrator cannot decide on a narrow view",
-          ORCHESTRATE.min_context > 12_000)
+          ORCHESTRATOR.min_context > 12_000)
     for name in ("document", "review"):
-        check(f"{name} needs breadth", ROLES[name].min_context > 12_000)
+        check(f"{name} needs breadth", WORKERS[name].min_context > 12_000)
     for name in ("explore", "write", "execute"):
-        check(f"{name} runs anywhere", ROLES[name].min_context == 0)
+        check(f"{name} runs anywhere", WORKERS[name].min_context == 0)
 
 
 def test_narrow_roles_still_fit_the_smallest_member():
@@ -259,7 +259,7 @@ def test_narrow_roles_still_fit_the_smallest_member():
     worst = 0
     for name in ("explore", "write", "execute"):
         stats = Stats()
-        run_role(ScriptedModel([ai("ok")]), ROLES[name], toolset, bb, {},
+        run_node(ScriptedModel([ai("ok")]), WORKERS[name], toolset, bb, {},
                  stats, brief=brief)
         worst = max(worst, stats.prompt_tokens)
     check(f"worst narrow-role prompt {worst} tok must fit a 6k-TPM model",
@@ -277,11 +277,11 @@ def test_the_graph_is_the_shape_we_document():
     that nothing checked.
     """
     picture = mermaid()
-    for role in ROLES:
+    for role in WORKERS:
         check(f"{role} is a node", f"{role}(" in picture)
 
     # Every worker returns to the hub, so the orchestrator decides every step.
-    for role in ROLES:
+    for role in WORKERS:
         if role != "write":
             check(f"{role} returns to the orchestrator",
                   f"{role} --> orchestrate;" in picture)
@@ -461,9 +461,9 @@ def test_a_resumed_session_does_not_overwrite_its_transcript():
     root = seed_project()
     directory = root / ".harness" / "steps"
     first = Transcript(directory)
-    first.write("explore", RoleResult(text="a", outputs=[], prompt="p"))
+    first.write("explore", NodeResult(text="a", outputs=[], prompt="p"))
     resumed = Transcript(directory)
-    resumed.write("write", RoleResult(text="b", outputs=[], prompt="q"))
+    resumed.write("write", NodeResult(text="b", outputs=[], prompt="q"))
     check("both turns survive", len(list(directory.glob("*.md"))) == 2)
     check("and the numbering continued", (directory / "02-write.md").is_file())
 

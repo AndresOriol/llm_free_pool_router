@@ -1,3 +1,3 @@
-from .router_chat_model import RouterChatModel
+from agent.runtime.chat_model import RouterChatModel
 
 __all__ = ["RouterChatModel"]
