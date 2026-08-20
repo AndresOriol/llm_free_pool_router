@@ -11,8 +11,10 @@ This backend is the middle ground chosen for the eval loop: it satisfies
 constrained so the blast radius is small:
 
 - Commands run with `shell=False`, so `&&`, `|`, `;`, `>`, `$(...)` and other
-  shell metacharacters are passed as literal arguments, not interpreted --
-  there is no command chaining or redirection to escape through.
+  shell metacharacters are never interpreted -- there is no command chaining or
+  redirection to escape through. They are also *refused* rather than passed
+  through as literal arguments: silently accepting shell syntax that does
+  nothing cost one run 900 seconds in heredocs that hung until the timeout.
 - Only an allowlisted program may be launched (`python`/`pytest` by default),
   named bare -- no paths, so `./evil.sh` or `/usr/bin/rm` are rejected.
 - The working directory is pinned to `root_dir` and known secret env vars are
@@ -48,6 +50,10 @@ from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.backends.protocol import ExecuteResponse, SandboxBackendProtocol
 
 DEFAULT_ALLOWED = ("python", "python3", "py", "pytest")
+
+# Tokens that only mean anything to a shell. With shell=False they arrive as
+# literal arguments, which is safe and useless -- see _refusal.
+_SHELL_OPERATORS = frozenset({"|", "||", "&&", ";", "&", ">", ">>", "<", "2>"})
 DEFAULT_TIMEOUT = 300
 MAX_OUTPUT_BYTES = 100_000
 # Env vars whose name contains any of these are withheld from the child process.
@@ -102,6 +108,27 @@ class RestrictedShellBackend(FilesystemBackend, SandboxBackendProtocol):
         if program not in self._allowed:
             return (f"'{program}' is not allowed. This backend only runs "
                     f"{sorted(self._allowed)} (named bare, no path).")
+
+        # Shell syntax with no shell to interpret it. Refused rather than passed
+        # through as literal arguments: a run spent 900 of its 1,050 seconds on
+        # three `python - <<'PY'` heredocs, each hanging until the 300s timeout,
+        # and the deterministic "run the code after an edit" step returned
+        # nothing about the code. Being told is cheap; hanging is not.
+        for token in argv[1:]:
+            if token.startswith("<<") or token in _SHELL_OPERATORS:
+                return (f"'{token}' is shell syntax and there is no shell here, "
+                        f"so it cannot be interpreted. No heredocs, pipes, "
+                        f"chaining or redirection. To run code that is not in a "
+                        f"file, use `python -c \"...\"`; for anything longer, "
+                        f"write it with create_file and run `python <file>`.")
+            # `python -` reads the script from stdin, and stdin is /dev/null
+            # here. Depending on the platform that either does nothing or hangs
+            # until the timeout; neither is what the caller wanted.
+            if token == "-":
+                return ("`-` reads the script from stdin, and this backend gives "
+                        "the process no stdin. Use `python -c \"...\"` for a "
+                        "one-liner, or create_file plus `python <file>`.")
+
         if program != "git":
             return ""
 

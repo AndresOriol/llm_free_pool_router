@@ -37,6 +37,28 @@ def _run():
         r = be.execute("./evil.sh")
         assert r.exit_code == 1 and "names a path" in r.output, r
 
+        # Shell syntax with no shell to run it is refused, not passed through
+        # as a literal argument. A recorded run spent 900 of its 1,050 seconds
+        # on three `python - <<'PY'` heredocs, each hanging to the 300s timeout,
+        # and the step whose whole job is "run the code after an edit" learned
+        # nothing about the code.
+        import time
+        started = time.time()
+        r = be.execute("python - <<'PY'\nimport os\nprint(1)\nPY")
+        assert r.exit_code == 1 and "stdin" in r.output, r
+        assert time.time() - started < 5, "it must refuse, not hang"
+
+        # `python -` reads its script from stdin, and there is no stdin here.
+        assert be.execute("python -").exit_code == 1
+
+        # A pipe is refused for the same reason.
+        r = be.execute('python -c "print(1)" | head')
+        assert r.exit_code == 1 and "no shell" in r.output, r
+
+        # ...but `<<` inside a code string is just Python, and must still run.
+        r = be.execute('python -c "print(1 << 2)"')
+        assert r.exit_code == 0 and "4" in r.output, r
+
         # Non-zero exit is surfaced with the exit code.
         r = be.execute('python -c "import sys; sys.exit(3)"')
         assert r.exit_code == 3, r
