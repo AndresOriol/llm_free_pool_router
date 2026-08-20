@@ -12,7 +12,8 @@ from pathlib import Path
 # `python tests/llm_router/test_is_transient.py`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from llm_router.base_provider import is_transient
+from llm_router.base_provider import (LLMProvider, is_decommissioned,
+                                      is_transient)
 
 
 class _Exc(Exception):
@@ -65,6 +66,40 @@ def _run():
 
     # Unknown error with no status/name -> surface it, don't exhaust the pool.
     assert is_transient(ValueError("bug")) == (False, None)
+
+    # -- a model retired upstream --------------------------------------------
+    # The real Groq body, verbatim. It is a 404, so is_transient correctly calls
+    # it fatal -- which is why it killed three runs before this was classified
+    # separately.
+    gone = _Exc("Error code: 404 - {'error': {'message': 'The model "
+                "`llama-3.3-70b-versatile` does not exist or you do not have access "
+                "to it.', 'code': 'model_not_found'}}", status_code=404)
+    assert is_decommissioned(gone) is True
+    assert is_transient(gone) == (False, None)
+
+    # Gemini words it differently for the same thing.
+    assert is_decommissioned(_Exc("404 NOT_FOUND. models/gemini-9-flash is not "
+                                  "found for API version v1beta")) is True
+
+    # Nothing else is a retirement -- a rate limit must still be a cooldown, and
+    # a real bug must still surface.
+    assert is_decommissioned(_Exc("rate_limit_exceeded", status_code=413)) is False
+    assert is_decommissioned(_Exc("bad request", status_code=400)) is False
+    assert is_decommissioned(ValueError("bug")) is False
+
+    # A retired member leaves the pool and nothing brings it back -- not the
+    # clock, which is the whole difference from a cooldown.
+    class _P(LLMProvider):
+        def build_chat_model(self):
+            raise NotImplementedError
+
+    provider = _P("Llama3_70b_groq_1", "", "llama-3.3-70b-versatile", "k", priority=1)
+    assert provider.check_availability() is True
+    provider.retire("code=model_not_found")
+    assert provider.decommissioned is True
+    assert provider.check_availability() is False
+    provider.cooldown_until = 0.0  # as if every cooldown had long expired
+    assert provider.check_availability() is False
 
     print("is_transient: all checks passed")
 

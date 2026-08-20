@@ -17,7 +17,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import ConfigDict
 
-from llm_router.base_provider import estimate_tokens, is_transient, provider_error_detail
+from llm_router.base_provider import (estimate_tokens, is_decommissioned,
+                                      is_transient, provider_error_detail)
 
 logger = logging.getLogger("LLMRouter")
 
@@ -114,14 +115,26 @@ class RouterChatModel(BaseChatModel):
     def _handle_failure(self, provider, exc: Exception, run_manager=None) -> bool:
         """Cooldown + reroute on transient errors; return False to re-raise.
 
+        A model retired upstream is dropped from the pool permanently rather
+        than cooled down; everything else transient gets a cooldown.
+
         A rerouted error is easy to lose track of, so surface the provider's
         error body (Groq's `tool_use_failed` puts the model's raw malformed
         output in `failed_generation`): log it at WARNING and, when tracing,
         attach it to the run via `on_text` so the failed attempt shows up in
         LangSmith instead of vanishing behind the successful reroute.
         """
-        transient, retry_after = is_transient(exc)
         detail = provider_error_detail(exc)
+
+        # Checked before is_transient, which would call this a fatal 4xx and
+        # kill the run. The model is gone, so the pool stops offering it and the
+        # loop tries the next member instead -- no cooldown, because a cooldown
+        # is a wait and there is nothing to wait for.
+        if is_decommissioned(exc):
+            provider.retire(detail or repr(exc))
+            return True
+
+        transient, retry_after = is_transient(exc)
         if not transient:
             logger.error(f"{provider.name} failed with a non-transient error: {exc!r}")
             return False

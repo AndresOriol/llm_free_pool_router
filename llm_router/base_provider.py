@@ -68,6 +68,44 @@ def provider_error_detail(exc: Exception) -> Optional[str]:
     return "; ".join(parts) or None
 
 
+def _status_of(exc: Exception) -> Optional[int]:
+    """HTTP status, wherever the SDK put it.
+
+    openai exceptions expose `.status_code`; google-genai's APIError exposes
+    `.code`.
+    """
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status
+    code = getattr(exc, "code", None)
+    return code if isinstance(code, int) else None
+
+
+def is_decommissioned(exc: Exception) -> bool:
+    """Is this pool member gone upstream, rather than busy?
+
+    Free platforms retire models without notice and the SDK reports it as an
+    ordinary 404. `is_transient` correctly refuses to retry a 4xx, so the error
+    propagates and kills the whole run -- which has now happened three times,
+    for `llama-4-scout`, `qwen3-32b` and `llama-3.3-70b-versatile`. The
+    workaround each time was to delete the model from the eval pool by hand,
+    which fixes the measurement and leaves an unattended run dying on the next
+    retirement.
+
+    A retired model is neither transient nor a bug in the caller: it is a member
+    that will never work again. So it is dropped from the pool for the rest of
+    the process and the run carries on with the others -- which is the whole
+    point of holding a pool.
+    """
+    message = str(getattr(exc, "message", "") or exc).lower()
+    for signal in ("model_not_found",
+                   "does not exist or you do not have access",
+                   "is not found for api version"):
+        if signal in message:
+            return True
+    return _status_of(exc) == 404
+
+
 def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     """Classify an exception raised while calling a provider.
 
@@ -97,12 +135,7 @@ def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     if "tool_use_failed" in message or "tool call validation failed" in message:
         return True, None
 
-    # openai SDK exceptions expose .status_code; google-genai APIError exposes .code
-    status = getattr(exc, "status_code", None)
-    if not isinstance(status, int):
-        code = getattr(exc, "code", None)
-        status = code if isinstance(code, int) else None
-
+    status = _status_of(exc)
     if isinstance(status, int):
         if status in (408, 409, 429) or status >= 500:
             return True, _retry_after(exc)
@@ -139,6 +172,9 @@ class LLMProvider(ABC):
         self.is_available = True
         self.cooldown_until = 0.0
         self.consecutive_failures = 0
+        # Set once the platform says this model no longer exists. Distinct from
+        # a cooldown, which is a wait: this one never ends.
+        self.decommissioned = False
         self._chat: Optional[BaseChatModel] = None
 
     @abstractmethod
@@ -155,12 +191,27 @@ class LLMProvider(ABC):
 
     def check_availability(self) -> bool:
         """Check whether the provider has served its penalty time."""
+        if self.decommissioned:
+            return False
         if not self.is_available and time.time() > self.cooldown_until:
             self.is_available = True
             self.consecutive_failures = 0
             logger.info(f"{self.name} has finished its cooldown and is available again.")
 
         return self.is_available
+
+    def retire(self, reason: str = "") -> None:
+        """Drop this member from the pool for the rest of the process.
+
+        Not a cooldown. Nothing brings it back, because nothing upstream is
+        going to un-retire the model -- the fix is to delete it from the config,
+        which is why this logs at ERROR naming the model to delete.
+        """
+        self.decommissioned = True
+        self.is_available = False
+        logger.error(f"{self.name} is gone upstream (model={self.model}); dropping it "
+                     f"from the pool for this process. Remove it from the config. "
+                     f"{reason}".rstrip())
 
     def trigger_cooldown(self, retry_after: Optional[int] = None):
         """Temporarily block the provider. Uses Retry-After or exponential backoff."""

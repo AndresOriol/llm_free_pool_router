@@ -68,8 +68,14 @@ class AutonomousLLMRouter:
 
     def seconds_until_available(self) -> Optional[float]:
         """How long until the soonest provider leaves cooldown, or None if some
-        provider is already available."""
+        provider is already available.
+
+        A retired member is skipped: it is unavailable forever, and counting it
+        here would have the caller sleep waiting for a model that no longer
+        exists.
+        """
         waits = [p.cooldown_until - time.time()
-                 for p in self.providers if not p.is_available]
+                 for p in self.providers
+                 if not p.is_available and not p.decommissioned]
         future = [w for w in waits if w > 0]
         return min(future) if future else None
