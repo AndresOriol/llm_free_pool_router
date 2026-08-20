@@ -59,7 +59,7 @@ when off.
 Event shape:
 
 ```
-{ts, event, model, provider, tokens_in, tokens_out, tool, ok, detail}
+{ts, event, model, provider, tokens_in, tokens_out, text, tool, ok, detail}
 ```
 
 Two producers write to one file: a LangChain callback handler
@@ -81,7 +81,13 @@ metric reads zero. Such callers must pass their config via the model's
 `provider_config` field; it defaults to `None`, which is exactly the
 inherit-from-the-graph behaviour the deep-agents path depends on.
 
-Tool args and outputs are clipped to 2 KB.
+`llm_end` carries `text`, the model's reply, clipped like everything else.
+It is the per-*attempt* view, so a malformed reply is attributable to the pool
+member that produced it — and it is the only place a reply survives before the
+envelope parser has run, which is what separates "the model wrote nonsense"
+from "the parser mangled sense".
+
+Tool args, outputs and reply text are clipped to 2 KB.
 
 ## 7.4 The shape is a contract
 
@@ -105,6 +111,35 @@ Llama3_70b_groq_1 has finished its cooldown and is available again.
 
 Everything else is quieted deliberately, because these five lines are the ones
 that explain a run's behaviour.
+
+## 7.6 What a session records about itself
+
+The trace answers *what happened*. A session harness run also has to answer
+*what each role was given*, and that is a different file.
+
+| Under the workdir's `.harness/` | One line/file per | Holds |
+| --- | --- | --- |
+| `journal.jsonl` | completed step | The brief (`goal`, `context`, `done_when`), the resulting `status` and `finding`, and the commands run with their exit codes |
+| `steps/NN-<role>.md` | model turn | The brief, the prompt as rendered, the raw reply before parsing, and the tool calls with their outputs |
+| `reports/session-*.md` | session | The rationale, built from the journal — the artefact a human reviews instead of the code |
+
+The split is a cost decision. The journal is the crash-resume substrate
+([6.12](06-agent.md#612-an-alternative-architecture-the-ad-hoc-role-harness)),
+re-read line by line every time a killed session resumes, so the bulk stays out
+of it. The transcript runs to a few kilobytes per turn and is only opened when a
+step needs explaining.
+
+**Why the transcript exists.** A recorded run's journal said a writer was
+blocked for want of the contents of a file, and nothing on disk said what the
+writer had been handed. The orchestrator curating context downward is the whole
+mechanism of the session design
+([design note §8.1](design/long-run-harness.md#81-the-handoff-envelope)), and it
+was the one variable not being logged. Naming a failure and diagnosing it are
+different things, and only the second changes anything.
+
+The eval runner copies all three into the run's results directory, before it
+prunes the workdir. They are what the per-run post-mortem reads
+([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
 
 ---
 

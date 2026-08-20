@@ -5,32 +5,37 @@
 *The running state. This is the one page in the wiki expected to change often —
 everything else describes design; this describes today.*
 
-**Last updated: 2026-08-06.** Update it when a phase lands, a scenario is added,
+**Last updated: 2026-08-20.** Update it when a phase lands, a scenario is added,
 or a comparison is decided. A status page nobody updates is worse than none.
 
 ## 11.1 One-paragraph summary
 
-The pipeline works end to end and has now run its first real comparison. Two
-decommissioned Groq models were the cause of the old 50% crash rate; with them
-removed from the eval pool the baseline passes **3/3**. It still has **one
-scenario**, at the easiest difficulty level, so a 3/3-vs-2/3 result is far
-inside the noise floor — the comparison machinery is trustworthy now, the
-sample size is not. The next move is authoring scenarios at L1 and L2.
+The pipeline works end to end. The measurement is no longer bottlenecked on
+having a single L0 scenario: there are now **five scenarios across four
+topics**, three of them L1 or L2, including the set's first `trap`. Pass rates
+are still noise at the sample sizes affordable here, so the instrument being
+built out is the *diagnostic* one — a per-turn transcript of what every role was
+given, and a per-run post-mortem that reads it
+([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
+The next move is a batch at n=5 over the new scenarios, with a second Gemini
+account making that affordable.
 
 ## 11.2 What's built
 
 | Phase | State | What it covers |
 | --- | --- | --- |
-| **P0** trace capture | **done** | `EVAL_TRACE_FILE` makes the agent append one JSON object per LLM/tool event ([trace.py](../agent/trace.py)). Every automatic metric is a sum over that file. |
+| **P0** trace capture | **done** | `EVAL_TRACE_FILE` makes the agent append one JSON object per LLM/tool event ([trace.py](../agent/trace.py)). Every automatic metric is a sum over that file. A session also writes a per-turn transcript of what each role was handed ([7.6](07-observability.md#76-what-a-session-records-about-itself)). |
 | **P1** runner | **done** | [evals/](../evals/): materialize → run → verify → integrity → record, plus `validate` and `show`. Metrics automatic, including the failure taxonomy. |
 | **P2** judge | not started | `claude -p` with a pinned rubric and diff-hash cache. Quality scoring is manual until then. |
 | **P3** compare/report | not started | Leaderboard and written comparisons. `show` covers the basics today. |
-| **P4** scenario library | **1 of ~15** | Only one L0 scenario exists. **This is the main gap.** |
+| **P4** scenario library | **5 of ~15** | Four topics. `retry-after-case` (L0, exhausted), `duration-notes` (L1), `threshold-off-by-one` (L2), `stale-categories` (L1, symptom-only), `count-and-share` (L2, trap). Still the main gap, but no longer a blocker. |
 | **P5** SWE-bench L3 | not started | Needs Docker. Deliberately last. |
 
 ## 11.3 Where the numbers stand
 
-**One scenario, two configurations, n=3, interleaved on an identical pool.**
+**All of this is `retry-after-case` (L0) only**, n=3, interleaved on an
+identical pool. It predates the four scenarios added since, and no
+configuration has been run against those more than n=2.
 
 | config | runs | pass | calls | bounces | `tokens_in` |
 | --- | --- | --- | --- | --- | --- |
@@ -68,21 +73,25 @@ Four observations:
 
 | Issue | Impact | State |
 | --- | --- | --- |
-| Only one scenario, at L0 | **The main gap.** Nothing can be compared on it: L0 is a canary, not a comparison instrument ([9.7](09-scenarios.md#97-the-difficulty-ladder)) | P4 |
+| Five scenarios, none run more than n=2 | No longer *the* blocker, but nothing here has enough reps to compare configurations. `retry-after-case` (L0) is exhausted as an instrument ([9.7](09-scenarios.md#97-the-difficulty-ladder)) | P4 |
+| Five of the eight scenario categories are still unwritten | `feature`, `tests`, `refactor`, `long-context` and `ambiguous` have never been run, so nothing probes size-based routing or multi-file construction ([9.6](09-scenarios.md#96-categories-to-cover)) | P4 |
 | `404 model_not_found` still propagates and kills a run | Worked around for evals via `llm_router/config.eval.yaml`, not fixed. Any run on the default pool still dies on it | [13.2](13-roadmap.md#132-what-to-do-next) |
 | `agent_evals` local history has diverged from its GitHub remote after the restructure | Scenarios aren't backed up | Needs a force-push decision |
 
 ## 11.5 What to do next
 
-1. **Author scenarios** — L1 and L2, across the categories in
-   [9.6](09-scenarios.md#96-categories-to-cover). Now the single blocking item:
-   with one L0 task, no comparison can reach significance no matter how many
-   reps it is given.
-2. **Fix the dead-model crash properly.** The eval pool works around it; the
+1. **Run a batch at n=5** over the four non-exhausted scenarios. The second
+   Gemini account roughly doubles the affordable reps, and enough *varied
+   failures to read* is what the diagnostic loop is short of — not more
+   architecture.
+2. **Post-mortem every run in it**, then J2 over the batch. The per-run reviewer
+   is built and has never been run against a real session.
+3. **Keep authoring scenarios** — `long-context` next, since size-based routing
+   is half the architecture and nothing probes it.
+4. **Fix the dead-model crash properly.** The eval pool works around it; the
    shipping pool still dies on it. A decommissioned model should be disabled
    permanently, the way a rate-limited one is benched temporarily.
-3. **Re-baseline at n=5** once scenarios exist, and record it in the ledger.
-4. **P2, the judge** — worth building only once there are enough scenarios that
+5. **P2, the judge** — worth building only once there are enough scenarios that
    reading diffs by hand hurts.
 
 ---

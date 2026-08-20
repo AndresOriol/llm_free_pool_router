@@ -25,10 +25,16 @@ else on this page is design and changes rarely; this block is state.*
   and one scored 3/3 and 1/3 on consecutive batches. Re-running them will
   produce a different random ordering, not an answer
   ([6.14.1](06-agent.md#6141-the-pass-column-is-noise-and-i-can-prove-it)).
-- **Authoring L1/L2 scenarios is the single blocking item**
-  ([13.2](13-roadmap.md#132-what-to-do-next)). Every measured failure so far was
-  `reasoning`, never `retrieval` or `tooling`, which is why more architecture
-  work is not the next move
+  There are now four more scenarios, at L1 and L2, and none has been run past
+  n=2 ([11.2](11-eval-status.md#112-whats-built)).
+- **The instrument being built is diagnostic, not a score.** Pass rates are
+  noise at affordable sample sizes, so what is being invested in is evidence:
+  every role's prompt and reply is recorded per turn
+  ([7.6](07-observability.md#76-what-a-session-records-about-itself)), and a
+  per-run post-mortem reads it
+  ([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
+  Every measured failure so far was `reasoning`, never `retrieval` or `tooling`,
+  which is why more architecture work is not the next move
   ([6.14.2](06-agent.md#6142-every-failure-is-reasoning-and-that-reframes-the-whole-exercise)).
 
 ---
@@ -104,7 +110,8 @@ else on this page is design and changes rarely; this block is state.*
 [7.2](07-observability.md#72-langsmith) LangSmith ·
 [7.3](07-observability.md#73-the-local-trace) The local trace ·
 [7.4](07-observability.md#74-the-shape-is-a-contract) The shape is a contract ·
-[7.5](07-observability.md#75-reading-routing-decisions-live) Reading routing decisions live
+[7.5](07-observability.md#75-reading-routing-decisions-live) Reading routing decisions live ·
+[7.6](07-observability.md#76-what-a-session-records-about-itself) What a session records about itself
 
 ### Part IV — Evaluation
 
