@@ -33,6 +33,13 @@ accounts:
   type: gemini
   url: https://generativelanguage.googleapis.com/v1beta/models
   api_key_env: GEMINI_API_KEY_1
+- name: gemini_2
+  user:
+  - EMAIL_ADDRESS
+  platform: gemini
+  type: gemini
+  url: https://generativelanguage.googleapis.com/v1beta/models
+  api_key_env: GEMINI_API_KEY_2
 models:
 - name: Llama3_70b
   platform: groq
