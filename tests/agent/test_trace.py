@@ -113,5 +113,12 @@ def _run():
     print("trace: all checks passed")
 
 
+def test_trace():
+    """Collected by pytest -- see the note in test_restricted_backend.py. The
+    trace's event shape is a contract (docs/07-observability.md#74), and a
+    contract nothing runs is not one."""
+    _run()
+
+
 if __name__ == "__main__":
     _run()
