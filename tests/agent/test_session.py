@@ -377,6 +377,36 @@ def test_every_turn_records_what_it_was_given():
           journaled["done_when"] == "the edit is applied")
 
 
+def test_the_session_keeps_its_own_bookkeeping_out_of_the_diff():
+    """The diff is what the orchestrator, documenter and reviewer are shown as
+    *the change made so far*, head-clipped at 6,000 characters.
+
+    A recorded run's diff section was 100% `.harness/` -- the journal and the
+    per-turn transcript -- and clipped out before reaching the one edited source
+    file. The orchestrator read its own transcript where the code should have
+    been.
+    """
+    root = seed_project()
+    backend = RestrictedShellBackend(root_dir=str(root), allow_git=True)
+    toolset = make_tools(backend)
+    model = ScriptedModel([
+        ai("ACTION: WRITE\nGOAL: fix add\nCONTEXT: /calc.py\nDONE_WHEN: applied"),
+        ai(calls=[("replace_in_file", {"file_path": "/calc.py",
+                                       "old_text": "return a - b",
+                                       "new_text": "return a + b"})]),
+        ai("STATUS: DONE | FINDING: applied"),
+    ] + [ai("ACTION: GIVEUP")] * 4)
+
+    bb, stats, outcome, steps = run_session(model, backend, toolset,
+                                            "add() is wrong", root, max_steps=2)
+
+    check("the transcript was still written",
+          list((root / ".harness" / "steps").glob("*.md")))
+    check(f"and it is nowhere in the diff:\n{bb.diff[:300]}",
+          ".harness" not in bb.diff)
+    check("while the real change is", "calc.py" in bb.diff)
+
+
 def test_a_resumed_session_does_not_overwrite_its_transcript():
     """R2 says a killed session resumes. Turn 1 of the second life must not
     land on top of turn 1 of the first, or the crash erases its own cause."""

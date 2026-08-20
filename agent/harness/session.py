@@ -94,20 +94,58 @@ class Git:
 
         if inside.returncode != 0:
             self._run("init", "-q")
-            self._run("add", "-A")
-            self._commit("Baseline before the session")
 
-        if not self._run("rev-parse", "HEAD").stdout.strip():
+        # Before anything is staged, so the session's own bookkeeping never
+        # enters its history or its diff.
+        self._exclude_state()
+
+        if not self._head():
             # An empty repo has no HEAD to branch from or diff against.
             self._run("add", "-A")
             self._commit("Baseline before the session")
 
-        self.base = self._run("rev-parse", "HEAD").stdout.strip()
+        self.base = self._head()
         self.branch = f"session/{session_id}"
         self.enabled = bool(self.base)
         if self.enabled:
             self._run("checkout", "-b", self.branch)
         return self.enabled
+
+    def _head(self) -> str:
+        """The current commit, or "" when there isn't one.
+
+        Not `rev-parse HEAD`: on a repo with no commits that prints the literal
+        string `HEAD` to stdout and fails, so its output cannot be used as a
+        truth test. `--verify` prints nothing instead, which is the difference
+        between recording a base commit and recording the word "HEAD" as one.
+        """
+        result = self._run("rev-parse", "--verify", "HEAD")
+        return result.stdout.strip() if result.returncode == 0 else ""
+
+    def _exclude_state(self) -> None:
+        """Keep `.harness/` out of the session's git.
+
+        The journal and the per-turn transcript live inside the workdir, so
+        `add -A` stages them: they land in the commits a human reviews, and in
+        `diff()`. That diff is what the orchestrator, the documenter and the
+        reviewer are shown as *the change made so far*, head-clipped at 6,000
+        characters -- and in a recorded run it was 100% `.harness/`, clipping
+        out before it reached the one edited source file. The orchestrator read
+        its own transcript where the code should have been.
+
+        `.git/info/exclude` rather than a `.gitignore`: the workdir is somebody
+        else's project and the harness does not get to leave files in it.
+        """
+        git_dir = self._run("rev-parse", "--git-dir").stdout.strip()
+        if not git_dir:
+            return
+        path = self.workdir / git_dir / "info" / "exclude"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+        if f"/{STATE_DIR}/" not in existing:
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(f"\n# The session's own bookkeeping, not its work.\n"
+                             f"/{STATE_DIR}/\n")
 
     def _commit(self, message: str) -> bool:
         # Identity may be unset on a fresh machine; -c keeps it out of global
