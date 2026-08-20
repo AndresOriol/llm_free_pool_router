@@ -12,12 +12,22 @@ tests assert. The session did as it was told, took `pass_to_pass` from 4/4 to
 suite at all. The test it broke was visible, runnable and named
 `test_summarise_does_not_modify_the_entries_it_is_given`. Nothing looked.
 
-**Baseline, then compare.** A snapshot is the set of test ids that *fail*. Taken
-once before the first edit, and again when the orchestrator wants to finish. A
-regression is a test failing now that was not failing then -- which is the right
-comparison rather than "everything passes", because a scenario that opens with a
-red test is the normal case here, and demanding green would refuse the very fix
-the session was asked to make.
+**The baseline is the set of tests that pass**, not the set that fails. Both
+readings catch a test that breaks; only this one catches a test that *stops
+existing*. Measured, on the first run of this gate: told to set a field the
+suite forbids, the session deleted the assertion and renamed the test around it
+--
+
+    -def test_summarise_does_not_modify_the_entries_it_is_given():
+    +def test_summarise_adds_month_total_to_each_entry():
+
+-- which leaves nothing failing, so a gate comparing failures sees a clean run.
+Comparing what passes turns a rewritten test into a missing one, which is what
+it is.
+
+A test that was already failing at baseline is not held against the session:
+a scenario that opens red is the normal case here, and demanding green would
+refuse the very fix the session was asked to make.
 
 **It runs through the agent's own `run_command` tool**, not through subprocess
 directly. So it inherits the jail, the allowlist and the timeout, it cannot
@@ -28,11 +38,12 @@ from __future__ import annotations
 
 import re
 
-# `-q --tb=no` because nothing here reads a traceback: the ids are the signal,
-# and the writer gets the real output from its own EXECUTE step. `-rf` is the
-# part that matters -- it prints one `FAILED <id>` line per failure, which is
-# the whole parse.
-COMMAND = "python -m pytest -q --tb=no -rf"
+# Two cheap runs rather than one clever one. `--collect-only` is the half that
+# knows a test exists at all, which is the half that catches a test edited out
+# of the way; `-rf` names the failures. Both are quiet enough to survive the
+# tool's output clipping on any suite this harness is pointed at.
+COLLECT = "python -m pytest --collect-only -q"
+RUN = "python -m pytest -q --tb=no -rf"
 
 # pytest's exit codes: 0 all passed, 1 some failed. Anything else (2 interrupted,
 # 3 internal error, 4 usage error, 5 nothing collected) means the suite did not
@@ -41,6 +52,8 @@ _USABLE = (0, 1)
 
 _EXIT_RE = re.compile(r"^exit=(-?\d+)", re.MULTILINE)
 _FAILED_RE = re.compile(r"^(?:FAILED|ERROR)\s+(\S+)", re.MULTILINE)
+# A collected id is `path::name`, one per line, before the trailing summary.
+_ID_RE = re.compile(r"^(\S+::\S+)\s*$", re.MULTILINE)
 
 
 class Suite:
@@ -51,50 +64,61 @@ class Suite:
     the kind of noise that gets ignored until it hides something.
     """
 
-    def __init__(self, run_command, command: str = COMMAND):
+    def __init__(self, run_command):
         # `run_command` is the agent's tool, already bound to the backend.
         self._run = run_command
-        self._command = command
         self.baseline: frozenset | None = None
         self.available = False
 
-    def snapshot(self) -> frozenset | None:
-        """Test ids failing right now, or None if the suite could not be run."""
+    def _execute(self, command: str) -> str | None:
+        """Command output, or None if it did not run usefully."""
         try:
-            output = str(self._run.invoke({"command": self._command}))
+            output = str(self._run.invoke({"command": command}))
         except Exception:  # noqa: BLE001 - a gate must never end a session
             return None
         match = _EXIT_RE.search(output)
         if match is None or int(match.group(1)) not in _USABLE:
             return None
-        return frozenset(_FAILED_RE.findall(output))
+        return output
+
+    def snapshot(self) -> frozenset | None:
+        """The test ids passing right now, or None if the suite could not run."""
+        collected = self._execute(COLLECT)
+        if collected is None:
+            return None
+        ids = frozenset(_ID_RE.findall(collected))
+        if not ids:
+            return None
+        run = self._execute(RUN)
+        if run is None:
+            return None
+        return ids - frozenset(_FAILED_RE.findall(run))
 
     def take_baseline(self) -> frozenset | None:
         """Record the starting state. Call once, before anything is edited."""
         self.baseline = self.snapshot()
-        self.available = self.baseline is not None
+        self.available = bool(self.baseline)
         return self.baseline
 
     def regressions(self) -> list:
-        """Tests failing now that were passing at baseline, newest verdict wins.
+        """Tests that passed at baseline and do not pass now.
 
-        Empty when the gate has no baseline to compare against: an unusable
-        suite is a reason to stay quiet, never a reason to block a session that
-        may be perfectly fine.
+        Covers both halves of the same failure: a test that now fails, and a
+        test that is no longer there to fail. Empty when there is no baseline
+        to compare against -- an unusable suite is a reason to stay quiet, never
+        a reason to block a session that may be perfectly fine.
         """
         if not self.available:
             return []
         now = self.snapshot()
         if now is None:
             return []
-        return sorted(now - self.baseline)
+        return sorted(self.baseline - now)
 
     def describe(self) -> str:
         """One line for the log, so the nodes can see what the gate knows."""
         if not self.available:
             return ""
-        if self.baseline:
-            return (f"Baseline: {len(self.baseline)} test(s) already failing before "
-                    f"any change: {', '.join(sorted(self.baseline))}. Fixing those "
-                    f"is the job; breaking anything else is a regression.")
-        return "Baseline: the project's test suite passes completely. Keep it that way."
+        return (f"Before this session started, {len(self.baseline)} test(s) passed. "
+                f"They must all still pass, and still exist, when it finishes. "
+                f"Rewriting or deleting a test counts as breaking it.")

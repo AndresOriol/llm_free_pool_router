@@ -491,60 +491,83 @@ def test_a_session_that_gets_stuck_still_reports():
 # --- the regression gate ---------------------------------------------------
 
 
-class FakeRun:
-    """Stands in for the agent's `run_command` tool. Returns scripted output."""
+class FakeSuite:
+    """Stands in for the agent's `run_command` tool, over a scripted suite.
 
-    def __init__(self, *outputs):
-        self.outputs = list(outputs)
-        self.calls = 0
+    A snapshot is two commands -- collect, then run -- so this answers by which
+    one it was asked, and `advance()` moves it to the next state of the world.
+    """
+
+    def __init__(self, *states):
+        # Each state is (collected_ids, failing_ids).
+        self.states = list(states)
+        self.at = 0
+
+    def advance(self):
+        self.at = min(self.at + 1, len(self.states) - 1)
 
     def invoke(self, args):
-        self.calls += 1
-        return self.outputs[min(self.calls - 1, len(self.outputs) - 1)]
+        collected, failing = self.states[self.at]
+        if "--collect-only" in args["command"]:
+            return "exit=0\n" + "\n".join(collected) + \
+                   f"\n\n{len(collected)} tests collected in 0.06s"
+        lines = [f"exit={1 if failing else 0}"]
+        lines += [f"FAILED {name} - AssertionError" for name in failing]
+        lines.append(f"{len(failing)} failed, {len(collected) - len(failing)} passed")
+        # The gate re-reads the world every time it is asked, so a second
+        # snapshot in one test means the state has moved on.
+        self.advance()
+        return "\n".join(lines)
 
 
-def _pytest_output(exit_code, *failed):
-    lines = [f"exit={exit_code}"]
-    lines += [f"FAILED {name} - AssertionError" for name in failed]
-    lines.append(f"{len(failed)} failed, 3 passed in 0.04s")
-    return "\n".join(lines)
+A, B, C = ("t.py::test_a", "t.py::test_b", "t.py::test_c")
 
 
-def test_gate_reads_which_tests_fail():
-    run = FakeRun(_pytest_output(1, "tests/test_a.py::test_one",
-                                 "tests/test_b.py::test_two"))
-    gate = Suite(run)
-    check("both failures found",
-          gate.snapshot() == frozenset({"tests/test_a.py::test_one",
-                                        "tests/test_b.py::test_two"}))
+def test_gate_baseline_is_what_passes():
+    """Not what fails: only this reading notices a test that stops existing."""
+    gate = Suite(FakeSuite(([A, B, C], [C])))
+    check("the passing tests are the baseline",
+          gate.take_baseline() == frozenset({A, B}))
 
 
 def test_a_test_that_was_already_failing_is_not_a_regression():
     """The scenario that opens red is the normal case. Demanding green would
     refuse the very fix the session was asked to make."""
-    run = FakeRun(_pytest_output(1, "tests/test_a.py::test_broken"),
-                  _pytest_output(1, "tests/test_a.py::test_broken"))
-    gate = Suite(run)
+    gate = Suite(FakeSuite(([A, B], [B]), ([A, B], [B])))
     gate.take_baseline()
     check("still-failing is not new", gate.regressions() == [])
 
 
 def test_a_newly_broken_test_is_a_regression():
-    run = FakeRun(_pytest_output(1, "tests/test_a.py::test_broken"),
-                  _pytest_output(1, "tests/test_a.py::test_broken",
-                                 "tests/test_b.py::test_was_fine"))
-    gate = Suite(run)
+    gate = Suite(FakeSuite(([A, B], [B]), ([A, B], [A, B])))
     gate.take_baseline()
-    check("the new failure is named",
-          gate.regressions() == ["tests/test_b.py::test_was_fine"])
+    check("the new failure is named", gate.regressions() == [A])
+
+
+def test_a_test_edited_out_of_the_way_is_a_regression():
+    """Measured on this gate's own first run: told to set a field the suite
+    forbids, the session deleted the assertion and renamed the test around it.
+    Nothing fails afterwards, so comparing failures sees a clean run."""
+    gate = Suite(FakeSuite(([A, B], []), ([A, "t.py::test_b_renamed"], [])))
+    gate.take_baseline()
+    check("a test that stopped existing is a regression",
+          gate.regressions() == [B])
 
 
 def test_a_suite_that_cannot_run_leaves_the_gate_quiet():
     """A gate that cannot see the tests must not have an opinion about them."""
+
+    class Broken:
+        def __init__(self, output):
+            self.output = output
+
+        def invoke(self, args):
+            return self.output
+
     for output in ("exit=4\nERROR: file or directory not found: tests",
                    "exit=5\nno tests ran in 0.01s",
                    "exit=2\nINTERNALERROR"):
-        gate = Suite(FakeRun(output))
+        gate = Suite(Broken(output))
         check(f"unusable suite is not a baseline ({output[:6]})",
               gate.take_baseline() is None)
         check("and blocks nothing", gate.regressions() == [])
@@ -555,26 +578,28 @@ def test_done_is_refused_when_the_session_broke_something():
     to work. Observed on scenario/ledger/count-and-share, where the notes ask
     for a change the project's own tests forbid."""
     log = Log(task="add a count to the summary")
-    log.ran("execute", "1 failed", False)
     log.add("exec", "execute", "(SUCCEEDED)", ok=True)
 
-    run = FakeRun(_pytest_output(0),
-                  _pytest_output(1, "tests/test_ledger.py::test_entries_untouched"))
-    gate = Suite(run)
+    gate = Suite(FakeSuite(([A, B], []), ([A, B], [B])))
     gate.take_baseline()
-
     brief, action = _veto(Brief(action="DONE"), {"reviewed": True}, log, gate)
     check("DONE is refused", action == "write")
-    check("the broken test is named in the brief",
-          "test_entries_untouched" in brief.context)
+    check("the broken test is named in the brief", B in brief.context)
     check("and the writer is told not to edit the test away",
-          "without" in brief.done_when and "editing the tests" in brief.done_when)
+          "editing the tests" in brief.done_when)
 
     # Same session, nothing broken: the gate gets out of the way.
-    clean = Suite(FakeRun(_pytest_output(0), _pytest_output(0)))
+    clean = Suite(FakeSuite(([A, B], []), ([A, B], [])))
     clean.take_baseline()
     _, ok_action = _veto(Brief(action="DONE"), {"reviewed": True}, log, clean)
     check("a clean run still finishes", ok_action == "done")
+
+
+def test_the_writer_is_told_tests_are_not_its_to_edit():
+    """It can now see the test that contradicts its brief, so it needs the rule
+    that keeping it ignorant used to supply for free."""
+    prompt = WORKERS["write"].prompt
+    check("the rule is stated", "never edit a test" in prompt.lower())
 
 
 def test_the_writer_sees_the_evidence_against_its_own_work():

@@ -22,7 +22,13 @@ from agent.harness.nodes.base import COMMON, Node
 from agent.harness.nodes.shared import applied_edits, report_from_edits
 
 PROMPT = (f"{COMMON}\nYou apply code changes, exactly as briefed. You do not "
-          "run tests and you do not explore.")
+          "run tests and you do not explore.\n"
+          "You never edit a test so that it agrees with your change. A test that "
+          "contradicts what you were asked to do is a fact about the task, not "
+          "an obstacle: apply the part that does not break it, and say in "
+          "FINDING which test disagrees and why. Observed on this node -- told "
+          "to set a field the suite forbids, it deleted the assertion and "
+          "renamed the test around it.")
 
 
 def absorb(result, log) -> None:
