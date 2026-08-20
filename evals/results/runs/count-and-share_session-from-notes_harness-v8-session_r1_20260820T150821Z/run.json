@@ -1,0 +1,63 @@
+{
+  "run_id": "count-and-share_session-from-notes_harness-v8-session_r1_20260820T150821Z",
+  "ts": "2026-08-20T15:26:05.182384+00:00",
+  "scenario": "count-and-share",
+  "scenario_tag": "scenario/ledger/count-and-share",
+  "topic": "ledger",
+  "withheld_files": 9,
+  "difficulty": "L2",
+  "category": "trap",
+  "context_mode": "none",
+  "task": "session-from-notes",
+  "task_tags": [
+    "session",
+    "notes-driven",
+    "trap",
+    "docs",
+    "L2"
+  ],
+  "config": "harness-v8-session",
+  "config_sha": "b19be9445a4f124241a2df15fad5a64c2d39e213",
+  "config_fingerprint": "d6bb13381b50",
+  "rep": 1,
+  "outcome": "fail",
+  "tampered_files": [],
+  "exit_code": 0,
+  "wall_time_s": 1053.7,
+  "f2p_passed": 3,
+  "f2p_total": 3,
+  "p2p_passed": 1,
+  "p2p_total": 4,
+  "f2p_ratio": 1.0,
+  "p2p_ratio": 0.25,
+  "verified": false,
+  "steps": 58,
+  "provider_calls": 70,
+  "failover_bounces": 12,
+  "tokens_in": 167290,
+  "tokens_out": 39384,
+  "tool_calls": 38,
+  "bad_tool_calls": 0,
+  "models_used": [
+    "gemini-3.5-flash",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b"
+  ],
+  "ran_own_tests": false,
+  "self_corrected": false,
+  "files_touched": 3,
+  "diff_lines": 31,
+  "diff_added": 25,
+  "diff_removed": 6,
+  "diff_files": [
+    "NOTES.md",
+    "docs/ledger.md",
+    "ledger/report.py"
+  ],
+  "gold_files": [
+    "docs/ledger.md",
+    "ledger/report.py"
+  ],
+  "found_gold_file": true,
+  "failure_class": "reasoning"
+}

@@ -1,0 +1,120 @@
+2026-08-20 16:58:51,001 - INFO - Writing eval trace to C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\results\runs\count-and-share_session-from-notes_harness-v8-session_r1_20260820T145845Z\trace.jsonl
+2026-08-20 16:58:51,022 - INFO - Variant: v8-session -- A session rather than a task: an orchestrator briefs explore/write/execute/document/review, the run commits incrementally on its own branch, journals every step so a crash resumes, and ends by updating the docs and writing a rationale into the project's notes.
+2026-08-20 16:58:51,705 - INFO - Routing to Gemini_3_5_Flash_gemini_1 (model=gemini-3.5-flash, ~556 tok).
+2026-08-20 16:58:51,816 - INFO - AFC is enabled with max remote calls: 10.
+2026-08-20 16:58:54,322 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-08-20 16:58:54,355 - INFO - Routing to Llama3_70b_groq_1 (model=llama-3.3-70b-versatile, ~866 tok).
+2026-08-20 16:58:56,033 - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 404 Not Found"
+2026-08-20 16:58:56,315 - ERROR - Llama3_70b_groq_1 failed with a non-transient error: NotFoundError("Error code: 404 - {'error': {'message': 'The model `llama-3.3-70b-versatile` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}")
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\.worktrees\harness-v8-session-b80fd82d\agent\harness\__main__.py", line 116, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\.worktrees\harness-v8-session-b80fd82d\agent\harness\__main__.py", line 82, in main
+    bb, stats, outcome, steps = run_session(
+                                ~~~~~~~~~~~^
+        model, backend, toolset, task, workdir, config=config,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        max_steps=variant.max_cycles_hint or MAX_STEPS)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\.worktrees\harness-v8-session-b80fd82d\agent\harness\session.py", line 522, in run_session
+    result = run_role(model, role, toolset, bb, config, stats,
+                      force_summary=role.reports, brief=brief)
+  File "C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\.worktrees\harness-v8-session-b80fd82d\agent\harness\loop.py", line 120, in run_role
+    response = bound.invoke(messages, config=config)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 476, in invoke
+    self.generate_prompt(
+    ~~~~~~~~~~~~~~~~~~~~^
+        [self._convert_input(input)],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    ).generations[0][0],
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1849, in generate_prompt
+    return self.generate(prompt_messages, stop=stop, callbacks=callbacks, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1656, in generate
+    self._generate_with_cache(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        m,
+        ^^
+    ...<2 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1994, in _generate_with_cache
+    result = self._generate(
+        messages, stop=stop, run_manager=run_manager, **kwargs
+    )
+  File "C:\Users\aoriol\Documents\antigravity\free_coding_agent\evals\.worktrees\harness-v8-session-b80fd82d\agent\router_chat_model.py", line 104, in _generate
+    message = self._underlying(provider).invoke(
+        messages, config=self.provider_config, stop=stop, **kwargs)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\runnables\base.py", line 6002, in invoke
+    return self.bound.invoke(
+           ~~~~~~~~~~~~~~~~~^
+        input,
+        ^^^^^^
+        self._merge_configs(config),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **{**self.kwargs, **kwargs},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 476, in invoke
+    self.generate_prompt(
+    ~~~~~~~~~~~~~~~~~~~~^
+        [self._convert_input(input)],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    ).generations[0][0],
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1849, in generate_prompt
+    return self.generate(prompt_messages, stop=stop, callbacks=callbacks, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1656, in generate
+    self._generate_with_cache(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        m,
+        ^^
+    ...<2 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_core\language_models\chat_models.py", line 1994, in _generate_with_cache
+    result = self._generate(
+        messages, stop=stop, run_manager=run_manager, **kwargs
+    )
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_openai\chat_models\base.py", line 1738, in _generate
+    _handle_openai_api_error(e)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langchain_openai\chat_models\base.py", line 1733, in _generate
+    raw_response = self.client.with_raw_response.create(**payload)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\_legacy_response.py", line 367, in wrapped
+    return cast(LegacyAPIResponse[R], func(*args, **kwargs))
+                                      ~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\_utils\_utils.py", line 298, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1281, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<53 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\_base_client.py", line 1332, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aoriol\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\openai\_base_client.py", line 1105, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.NotFoundError: Error code: 404 - {'error': {'message': 'The model `llama-3.3-70b-versatile` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}
