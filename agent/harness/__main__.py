@@ -85,8 +85,8 @@ def main() -> None:
     sys.exit(0)
 
 
-def _summary(outcome, bb, stats, variant, units) -> None:
-    print(f"\n=== {outcome.upper()} after {units} step(s) [{variant.name}] ===")
+def _summary(outcome, bb, stats, steps) -> None:
+    print(f"\n=== {outcome.upper()} after {steps} step(s) ===")
     for line in bb.log:
         print(f"  {line}")
     avg = stats.prompt_tokens // stats.calls if stats.calls else 0
