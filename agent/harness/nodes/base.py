@@ -60,7 +60,13 @@ class Node:
     prompt: str
     tools: tuple = ()       # tool names from agent.runtime.tools.make_tools
     reads: tuple = ()       # kinds of log entry this node is allowed to see
-    max_rounds: int = 2     # tool-call rounds before the node is cut off
+    # Tool-call rounds before the node is cut off. Sized to let one node finish
+    # a read -> reason -> edit -> run -> read-the-error -> fix chain, which is
+    # the atomic unit of coding work. The earlier ceilings (2-4) cut that chain
+    # in half and handed the remainder to a node with no memory of it -- and
+    # `force_summary` spends one of them, so a 3-round reporting node had two
+    # rounds that could touch a tool.
+    max_rounds: int = 2
     instruction: str = ""   # the ask, when no brief is written for this step
     # Is this node's value its *text* (a report) or its *tool effects* (an
     # action)? Only a reporting node benefits from a forced no-tools final

@@ -15,9 +15,17 @@ printing `log.entries` shows the session's whole state in the order it arrived.
 Two rules keep this cheap:
 
 - **Every cap here is a token-budget decision**, not a formatting preference.
-  They are sized so the largest realistic view stays near ~1,200 tokens, leaving
-  room for tool schemas inside the smallest pool member's ceiling (6,000 TPM ->
-  ~5,400 usable).
+  They are sized against the *mid* of the pool rather than its floor. The
+  earlier sizing (~1,200 tokens, to fit a 6,000-TPM Groq member with room for
+  tool schemas) shaped every view in the harness around three of ten pool
+  members; the other seven hold 128k-250k
+  ([llm_router/config.yaml](../../llm_router/config.yaml)). The router already
+  excludes any member a request would overflow
+  ([4.2](../../docs/04-failover.md#42-size-aware-selection)), so a richer view
+  routes itself to a wider member instead of being truncated to fit the
+  narrowest one -- and a step that genuinely stays small still lands on Groq.
+  Size-aware selection is what decides the tier; these caps only decide what a
+  node is allowed to know.
 - **Clipping happens on the way in**, once, in the writer that knows what it is
   writing -- command output is clipped from the end because pytest puts the
   failure summary there, a diff from the start. A view never has to re-decide.
@@ -30,15 +38,18 @@ from typing import Optional
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
-MAX_FILES = 12
-MAX_NOTES = 6
-MAX_NOTE_CHARS = 500
-MAX_EDITS = 8
+MAX_FILES = 24
+MAX_NOTES = 12
+MAX_NOTE_CHARS = 1_200
+MAX_EDITS = 16
 # Command output is tail-clipped, not head-clipped: pytest puts the failure
-# summary at the end, which is the part a model needs to react to.
-MAX_EXEC_CHARS = 1_500
-MAX_STEPS_SHOWN = 10
-MAX_STEP_CHARS = 120
+# summary at the end, which is the part a model needs to react to. 1,500 chars
+# was under one real traceback: the assertion line and the short test summary
+# are what a writer has to react to, and clipping to fit Groq routinely cut
+# them off mid-frame.
+MAX_EXEC_CHARS = 6_000
+MAX_STEPS_SHOWN = 20
+MAX_STEP_CHARS = 200
 # The session's own diff, shown to the nodes that judge it (document, review).
 # Both of those are routed to wide-context members, so this cap is generous
 # compared with the rest -- it is the one kind whose whole value is detail.

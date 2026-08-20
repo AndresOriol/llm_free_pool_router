@@ -40,7 +40,7 @@ NODE = Node(
     prompt=PROMPT,
     tools=("find_files", "search_code", "read_lines", "list_dir"),
     reads=("task",),
-    max_rounds=3,
+    max_rounds=6,
     report=report_from_text,
     absorb=absorb,
 )

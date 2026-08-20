@@ -23,7 +23,7 @@ NODE = Node(
     prompt=PROMPT,
     tools=("read_lines", "search_code"),
     reads=("task", "diff", "notes", "exec"),
-    max_rounds=3,
+    max_rounds=5,
     min_context=WIDE,
     report=report_from_text,
 )
