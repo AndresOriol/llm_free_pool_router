@@ -35,17 +35,22 @@ The config does **not** list one entry per provider. It lists accounts and
 models separately, and the loader multiplies them:
 
 ```
-accounts:  groq_1, gemini_1
+accounts:  groq_1, gemini_1, gemini_2
 models:    Llama3_70b (groq), Gemini_3_5_Flash (gemini), ...
                  ↓
-providers: Llama3_70b_groq_1, Gemini_3_5_Flash_gemini_1, ...
+providers: Llama3_70b_groq_1, Gemini_3_5_Flash_gemini_1,
+           Gemini_3_5_Flash_gemini_2, ...
 ```
 
 Every model is fanned out across every account on its platform
-([loader.py](../llm_router/loader.py)). Adding a second Groq account therefore
-gives *every* Groq model a second account instantly, without touching the model
-list. This is the single most important property of the config format: the pool
-is meant to grow by adding accounts, and that must stay a one-line change.
+([loader.py](../llm_router/loader.py)). This is the single most important
+property of the config format: the pool is meant to grow by adding accounts,
+and that must stay a one-line change.
+
+It has been exercised once. Adding `gemini_2` — six lines, no model touched —
+took every Gemini model from one account to two, and the pool from 14 providers
+to 21. That is the whole mechanism working as intended, and it is what makes
+running a scenario at n=5 affordable rather than extravagant.
 
 A provider whose account key is missing from the environment is **skipped with
 a warning**, not raised on. A half-filled `.env` gets you a working smaller
