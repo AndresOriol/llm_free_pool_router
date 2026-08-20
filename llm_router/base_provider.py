@@ -1,3 +1,4 @@
+import re
 import time
 import logging
 from abc import ABC, abstractmethod
@@ -96,14 +97,33 @@ def is_decommissioned(exc: Exception) -> bool:
     that will never work again. So it is dropped from the pool for the rest of
     the process and the run carries on with the others -- which is the whole
     point of holding a pool.
+
+    **The status is not always reachable.** `langchain_google_genai` catches the
+    SDK's `APIError` and re-raises its own `ChatGoogleGenerativeAIError`, which
+    is a plain exception: no `.status_code`, no `.code`, just the original text
+    in the message. So `_status_of` returns None and the 404 test below never
+    fires. That is how `gemini-2.5-flash` -- retired with "no longer available
+    to new users" -- killed both runs of a batch after this function was
+    supposedly written to prevent exactly that. The status is therefore read out
+    of the message too, which is the only place a wrapped error still has it.
     """
     message = str(getattr(exc, "message", "") or exc).lower()
     for signal in ("model_not_found",
                    "does not exist or you do not have access",
-                   "is not found for api version"):
+                   "is not found for api version",
+                   # Google's wording when a model is closed to new users. It
+                   # is a retirement, whatever the status says.
+                   "no longer available"):
         if signal in message:
             return True
-    return _status_of(exc) == 404
+    if _status_of(exc) == 404:
+        return True
+    # A wrapped 404, read out of the text. Both halves are required: a bare
+    # `404` appears in plenty of messages that are not retirements (a token
+    # count, a port, an id), and "not found" alone is said about files and
+    # fields as often as about models.
+    return bool(re.search(r"\b404\b", message)
+                and ("not_found" in message or "not found" in message))
 
 
 def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
