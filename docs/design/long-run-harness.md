@@ -166,6 +166,10 @@ Reopen only with new evidence.
 | **J2 is built first, as a Claude Code skill; J1 comes out of what J2 finds** | Error analysis precedes judge design. A rubric written before the failures are understood is the mistake §6.3 already caught once |
 | **J2 never runs on the free pool** | It is the instrument used to *build* the system; an unreliable system cannot supply its own diagnosis |
 | **Every report is kept** | The sequence of reports is the project's memory of what was tried and believed at the time |
+| **The per-run post-mortem is a subagent, not a skill; J2 stays a skill** | Different unit and different context budget. One run per isolated context, several per batch (§9.4) |
+| **The instrument is fixed before the post-mortem is built** | The evidence could not say what a role was given, so a reviewer built on it would have concluded "cannot determine" on every step worth explaining (§9.2) |
+| **The post-mortem returns a narrative with citations, never a score** | Pass rate is already noise at these sample sizes; a second number would be a second thing to over-read (§9.5) |
+| **Every post-mortem is kept, like every report** | Same reasoning: a diagnosis that quietly stops being true is itself a finding |
 
 ## 6. The evaluation process
 
@@ -460,8 +464,176 @@ built from the journal rather than from what anyone said.
 
 ---
 
+## 9. Reading one session back: the post-mortem
+
+*Added after auditing what the first batch's evidence could and could not
+answer. The audit's conclusion is §9.2, and it is the reason this section
+exists at all.*
+
+### 9.1 J2 is the wrong granularity for "why"
+
+J2 works on a **batch**: it counts categories and ranks what to change. That is
+the right shape for deciding where to spend the next change, and the wrong shape
+for understanding a single derailment — the bundle it reads clips each run to a
+few thousand characters, which is enough to see *that* a run went wrong and not
+enough to see *where it turned*.
+
+J2's own procedure asks for "one note per failed run, in your own words, before
+any categorising". Those notes are currently improvised from the clipped bundle.
+A **per-run post-mortem** produces them properly, and J2 then works over the
+post-mortems rather than over raw evidence. So this is not a competing judge; it
+is the step that supplies J2's first input.
+
+| | Post-mortem | J2 | J1 |
+| --- | --- | --- | --- |
+| Unit | one run | one batch | one run |
+| Question | where did it turn, and what did it have | what fails most, what to fix | is this run acceptable |
+| Output | a narrative with citations | a taxonomy with counts | binary verdicts |
+| Exists | being built | built | not built |
+
+### 9.2 The finding: the evidence could not say what a role was given
+
+The first batch's report has a paragraph it could not finish — an edit the
+journal claims and the tree does not contain — and it names the reason: the
+workdir is gone and nothing recorded the intermediate state. That is one
+instance of a general hole.
+
+`threshold-off-by-one` r1, journal step 6, is the sharper case:
+
+```
+write: INSUFFICIENT_CONTEXT: "Missing contents of alerts/rules.py to determine
+                              threshold checking and message formatting"
+```
+
+A role is saying, in the exact words §8.1 designed for it, *you did not give me
+enough*. **And nothing on disk said what it had been given.** The signal the
+envelope exists to produce arrived, and the instrument could not read it.
+
+Three gaps, all in the same direction:
+
+| Not recorded | Why it matters |
+| --- | --- |
+| The brief's `CONTEXT` and `DONE_WHEN` — `Step` kept only `goal` | The orchestrator pushing context down is the entire mechanism of §8.1. It was the one variable not being logged |
+| The prompt a role actually received | Which blackboard sections rendered, and what got clipped out of them. Whether a role was blind is not inferable from its reply |
+| The model's reply before `envelope.py` parsed it | A model that wrote nonsense and a parser that mangled sense are indistinguishable afterwards. `think-leakage` was found by luck, from text that happened to survive into a finding |
+
+The consequence is precise: on this evidence a review can say *"step 7 invented
+`alerts/formatter.py` instead of editing `alerts/message.py`"* — which J2 already
+said — but not *"and its brief named no file, so inventing one was the only move
+available to it."* The first is a report. The second is a recommendation. Only
+the second changes anything.
+
+**This generalises past the post-mortem.** Every proposal in §8.1 is a claim
+about what a role should be handed; none of them could have been evaluated
+against a recorded run.
+
+### 9.3 What is now captured
+
+Three additions, none of which touches a decision the harness makes:
+
+- **`.harness/steps/NN-<role>.md`, one file per model turn** — the brief it was
+  given, the prompt it received, its raw reply, and its tool calls with their
+  outputs. The orchestrator's own turns are included: its reply *is* the brief,
+  so the decision and its inputs sit in one file. Written by `Transcript` in
+  [session.py](../../agent/harness/session.py); a resumed session continues the
+  numbering rather than overwriting the turns that preceded the crash.
+- **`journal.jsonl` carries the whole brief** — `context` and `done_when`
+  alongside `goal`, so the cheap artifact stays sufficient for counting and the
+  expensive one is only opened when a step needs explaining.
+- **`trace.jsonl` records each provider's reply text**, clipped like every other
+  field. This is the per-*attempt* view, so it also attributes a malformed reply
+  to the pool member that produced it.
+
+Cost is about 5 KB per turn, ~70 KB for a fourteen-step session. Deliberately
+*not* folded into the journal: the journal is the crash-resume substrate, re-read
+line by line on every resume, and it should stay cheap to read.
+
+**The transcript earned itself on its first output.** The deterministic
+post-write `EXECUTE` brief carries `CONTEXT: ok: replaced 1 occurrence(s) in
+/calc.py` and no test command — the Executor is asked to decide what would
+convince it while being told only that something changed somewhere. That is
+visible in one file now and was invisible before. ❓ Whether the forced briefs
+should carry more is the first question the post-mortem should be pointed at.
+
+### 9.4 A subagent, not a skill
+
+J2 is a skill because it is invoked once per batch, in the main context, and its
+output is the thing the human reads next. The post-mortem is neither:
+
+- **Context.** A session run is fourteen steps, ~100 provider calls, plus the
+  diff, the hidden-test output and the rationale. Reviewing several in one
+  context exhausts it before the synthesis, and the synthesis is J2's job
+  anyway.
+- **It is a loop, not a call.** batch → one post-mortem per run → J2 over the
+  post-mortems → a change → repeat. That wants something launchable per run,
+  with its own context, several times.
+
+So: a subagent that writes **one file per run** to
+`evals/results/reviews/<run_id>.md`, and J2 reads that directory instead of
+improvising its open-coding notes. Reviews are kept forever, on the same
+reasoning as reports (§5): a diagnosis that quietly stops being true between two
+runs is itself a finding.
+
+### 9.5 What it must produce, and what it must not
+
+**Not a score.** Pass rate is already noise at these sample sizes, and a second
+number would be a second thing to over-read. Quality is currently poor enough
+that the useful output is a description of *how* it went wrong, not a position
+on a scale.
+
+But "not a score" cannot mean "free-form", or two post-mortems are not
+comparable and the sequence stops being a record. What is pinned is the
+**questions**, not a scale:
+
+1. **What was it asked to do**, and what would have counted as done.
+2. **The turn-by-turn account** — what happened, in the order it happened.
+3. **The first turn that could not be recovered from**, named by turn number.
+   Not the first mistake: the first one the rest of the session could not undo.
+4. **What that turn had** — its brief, and what its prompt did and did not
+   contain. This is the question the whole instrument change exists to serve.
+5. **What it would have needed** to go the other way.
+6. **What in the harness would have supplied that** — a role's tools, a
+   blackboard section's cap, a deterministic edge, the orchestrator's brief. If
+   the honest answer is "a better model", it says that instead of inventing a
+   mechanism.
+
+Every claim cites `steps/NN-<role>.md`, `journal:N`, or a line in `trace.jsonl`,
+on the same rule as §6.4: the human must be able to open it and disagree.
+
+❓ Open: whether the post-mortem should also read runs that **passed**. A pass
+that happened for the wrong reason is exactly what §6.5's spec-gaming gap
+describes, and it is invisible to an analysis that only reads failures.
+
+### 9.6 Where the loop stands
+
+```
+scenarios ──▶ batch ──▶ post-mortem per run ──▶ J2 over the batch ──▶ change
+    ▲                                                                   │
+    └───────────────────────────────────────────────────────────────────┘
+```
+
+Two links are weak, and they are weak for the same reason. **The scenario set is
+three, one of them exhausted** (§6.3 needs varied failures to code, and there
+are not enough). And **five of the eight categories in
+[9.6](../09-scenarios.md#96-categories-to-cover) have never been run at all** —
+including `trap`, which is the only probe of over-eagerness, and symptom-only
+bugfix, which is the reason no `retrieval` failure has ever been observed: every
+scenario so far hands over the file.
+
+A second Gemini account changes what is affordable here. Reps of five per
+scenario stop being extravagant, and enough varied failures to code is the
+binding constraint on the whole loop.
+
+---
+
 ## Changelog
 
+- **v7** — added §9, the per-run post-mortem. Audited what the first batch's
+  evidence could answer and found the gap that motivates it: nothing recorded
+  what a role was *given*, only what it concluded (§9.2). Instrumented in the
+  same pass — a per-turn transcript, the whole brief in the journal, the raw
+  reply in the trace. Settled that the post-mortem is a subagent and that J2
+  reads its output rather than raw evidence.
 - **v6** — the Executor gets a model and a shell (§4.2, §8); §4 broadened to
   cover everything the agent may run. Added §8.1, the handoff envelope: the
   Orchestrator pushes curated context down, roles can answer
