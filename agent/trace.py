@@ -60,6 +60,18 @@ def _model_name(serialized, metadata, invocation_params) -> str:
     return "unknown"
 
 
+def _reply(response) -> Optional[str]:
+    """The model's text, clipped. Separates "the model wrote nonsense" from
+    "the parser mangled it" -- indistinguishable once envelope.py has run, and
+    one recorded failure class (`<think>` blocks landing in findings) is only
+    visible here, at the provider that emitted them.
+    """
+    try:
+        return _clip(response.generations[0][0].text) or None
+    except (AttributeError, IndexError, TypeError):
+        return None
+
+
 def _usage(response) -> tuple[Optional[int], Optional[int]]:
     """(tokens_in, tokens_out) -- usage_metadata first, then llm_output."""
     try:
@@ -110,7 +122,8 @@ class JsonlTracer(BaseCallbackHandler):
     def on_llm_end(self, response, *, run_id=None, **kwargs):
         tokens_in, tokens_out = _usage(response)
         self._write("llm_end", run_id=run_id, ok=True,
-                    tokens_in=tokens_in, tokens_out=tokens_out)
+                    tokens_in=tokens_in, tokens_out=tokens_out,
+                    text=_reply(response))
 
     def on_llm_error(self, error, *, run_id=None, **kwargs):
         # One of these per rerouted attempt: the failover-bounce count.

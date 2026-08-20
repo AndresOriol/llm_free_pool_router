@@ -59,6 +59,12 @@ def _collect_session_artifacts(workdir: Path, out_dir: Path) -> None:
     reports = sorted((state / "reports").glob("session-*.md"))
     if reports:
         shutil.copyfile(reports[-1], out_dir / "rationale.md")
+    # The per-turn transcript: prompt in, reply out. It is the only artifact
+    # that says what a role was given, so a post-mortem that loses it can
+    # report where a run went wrong but not why.
+    steps = state / "steps"
+    if steps.is_dir():
+        shutil.copytree(steps, out_dir / "steps", dirs_exist_ok=True)
 
 
 def _outcome(execution: dict, verification: dict, tampered: list) -> str:

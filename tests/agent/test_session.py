@@ -16,9 +16,9 @@ from agent.harness.blackboard import Blackboard
 from agent.harness.envelope import Brief, parse_brief, parse_report
 from agent.harness.loop import RoleResult, Stats, run_role
 from agent.harness.roles import SESSION_ORCHESTRATE, SESSION_ROLES
-from agent.harness.session import (Git, Journal, Step, append_to_notes,
-                                   build_report, read_notes, replay,
-                                   run_session, write_rationale)
+from agent.harness.session import (Git, Journal, Step, Transcript,
+                                   append_to_notes, build_report, read_notes,
+                                   replay, run_session, write_rationale)
 from agent.harness.tools import make_tools
 from agent.restricted_backend import RestrictedShellBackend
 from tests.agent.test_harness import FIXED, ScriptedModel, ai, check, seed_project
@@ -333,6 +333,61 @@ def test_endless_exploration_is_refused():
     check(f"a write was forced, got {actions}", "write" in actions)
     check("and it is recorded as a refusal",
           any("EXPLORE refused" in line for line in bb.log))
+
+
+def test_every_turn_records_what_it_was_given():
+    """The evidence a post-mortem needs, and did not have.
+
+    A run's journal said `write: INSUFFICIENT_CONTEXT: missing the contents of
+    alerts/rules.py` and nothing on disk said what the writer had been handed.
+    That is the difference between naming a failure and diagnosing it, so the
+    prompt and the raw reply are now kept per turn.
+    """
+    root = seed_project()
+    backend = RestrictedShellBackend(root_dir=str(root), allow_git=True)
+    toolset = make_tools(backend)
+    model = ScriptedModel([
+        ai("ACTION: WRITE\nGOAL: fix add\nCONTEXT: /calc.py returns a - b\n"
+           "DONE_WHEN: the edit is applied"),
+        ai(calls=[("replace_in_file", {"file_path": "/calc.py",
+                                       "old_text": "return a - b",
+                                       "new_text": "return a + b"})]),
+        ai("STATUS: DONE | FINDING: applied"),
+    ] + [ai("ACTION: GIVEUP")] * 4)
+
+    bb, stats, outcome, steps = run_session(model, backend, toolset,
+                                            "add() is wrong", root, max_steps=2)
+
+    turns = sorted((root / ".harness" / "steps").glob("*.md"))
+    check(f"one file per model turn, got {[t.name for t in turns]}", len(turns) >= 2)
+    check("the orchestrator's own turn is kept too",
+          turns[0].name.endswith("-orchestrate.md"))
+
+    write_turn = next(t for t in turns if t.name.endswith("-write.md"))
+    text = write_turn.read_text(encoding="utf-8")
+    check("the brief it was given is recorded", "/calc.py returns a - b" in text)
+    check("so is the prompt it actually received", "# Task" in text)
+    check("and the reply before parsing mangled it", "STATUS: DONE | FINDING" in text)
+    check("with the tool calls it made", "replace_in_file" in text)
+
+    journaled = [s for s in steps if s["action"] == "write"][0]
+    check("the journal carries the whole brief, not just the goal",
+          journaled["context"] == "/calc.py returns a - b")
+    check("including what would have ended the step",
+          journaled["done_when"] == "the edit is applied")
+
+
+def test_a_resumed_session_does_not_overwrite_its_transcript():
+    """R2 says a killed session resumes. Turn 1 of the second life must not
+    land on top of turn 1 of the first, or the crash erases its own cause."""
+    root = seed_project()
+    directory = root / ".harness" / "steps"
+    first = Transcript(directory)
+    first.write("explore", RoleResult(text="a", outputs=[], prompt="p"))
+    resumed = Transcript(directory)
+    resumed.write("write", RoleResult(text="b", outputs=[], prompt="q"))
+    check("both turns survive", len(list(directory.glob("*.md"))) == 2)
+    check("and the numbering continued", (directory / "02-write.md").is_file())
 
 
 def test_a_session_that_gets_stuck_still_reports():

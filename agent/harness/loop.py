@@ -62,6 +62,13 @@ class RoleResult:
     # decide what happened; `calls` is what lets a session say *which command*
     # produced an exit code, which is the substrate a rationale has to cite.
     calls: list = field(default_factory=list)
+    # The exact prompt this role was handed, before any tool call. Without it a
+    # post-mortem can see that a role went wrong but not whether it was given
+    # what it needed -- and in a design whose whole mechanism is the
+    # orchestrator curating context downward, that is the question worth
+    # asking. The system prompt is role-static and lives in roles.py; only this
+    # half varies per step.
+    prompt: str = ""
 
 
 def run_role(model, role, toolset, bb: Blackboard, config: dict,
@@ -125,7 +132,8 @@ def run_role(model, role, toolset, bb: Blackboard, config: dict,
                                "args": call.get("args") or {}, "output": out})
             messages.append(ToolMessage(content=out, tool_call_id=call.get("id", "")))
 
-    return RoleResult(text=text, outputs=outputs, calls=calls_made)
+    return RoleResult(text=text, outputs=outputs, calls=calls_made,
+                      prompt=messages[1].content)
 
 
 def _text_of(response) -> str:
