@@ -51,17 +51,17 @@ def report(result) -> Report:
         Report(status=status, finding=finding, evidence=evidence), result)
 
 
-def absorb(result, bb) -> None:
+def absorb(result, log) -> None:
     outputs = [out for name, out in result.outputs if name == "run_command"]
     if outputs:
-        bb.set_exec(outputs[-1], exit_code(outputs[-1]) == 0)
+        log.ran("execute", outputs[-1], exit_code(outputs[-1]) == 0)
 
 
 NODE = Node(
     name="execute",
     prompt=PROMPT,
     tools=("run_command", "create_file"),
-    sections=("task", "edits"),
+    reads=("task", "edits"),
     max_rounds=3,
     reports=False,
     report=report,

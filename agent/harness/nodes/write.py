@@ -15,9 +15,9 @@ PROMPT = (f"{COMMON}\nYou apply code changes, exactly as briefed. You do not "
           "run tests and you do not explore.")
 
 
-def absorb(result, bb) -> None:
+def absorb(result, log) -> None:
     for edit in applied_edits(result):
-        bb.add_edit(edit)
+        log.edit("write", edit)
 
 
 NODE = Node(
@@ -27,7 +27,7 @@ NODE = Node(
     # match the file exactly, and a writer that cannot look reports BLOCKED --
     # observed, verbatim: "no tool for reading files is provided".
     tools=("read_lines", "replace_in_file", "create_file"),
-    sections=("task", "files"),
+    reads=("task", "files"),
     max_rounds=4,
     reports=False,
     report=report_from_edits,

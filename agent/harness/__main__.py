@@ -50,7 +50,7 @@ def build(workdir: Path, config=None):
     if shell:
         logging.warning("HARNESS_SHELL=1: the Executor has an unrestricted shell. "
                         "Run this inside a container.")
-    return model, backend, make_tools(backend, shell=shell)
+    return model, make_tools(backend, shell=shell)
 
 
 def main() -> None:
@@ -70,12 +70,12 @@ def main() -> None:
         config["callbacks"] = [tracer]
         logging.info(f"Writing eval trace to {tracer.path}")
 
-    model, backend, toolset = build(workdir, config)
+    model, toolset = build(workdir, config)
 
-    bb, stats, outcome, steps = run_session(
-        model, backend, toolset, task, workdir, config=config,
+    log, stats, outcome, steps = run_session(
+        model, toolset, task, workdir, config=config,
         max_steps=int(os.environ.get("HARNESS_MAX_STEPS") or MAX_STEPS))
-    _summary(outcome, bb, stats, len(steps))
+    _summary(outcome, log, stats, len(steps))
     # Exit 0 for any *clean* end -- done, gave up, or out of budget. All three
     # wrote a rationale and left the branch reviewable, which is what R3 asks of
     # a session that gets stuck. Exiting non-zero made the eval runner record an
@@ -85,9 +85,9 @@ def main() -> None:
     sys.exit(0)
 
 
-def _summary(outcome, bb, stats, steps) -> None:
+def _summary(outcome, log, stats, steps) -> None:
     print(f"\n=== {outcome.upper()} after {steps} step(s) ===")
-    for line in bb.log:
+    for line in log.texts("steps"):
         print(f"  {line}")
     avg = stats.prompt_tokens // stats.calls if stats.calls else 0
     print(f"\nmodel calls: {stats.calls} | ~prompt tokens: {stats.prompt_tokens} "

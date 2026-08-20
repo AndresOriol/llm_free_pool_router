@@ -16,16 +16,16 @@ PROMPT = (f"{COMMON}\nYou keep documentation true to the code. You read the "
           "wrong. You never change code.")
 
 
-def absorb(result, bb) -> None:
+def absorb(result, log) -> None:
     for edit in applied_edits(result):
-        bb.add_edit(edit)
+        log.edit("document", edit)
 
 
 NODE = Node(
     name="document",
     prompt=PROMPT,
     tools=("read_lines", "find_files", "replace_in_file", "create_file"),
-    sections=("task", "diff", "edits"),
+    reads=("task", "diff", "edits"),
     max_rounds=4,
     reports=False,
     min_context=WIDE,

@@ -514,7 +514,7 @@ Three gaps, all in the same direction:
 | Not recorded | Why it matters |
 | --- | --- |
 | The brief's `CONTEXT` and `DONE_WHEN` — `Step` kept only `goal` | The orchestrator pushing context down is the entire mechanism of §8.1. It was the one variable not being logged |
-| The prompt a role actually received | Which blackboard sections rendered, and what got clipped out of them. Whether a role was blind is not inferable from its reply |
+| The prompt a role actually received | Which kinds of log entry rendered, and what got clipped out of them. Whether a role was blind is not inferable from its reply |
 | The model's reply before `protocol.py` parsed it | A model that wrote nonsense and a parser that mangled sense are indistinguishable afterwards. `think-leakage` was found by luck, from text that happened to survive into a finding |
 
 The consequence is precise: on this evidence a review can say *"step 7 invented
@@ -593,7 +593,7 @@ comparable and the sequence stops being a record. What is pinned is the
    contain. This is the question the whole instrument change exists to serve.
 5. **What it would have needed** to go the other way.
 6. **What in the harness would have supplied that** — a role's tools, a
-   blackboard section's cap, a deterministic edge, the orchestrator's brief. If
+   log kind's cap, a deterministic edge, the orchestrator's brief. If
    the honest answer is "a better model", it says that instead of inventing a
    mechanism.
 

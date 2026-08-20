@@ -44,8 +44,9 @@ task, replicated. It is deleted, not disabled — `git log` is the record.
   `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
   nothing about sessions.
 - [agent/harness](agent/harness/) — the agent itself: a LangGraph state machine
-  of narrow nodes, each seeing one slice of a shared blackboard. One file per
-  node in [nodes/](agent/harness/nodes/); the edges and the vetoes in
+  of narrow nodes over one shared log ([log.py](agent/harness/log.py)), each
+  node reading only the kinds of entry it declares. One file per node in
+  [nodes/](agent/harness/nodes/); the edges and the vetoes in
   [graph.py](agent/harness/graph.py); what a session leaves behind in
   [record/](agent/harness/record/).
 - [evals](evals/) — the harness that decides whether a change to either of the

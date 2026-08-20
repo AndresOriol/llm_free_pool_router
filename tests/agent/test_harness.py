@@ -14,7 +14,7 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage
 
-from agent.harness.blackboard import Blackboard, MAX_NOTE_CHARS
+from agent.harness.log import Log, MAX_NOTES, MAX_NOTE_CHARS
 from agent.harness.nodes import ORCHESTRATOR, WORKERS, Stats, run_node
 from agent.runtime.tools import make_tools
 from agent.runtime.backend import RestrictedShellBackend
@@ -62,21 +62,27 @@ def check(label, cond):
         raise AssertionError(label)
 
 
-def test_blackboard_caps():
-    bb = Blackboard(task="t")
-    bb.add_note("x" * (MAX_NOTE_CHARS + 500))
-    check("note is clipped", len(bb.notes[0]) <= MAX_NOTE_CHARS + 20)
-    for i in range(20):
-        bb.add_note(f"note {i}")
-    check("notes are capped", len(bb.notes) <= 6)
-    bb.add_files(["/a.py", "/a.py", "/b.py"])
-    check("files deduped", bb.files.count("/a.py") == 1)
+def test_log_caps():
+    """Clipped on the way in, capped on the way out, and never the whole log."""
+    log = Log(task="t")
+    log.note("explore", "x" * (MAX_NOTE_CHARS + 500))
+    check("a note is clipped as it is written",
+          len(log.texts("notes")[0]) <= MAX_NOTE_CHARS + 20)
 
-    # A role only ever sees the sections it declares.
-    bb.set_exec("boom", False)
-    rendered = bb.render(("task", "files"))
-    check("undeclared section absent", "boom" not in rendered)
-    check("declared section present", "/a.py" in rendered)
+    for i in range(20):
+        log.note("explore", f"note {i}")
+    shown = log.view(("notes",))[0].content
+    check("but only the last few are shown", shown.count("[explore]") <= MAX_NOTES)
+    check("and they are the last few", "note 19" in shown and "note 0" not in shown)
+
+    log.files("explore", ["/a.py", "/a.py", "/b.py"])
+    check("files deduped", log.texts("files").count("- /a.py") == 1)
+
+    # A node only ever sees the kinds it declares.
+    log.ran("execute", "boom", False)
+    rendered = "\n".join(str(m.content) for m in log.view(("task", "files")))
+    check("undeclared kind absent", "boom" not in rendered)
+    check("declared kind present", "/a.py" in rendered)
 
 
 def test_role_isolation():
@@ -88,21 +94,21 @@ def test_role_isolation():
     root = seed_project()
     backend = RestrictedShellBackend(root_dir=str(root), allow_git=True)
     toolset = make_tools(backend)
-    bb = Blackboard(task="fix add")
+    log = Log(task="fix add")
 
     model = ScriptedModel([ai("nothing found")])
-    run_node(model, WORKERS["explore"], toolset, bb, {}, Stats())
+    run_node(model, WORKERS["explore"], toolset, log, {}, Stats())
     check("explore cannot edit", "replace_in_file" not in model.seen[0]["tools"])
     check("explore can search", "search_code" in model.seen[0]["tools"])
 
     writer = ScriptedModel([ai("applied")])
-    run_node(writer, WORKERS["write"], toolset, bb, {}, Stats())
+    run_node(writer, WORKERS["write"], toolset, log, {}, Stats())
     check("write cannot run anything", "run_command" not in writer.seen[0]["tools"])
     check("write can read, or replace_in_file cannot match",
           "read_lines" in writer.seen[0]["tools"])
 
     hub = ScriptedModel([ai("ACTION: EXPLORE")])
-    run_node(hub, ORCHESTRATOR, toolset, bb, {}, Stats())
+    run_node(hub, ORCHESTRATOR, toolset, log, {}, Stats())
     check("the orchestrator is given no tools at all", not hub.seen[0]["tools"])
 
 
@@ -116,16 +122,16 @@ def test_a_role_never_sees_another_role_s_conversation():
     root = seed_project()
     backend = RestrictedShellBackend(root_dir=str(root))
     toolset = make_tools(backend)
-    bb = Blackboard(task="fix add")
+    log = Log(task="fix add")
 
     first = ScriptedModel([
         ai(calls=[("search_code", {"pattern": "def add"})]),
         ai("found it in /calc.py"),
     ])
-    run_node(first, WORKERS["explore"], toolset, bb, {}, Stats())
+    run_node(first, WORKERS["explore"], toolset, log, {}, Stats())
 
     second = ScriptedModel([ai("ok")])
-    run_node(second, WORKERS["write"], toolset, bb, {}, Stats())
+    run_node(second, WORKERS["write"], toolset, log, {}, Stats())
     rendered = "\n".join(str(m.content) for m in second.seen[0]["messages"])
     check("the earlier role's tool call did not leak", "search_code" not in rendered)
     check("nor did its answer", "found it in" not in rendered)

@@ -114,7 +114,7 @@ Live, unresolved, and worth deciding when the evidence arrives — not before.
 | How does a free-pool judge get validated? | It must agree with the Claude judge on a labelled set before its scores can be trusted. |
 | Where does shared cooldown state live, if it ever needs to be shared across processes? | A second concurrent consumer actually existing. |
 | Where do per-provider curated docs live once the provider list grows? | The provider list growing past what one page holds ([5. Providers](05-providers.md)). |
-| Should a role's blackboard slice grow when the pool has the room, or stay narrow on principle? | An L2 scenario run with `write` given the `notes` and `exec` sections. The recorded failure it targets is a writer acting on a brief that carried nothing ([6.5](06-agent.md#65-what-each-role-sees)). |
+| Should a node's slice of the log grow when the pool has the room, or stay narrow on principle? | An L2 scenario run with `write` given the `notes` and `exec` kinds. The recorded failure it targets is a writer acting on a brief that carried nothing ([6.5](06-agent.md#65-what-each-role-sees)). |
 
 ## 13.5 Settled decisions
 

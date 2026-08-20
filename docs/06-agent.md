@@ -118,7 +118,7 @@ run cannot go wrong. All of them are in `_veto` or an edge function:
 
 **What is graph state and what is not.** The state holds only what an edge
 reads: the next worker, its brief, whether a review passed, the step count. The
-blackboard, the journal, the transcript and git are collaborators the nodes
+log, the journal, the transcript and git are collaborators the nodes
 close over. That is also why a session that exhausts its budget still writes its
 rationale — everything it learned is already on disk, not in a state object that
 died with the graph.
@@ -130,19 +130,21 @@ reasoned about in.
 
 ## 6.5 What each role sees
 
-This is the mechanism, and the one table worth memorising. A role is rendered
-exactly the blackboard sections it declares
-([nodes/](../agent/harness/nodes/), [blackboard.py](../agent/harness/blackboard.py)),
-each capped in characters:
+Everything the session knows is one ordered log of entries, each tagged with a
+*kind* and the node that wrote it ([log.py](../agent/harness/log.py)). A node
+declares the kinds it reads ([nodes/](../agent/harness/nodes/)) and is handed
+those entries as messages — the last few of each kind, and nothing else.
 
-| role | task | files | notes | edits | exec | diff | plan | log | tier |
-| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | --- |
-| **orchestrate** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | wide |
-| explore | ✓ | | | | | | | | any |
-| **write** | ✓ | ✓ | | | | | | | any |
-| execute | ✓ | | | ✓ | | | | | any |
-| document | ✓ | | | ✓ | | ✓ | | | wide |
-| review | ✓ | | ✓ | | ✓ | ✓ | | | wide |
+This is the mechanism, and the one table worth memorising:
+
+| role | task | files | notes | edits | exec | diff | steps | tier |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | --- |
+| **orchestrate** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | wide |
+| explore | ✓ | | | | | | | any |
+| **write** | ✓ | ✓ | | | | | | any |
+| execute | ✓ | | | ✓ | | | | any |
+| document | ✓ | | | ✓ | | ✓ | | wide |
+| review | ✓ | | ✓ | | ✓ | ✓ | | wide |
 
 Read the `write` row. It sees the task and a list of candidate files, and
 nothing else — not the diff, not the notes, not what the last command returned.
@@ -169,15 +171,14 @@ breadth is what makes it stupid.
 is three lines of idea:
 
 ```python
-messages = [SystemMessage(node.prompt),
-            HumanMessage(bb.render(node.sections) + "\n\n" + ask)]
+messages = [SystemMessage(node.prompt), *log.view(node.reads), HumanMessage(ask)]
 # ... up to node.max_rounds of tool calls ...
 return NodeResult(text=..., outputs=..., calls=..., prompt=...)
 ```
 
 `ask` is the orchestrator's brief. Then **the message list is discarded.** Only
-the `NodeResult` escapes, and only what the graph folds into the blackboard
-survives into the next step. No role ever sees another role's conversation.
+the `NodeResult` escapes, and only what the graph appends to the log survives
+into the next step. No role ever sees another role's conversation.
 
 That is what bounds a prompt by the role's declaration rather than by how long
 the run has been going — step 40 costs what step 1 cost — and it is why this is

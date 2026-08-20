@@ -37,14 +37,14 @@ what a session is.
 | [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
 
 `agent/harness/` is the agent itself: a LangGraph state machine of narrow nodes
-over a shared blackboard. See [6.4](06-agent.md#64-the-graph).
+over one shared log. See [6.4](06-agent.md#64-the-graph).
 
 | File | The question it answers |
 | --- | --- |
-| [nodes/](../agent/harness/nodes/) | *Who does what, with which tools, and how is it judged?* — one file per node, each declaring its prompt, its tools, its blackboard sections, and how its result is read |
+| [nodes/](../agent/harness/nodes/) | *Who does what, with which tools, and how is it judged?* — one file per node, each declaring its prompt, its tools, the log entries it reads, and how its result is read |
 | [nodes/base.py](../agent/harness/nodes/base.py) | *What is a node, and what does one call look like?* — the `Node` fields, then build the prompt, a few tool rounds, throw the conversation away |
 | [graph.py](../agent/harness/graph.py) | *What happens when, and what is the model not allowed to decide?* — the edges between nodes and every deterministic veto |
-| [blackboard.py](../agent/harness/blackboard.py) | *What does a node get to see?* — the shared state, and the per-section caps that **are** the context budget |
+| [log.py](../agent/harness/log.py) | *What does a node get to see?* — everything the session knows, as one ordered log, and the per-kind caps that **are** the context budget |
 | [protocol.py](../agent/harness/protocol.py) | *How does context get from the orchestrator to a node?* — the brief down, the report back |
 | [record/](../agent/harness/record/) | *What does a session leave behind?* — git, the journal, the per-turn transcript, the rationale, the notes file |
 | [session.py](../agent/harness/session.py) | *What is one run, start to finish?* — wiring, the step budget, resume, and the account it writes |

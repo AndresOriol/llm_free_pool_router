@@ -31,15 +31,15 @@ def _paths(result) -> list:
     return found
 
 
-def absorb(result, bb) -> None:
-    bb.add_files(_paths(result))
+def absorb(result, log) -> None:
+    log.files("explore", _paths(result))
 
 
 NODE = Node(
     name="explore",
     prompt=PROMPT,
     tools=("find_files", "search_code", "read_lines", "list_dir"),
-    sections=("task",),
+    reads=("task",),
     max_rounds=3,
     report=report_from_text,
     absorb=absorb,

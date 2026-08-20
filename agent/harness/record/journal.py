@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agent.harness.blackboard import Blackboard
+from agent.harness.log import Log
 
 
 @dataclass
@@ -63,7 +63,7 @@ class Journal:
         return steps
 
 
-def replay(journal: Journal, bb: Blackboard) -> int:
+def replay(journal: Journal, log: Log) -> int:
     """Rebuild what the session knew from the journal. Returns steps replayed.
 
     Only knowledge is restored, never actions: the files on disk already carry
@@ -74,9 +74,7 @@ def replay(journal: Journal, bb: Blackboard) -> int:
     for record in steps:
         finding = record.get("finding") or ""
         if finding:
-            bb.add_note(f"[{record.get('action', '?')}] {finding}")
+            log.note(record.get("action", "?"), finding)
         for command, code in record.get("evidence") or []:
-            bb.record("resumed", f"{command} -> exit {code}")
-    if steps:
-        bb.cycles = len(steps)
+            log.step("resumed", f"{command} -> exit {code}")
     return len(steps)

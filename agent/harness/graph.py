@@ -28,7 +28,7 @@ there is one place to read them:
 
 **What is state and what is not.** The graph's state holds only what the edges
 read: which worker is next, its brief, whether a review has passed, the step
-count. The blackboard, the journal, the transcript and git are collaborators the
+count. The log, the journal, the transcript and git are collaborators the
 nodes close over -- they are not merged between branches, they are written to.
 Keeping them out of the state also means their contents survive a
 `GraphRecursionError`, which is how a session that runs out of budget still
@@ -37,18 +37,15 @@ writes its rationale (R3: it never ends silently).
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from agent.harness.blackboard import Blackboard
+from agent.harness.log import Log
 from agent.harness.nodes import ORCHESTRATOR, WORKERS, Stats, absorb, run_node
 from agent.harness.protocol import Brief, parse_brief
 from agent.harness.record import Git, Journal, Step, Transcript
-
-logger = logging.getLogger("harness")
 
 # Steps cost roughly half a minute each against the real pool, so this is set by
 # the scenario timeout rather than by how much work a session could usefully do.
@@ -74,20 +71,20 @@ class SessionState(TypedDict, total=False):
 # The vetoes. Every one of them is a decision the orchestrator does not get.
 # ---------------------------------------------------------------------------
 
-def _veto(brief: Brief, state: SessionState, bb: Blackboard) -> tuple:
+def _veto(brief: Brief, state: SessionState, log: Log) -> tuple:
     """(brief, action) after the deterministic push-backs. See the module table."""
     action = brief.action
 
     if action == "DONE":
-        if not bb.exec_ok:
-            bb.record("orchestrate", "DONE refused: nothing has run yet")
+        if not log.exec_ok:
+            log.step("orchestrate", "DONE refused: nothing has run yet")
             return (Brief(action="EXECUTE",
                           goal="Verify the change actually works.",
                           context=brief.context,
                           done_when="A command has run and its exit code is known."),
                     "execute")
         if not state.get("reviewed"):
-            bb.record("orchestrate", "DONE refused: nothing has been reviewed")
+            log.step("orchestrate", "DONE refused: nothing has been reviewed")
             return (Brief(action="REVIEW",
                           goal="Check the change does what was asked.",
                           context=brief.context,
@@ -100,18 +97,19 @@ def _veto(brief: Brief, state: SessionState, bb: Blackboard) -> tuple:
         return brief, "giveup"
 
     recent = state.get("recent") or []
-    if (action == "EXPLORE" and bb.files
+    if (action == "EXPLORE" and log.texts("files")
             and recent[-MAX_CONSECUTIVE_EXPLORE:].count("explore")
             >= MAX_CONSECUTIVE_EXPLORE):
-        bb.record("orchestrate", "EXPLORE refused: already explored twice")
+        log.step("orchestrate", "EXPLORE refused: already explored twice")
         return (Brief(action="WRITE",
                       goal="Apply the change the task asks for.",
-                      context=(brief.context or "") + "\n" + "\n".join(bb.notes[-2:]),
+                      context=(brief.context or "") + "\n"
+                              + "\n".join(log.texts("notes")[-2:]),
                       done_when="An edit has been applied to a file."),
                 "write")
 
     if action.lower() not in WORKERS:
-        bb.record("orchestrate", f"unknown action {action!r}; exploring")
+        log.step("orchestrate", f"unknown action {action!r}; exploring")
         return Brief(action="EXPLORE", goal=brief.goal, context=brief.context), "explore"
 
     return brief, action.lower()
@@ -121,7 +119,7 @@ def _veto(brief: Brief, state: SessionState, bb: Blackboard) -> tuple:
 # The graph.
 # ---------------------------------------------------------------------------
 
-def build(model, toolset, bb: Blackboard, journal: Journal,
+def build(model, toolset, log: Log, journal: Journal,
           transcript: Transcript, git: Git, config: dict, stats: Stats,
           max_steps: int = MAX_STEPS):
     """Compile the session graph. Nodes close over the session's collaborators."""
@@ -132,9 +130,9 @@ def build(model, toolset, bb: Blackboard, journal: Journal,
         # counts supersteps and stays a backstop, not the rule.
         if state.get("step", 0) >= max_steps:
             return {"action": "exhausted", "outcome": "exhausted"}
-        decision = run_node(model, ORCHESTRATOR, toolset, bb, config, stats)
+        decision = run_node(model, ORCHESTRATOR, toolset, log, config, stats)
         transcript.write("orchestrate", decision)
-        brief, action = _veto(parse_brief(decision.text), state, bb)
+        brief, action = _veto(parse_brief(decision.text), state, log)
         if action in {"done", "giveup"}:
             return {"action": action, "brief": brief, "outcome": action}
         return {"action": action, "brief": brief}
@@ -142,13 +140,13 @@ def build(model, toolset, bb: Blackboard, journal: Journal,
     def worker(node):
         def run(state: SessionState) -> dict:
             brief = state["brief"]
-            result = run_node(model, node, toolset, bb, config, stats,
+            result = run_node(model, node, toolset, log, config, stats,
                               force_summary=node.reports, brief=brief)
             transcript.write(node.name, result, brief=brief)
             # Both of these live in the node's own file: how its raw result
             # becomes a verdict, and what of it the next node gets to see.
             report = node.report(result)
-            absorb(node, report, result, bb)
+            absorb(node, report, result, log)
 
             step = state.get("step", 0) + 1
             journal.append(Step(n=step, action=node.name, goal=brief.goal,
@@ -164,7 +162,7 @@ def build(model, toolset, bb: Blackboard, journal: Journal,
                 update["reviewed"] = done
             if node.name in {"write", "document"} and done:
                 git.commit(f"{node.name}: {(brief.goal or report.finding)[:60]}")
-                bb.set_diff(git.diff())
+                log.diff(git.diff())
             if node.name == "write" and done:
                 # "Check what you just changed" is always the right next move,
                 # so it is not worth a model call to be told so.
@@ -200,6 +198,6 @@ def build(model, toolset, bb: Blackboard, journal: Journal,
 
 def mermaid() -> str:
     """The graph's own picture. Documentation that cannot drift from the code."""
-    return build(None, {}, Blackboard(task=""), Journal(Path("j")),
+    return build(None, {}, Log(task=""), Journal(Path("j")),
                  Transcript(Path("t")), Git(Path(".")), {}, Stats()
                  ).get_graph().draw_mermaid()

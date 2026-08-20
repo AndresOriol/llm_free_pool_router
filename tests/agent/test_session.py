@@ -12,7 +12,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from agent.harness.blackboard import Blackboard
+from agent.harness.log import Log
 from agent.harness.protocol import Brief, parse_brief, parse_report
 from agent.harness.graph import mermaid
 from agent.harness.session import run_session
@@ -180,12 +180,13 @@ def test_journal_replays_knowledge_not_actions():
     with (root / "journal.jsonl").open("a", encoding="utf-8") as handle:
         handle.write('{"n": 3, "action": "wri')
 
-    bb = Blackboard(task="t")
-    replayed = replay(journal, bb)
+    log = Log(task="t")
+    replayed = replay(journal, log)
     check("only completed steps are replayed", replayed == 2)
-    check("findings are restored", any("/retry.py" in n for n in bb.notes))
-    check("evidence is restored", any("exit 1" in line for line in bb.log))
-    check("the step count carries over", bb.cycles == 2)
+    check("findings are restored", any("/retry.py" in n for n in log.texts("notes")))
+    check("evidence is restored",
+          any("exit 1" in line for line in log.texts("steps")))
+    check("both findings carry over", len(log.texts("notes")) == 2)
 
 
 # --- the human interface ---------------------------------------------------
@@ -242,24 +243,24 @@ def test_judgement_roles_declare_a_context_floor():
 
 def test_narrow_roles_still_fit_the_smallest_member():
     """The budget claim, per tier: the roles that run anywhere must still fit
-    the 6,000-TPM member even on a saturated blackboard."""
+    the 6,000-TPM member even on a saturated log."""
     root = seed_project()
     backend = RestrictedShellBackend(root_dir=str(root))
     toolset = make_tools(backend)
-    bb = Blackboard(task="fix the retry helper")
+    log = Log(task="fix the retry helper")
     for i in range(30):
-        bb.add_note(f"finding number {i} " + "y" * 400)
-        bb.add_files([f"/mod{i}.py"])
-        bb.add_edit(f"ok: edit {i}")
-    bb.set_exec("E   assert 1 == 3\n" * 400, False)
-    bb.set_diff("+++ b/retry.py\n" + "+    x = 1\n" * 400)
+        log.note("explore", f"finding number {i} " + "y" * 400)
+        log.files("explore", [f"/mod{i}.py"])
+        log.edit("write", f"ok: edit {i}")
+    log.ran("execute", "E   assert 1 == 3\n" * 400, False)
+    log.diff("+++ b/retry.py\n" + "+    x = 1\n" * 400)
     brief = Brief(action="WRITE", goal="g" * 300, context="c" * 1_200,
                   done_when="d" * 300)
 
     worst = 0
     for name in ("explore", "write", "execute"):
         stats = Stats()
-        run_node(ScriptedModel([ai("ok")]), WORKERS[name], toolset, bb, {},
+        run_node(ScriptedModel([ai("ok")]), WORKERS[name], toolset, log, {},
                  stats, brief=brief)
         worst = max(worst, stats.prompt_tokens)
     check(f"worst narrow-role prompt {worst} tok must fit a 6k-TPM model",
@@ -308,7 +309,7 @@ def test_the_budget_counts_steps_not_supersteps():
         ai("STATUS: PARTIAL | FINDING: nothing yet"),
     ] * 20)
 
-    bb, stats, outcome, steps = run_session(model, backend, toolset, "fix it",
+    log, stats, outcome, steps = run_session(model, toolset, "fix it",
                                             root, max_steps=3)
     check(f"outcome was {outcome}", outcome == "exhausted")
     check(f"exactly the budget in journal steps, got {len(steps)}", len(steps) == 3)
@@ -336,14 +337,14 @@ def test_session_end_to_end():
         ai("ACTION: DONE"),                      # accepted
     ])
 
-    bb, stats, outcome, steps = run_session(model, backend, toolset,
+    log, stats, outcome, steps = run_session(model, toolset,
                                             "add() is wrong", root, max_steps=8)
 
     check(f"outcome was {outcome}", outcome == "done")
     check("the file is actually fixed", (root / "calc.py").read_text() == FIXED)
-    check("the run verified itself", bb.exec_ok is True)
+    check("the run verified itself", log.exec_ok is True)
     check("an unreviewed done was refused",
-          any("nothing has been reviewed" in line for line in bb.log))
+          any("nothing has been reviewed" in line for line in log.texts("steps")))
     check("the edit was followed by a run without asking",
           [s["action"] for s in steps][:2] == ["write", "execute"])
     check("every step is journalled", len(steps) == 3)
@@ -375,12 +376,12 @@ def test_endless_exploration_is_refused():
         ai("applied"),
     ] + [ai("ACTION: GIVEUP")] * 6)
 
-    bb, stats, outcome, steps = run_session(model, backend, toolset,
+    log, stats, outcome, steps = run_session(model, toolset,
                                             "add() is wrong", root, max_steps=6)
     actions = [s["action"] for s in steps]
     check(f"a write was forced, got {actions}", "write" in actions)
     check("and it is recorded as a refusal",
-          any("EXPLORE refused" in line for line in bb.log))
+          any("EXPLORE refused" in line for line in log.texts("steps")))
 
 
 def test_every_turn_records_what_it_was_given():
@@ -403,7 +404,7 @@ def test_every_turn_records_what_it_was_given():
         ai("STATUS: DONE | FINDING: applied"),
     ] + [ai("ACTION: GIVEUP")] * 4)
 
-    bb, stats, outcome, steps = run_session(model, backend, toolset,
+    log, stats, outcome, steps = run_session(model, toolset,
                                             "add() is wrong", root, max_steps=2)
 
     turns = sorted((root / ".harness" / "steps").glob("*.md"))
@@ -445,14 +446,14 @@ def test_the_session_keeps_its_own_bookkeeping_out_of_the_diff():
         ai("STATUS: DONE | FINDING: applied"),
     ] + [ai("ACTION: GIVEUP")] * 4)
 
-    bb, stats, outcome, steps = run_session(model, backend, toolset,
+    log, stats, outcome, steps = run_session(model, toolset,
                                             "add() is wrong", root, max_steps=2)
 
     check("the transcript was still written",
           list((root / ".harness" / "steps").glob("*.md")))
-    check(f"and it is nowhere in the diff:\n{bb.diff[:300]}",
-          ".harness" not in bb.diff)
-    check("while the real change is", "calc.py" in bb.diff)
+    diff = log.texts("diff")[-1]
+    check(f"and it is nowhere in the diff:\n{diff[:300]}", ".harness" not in diff)
+    check("while the real change is", "calc.py" in diff)
 
 
 def test_a_resumed_session_does_not_overwrite_its_transcript():
@@ -478,7 +479,7 @@ def test_a_session_that_gets_stuck_still_reports():
         ai("STATUS: INSUFFICIENT_CONTEXT\nFINDING: no file was named"),
         ai("ACTION: GIVEUP"),
     ])
-    bb, stats, outcome, steps = run_session(model, backend, toolset, "fix it",
+    log, stats, outcome, steps = run_session(model, toolset, "fix it",
                                             root, max_steps=6)
     check(f"outcome was {outcome}", outcome == "giveup")
     rationale = next((root / ".harness" / "reports").glob("session-*.md")).read_text()
