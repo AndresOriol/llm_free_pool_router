@@ -1,23 +1,21 @@
-# Eval pool: llm_router/config.yaml minus models that are dead upstream.
+# Eval pool: a pinned copy of llm_router/config.yaml.
 #
-# Groq returns `404 model_not_found` for llama-4-scout and qwen3-32b. A 404 is
-# not in the router's transient set, so it propagates and kills the whole run.
-# Both were verified dead by probing every pool member directly.
+# It exists so both sides of a comparison draw from an identical pool even if
+# config.yaml is edited mid-batch. Regenerate after editing config.yaml.
 #
-# Dropping them here isolates a comparison from that crash. This is a
-# workaround for the measurement, NOT the fix: the router should disable a
-# decommissioned model permanently, the way it benches a rate-limited one
-# temporarily (docs/13-roadmap.md#132-what-to-do-next).
+# It used to exist for another reason: Groq 404s on a retired model, a 404 is
+# not transient, and it propagated and killed the whole run -- so dead models
+# were deleted here by hand to isolate the measurement. That was a workaround
+# for the measurement and not the fix, and it is no longer needed: the router
+# retires a member the platform says is gone and carries on with the rest
+# (llm_router/base_provider.py, is_decommissioned).
 #
-# Note which configurations this bites. A dead model is only reached if a
-# request is small enough to pass the size filter, so an agent that shrinks its
-# requests -- the whole point of the ad-hoc harness -- reaches *further* into
-# the pool and trips landmines that a token-heavy agent never gets near. The
-# 6,000-ceiling qwen3-32b was invisible to the deep-agents loop for exactly
-# this reason.
-#
-# Every eval configuration points at this same file, so both sides of a
-# comparison draw from an identical pool. Regenerate after editing config.yaml.
+# Which configurations that bit is worth remembering. A dead model is only
+# reached if a request is small enough to pass the size filter, so an agent
+# that shrinks its requests -- the whole point of the ad-hoc harness -- reaches
+# *further* into the pool and trips landmines a token-heavy agent never gets
+# near. The 6,000-ceiling qwen3-32b was invisible to the deep-agents loop for
+# exactly this reason.
 accounts:
 - name: groq_1
   user:
@@ -41,11 +39,6 @@ accounts:
   url: https://generativelanguage.googleapis.com/v1beta/models
   api_key_env: GEMINI_API_KEY_2
 models:
-- name: Llama3_70b
-  platform: groq
-  model: llama-3.3-70b-versatile
-  priority: 1
-  max_input_tokens: 12000
 - name: GptOss120b
   platform: groq
   model: openai/gpt-oss-120b
@@ -86,11 +79,6 @@ models:
   model: gemini-2.5-flash-lite
   priority: 23
   max_input_tokens: 250000
-- name: Llama3_8b
-  platform: groq
-  model: llama-3.1-8b-instant
-  priority: 30
-  max_input_tokens: 6000
 - name: Gemma4_31b
   platform: gemini
   model: gemma-4-31b-it

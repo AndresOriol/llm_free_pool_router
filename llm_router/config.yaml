@@ -48,13 +48,13 @@ accounts:
     api_key_env: GEMINI_API_KEY_2
 
 models:
-  # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
-  - name: Llama3_70b
-    platform: groq
-    model: llama-3.3-70b-versatile
-    priority: 1
-    max_input_tokens: 12000
+  # Groq retired its whole Llama line (3.3-70b, 3.1-8b, 4-scout) and qwen3-32b;
+  # all four were probed dead and removed. The router now retires a model the
+  # platform 404s on rather than dying on it, so the next retirement costs one
+  # logged attempt instead of a run -- but a known-dead entry is still noise,
+  # and does not belong here.
 
+  # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
   - name: GptOss120b
     platform: groq
     model: openai/gpt-oss-120b
@@ -68,12 +68,6 @@ models:
     max_input_tokens: 250000
 
   # -- Mid tier: solid for well-scoped implementation steps.
-  - name: Qwen3_32b
-    platform: groq
-    model: qwen/qwen3-32b
-    priority: 10
-    max_input_tokens: 6000
-
   - name: Qwen3_6_27b
     platform: groq
     model: qwen/qwen3.6-27b
@@ -96,12 +90,6 @@ models:
   # shared org-wide request budget) routinely dumps whole tasks here once the
   # reasoning/mid tiers exhaust, so quality here matters more than the tier
   # name implies. See docs/03-pool-model.md#34-priority-tiers.
-  - name: Llama4Scout
-    platform: groq
-    model: meta-llama/llama-4-scout-17b-16e-instruct
-    priority: 20
-    max_input_tokens: 30000
-
   - name: GptOss20b
     platform: groq
     model: openai/gpt-oss-20b
@@ -121,12 +109,6 @@ models:
     max_input_tokens: 250000
 
   # -- Last resort: only when everything above is in cooldown.
-  - name: Llama3_8b
-    platform: groq
-    model: llama-3.1-8b-instant
-    priority: 30
-    max_input_tokens: 6000
-
   # Gemma has unlimited TPM, so its ceiling is the model's context window.
   - name: Gemma4_31b
     platform: gemini
