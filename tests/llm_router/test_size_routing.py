@@ -64,5 +64,12 @@ def _run():
     print("size_routing: all checks passed")
 
 
+# pytest collects `test_*` functions, not `_run`. Without this the whole
+# file was inert under `python -m pytest tests`: it had never run in CI,
+# which is how a bug in the thing it checks survived having a test.
+def test_size_routing():
+    _run()
+
+
 if __name__ == "__main__":
     _run()

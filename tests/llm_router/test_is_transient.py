@@ -81,8 +81,22 @@ def _run():
     assert is_decommissioned(_Exc("404 NOT_FOUND. models/gemini-9-flash is not "
                                   "found for API version v1beta")) is True
 
+    # langchain_google_genai catches the SDK's APIError and re-raises its own
+    # plain exception, so there is no `.status_code` and no `.code` to read --
+    # only the original text. Verbatim, and it killed both runs of a batch.
+    wrapped = _Exc("Error calling model 'gemini-2.5-flash' (NOT_FOUND): 404 "
+                   "NOT_FOUND. {'error': {'code': 404, 'message': 'This model "
+                   "models/gemini-2.5-flash is no longer available to new users. "
+                   "Please update your code to use models/gemini-3.6-flash', "
+                   "'status': 'NOT_FOUND'}}")
+    assert getattr(wrapped, "status_code", None) is None, "the status is gone"
+    assert getattr(wrapped, "code", None) is None, "and so is the code"
+    assert is_decommissioned(wrapped) is True
+
     # Nothing else is a retirement -- a rate limit must still be a cooldown, and
     # a real bug must still surface.
+    assert is_decommissioned(_Exc("503 Service Unavailable", status_code=503)) is False
+    assert is_decommissioned(_Exc("model produced 404 tokens")) is False
     assert is_decommissioned(_Exc("rate_limit_exceeded", status_code=413)) is False
     assert is_decommissioned(_Exc("bad request", status_code=400)) is False
     assert is_decommissioned(ValueError("bug")) is False
@@ -102,6 +116,13 @@ def _run():
     assert provider.check_availability() is False
 
     print("is_transient: all checks passed")
+
+
+# pytest collects `test_*` functions, not `_run`. Without this the whole
+# file was inert under `python -m pytest tests`: it had never run in CI,
+# which is how a bug in the thing it checks survived having a test.
+def test_error_classification():
+    _run()
 
 
 if __name__ == "__main__":
