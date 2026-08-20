@@ -10,9 +10,7 @@ import sys
 from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
-from agent.harness import variants
-from agent.harness.loop import DEFAULT_TEST_CMD, MAX_CYCLES, solve
-from agent.harness.session import MAX_STEPS, run_session
+from agent.harness.graph import MAX_STEPS, run_session
 from agent.harness.tools import make_tools
 from agent.restricted_backend import RestrictedShellBackend
 from agent.router_chat_model import RouterChatModel
@@ -74,30 +72,17 @@ def main() -> None:
 
     model, backend, toolset = build(workdir, config)
 
-    variant = variants.get(os.environ.get("HARNESS_VARIANT"))
-    logging.info(f"Variant: {variant.name} -- {variant.note}")
-
-    if variant.topology == "session":
-        bb, stats, outcome, steps = run_session(
-            model, backend, toolset, task, workdir, config=config,
-            max_steps=variant.max_cycles_hint or MAX_STEPS)
-        _summary(outcome, bb, stats, variant, len(steps))
-        # Exit 0 for any *clean* end -- done, gave up, or out of budget. All
-        # three wrote a rationale and left the branch reviewable, which is what
-        # R3 asks of a session that gets stuck. Exiting non-zero made the eval
-        # runner record an orderly "exhausted" as `crash`, which is the one
-        # outcome that means the opposite: that nothing was reported at all.
-        # Whether the work was any good is the hidden tests' verdict, not this.
-        sys.exit(0)
-
-    bb, stats, outcome = solve(model, backend, toolset, task, config=config,
-                               test_cmd=os.environ.get("HARNESS_TEST_CMD")
-                               or DEFAULT_TEST_CMD,
-                               max_cycles=variant.max_cycles_hint or MAX_CYCLES,
-                               variant=variant)
-
-    _summary(outcome, bb, stats, variant, bb.cycles)
-    sys.exit(0 if outcome == "pass" else 1)
+    bb, stats, outcome, steps = run_session(
+        model, backend, toolset, task, workdir, config=config,
+        max_steps=int(os.environ.get("HARNESS_MAX_STEPS") or MAX_STEPS))
+    _summary(outcome, bb, stats, len(steps))
+    # Exit 0 for any *clean* end -- done, gave up, or out of budget. All three
+    # wrote a rationale and left the branch reviewable, which is what R3 asks of
+    # a session that gets stuck. Exiting non-zero made the eval runner record an
+    # orderly "exhausted" as `crash`, which is the one outcome that means the
+    # opposite: that nothing was reported at all. Whether the work was any good
+    # is the hidden tests' verdict, not this.
+    sys.exit(0)
 
 
 def _summary(outcome, bb, stats, variant, units) -> None:

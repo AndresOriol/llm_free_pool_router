@@ -1,12 +1,10 @@
-"""A session: one long unattended run over one project.
+"""What a session writes down: git, the journal, the transcript, the rationale.
 
-The pipeline in loop.py drives a *task* to a verdict. This drives a *session* --
-the unit of work described in docs/design/long-run-harness.md: the agent picks
-up the project's notes, works unattended on its own branch, updates the docs to
-match what it changed, and writes a rationale a human can review instead of the
-code.
+The graph (agent/harness/graph.py) decides what happens. This module is
+everything that survives it -- and under a review model where the human reads
+prose rather than code, that is the deliverable.
 
-Four things make it a session rather than a long task:
+Four things make a session rather than a long task, and all four live here:
 
 - **It commits.** Each completed unit is a commit on `session/<id>`; the human's
   gate is the merge, so nothing here can merge, push or reset.
@@ -17,10 +15,6 @@ Four things make it a session rather than a long task:
 - **It answers to the notes.** The project's notes file is the input and the
   output: the human writes feedback there, the session appends its account.
 
-The orchestrator is the only role that sees everything, and it writes a brief
-for each worker (agent/harness/envelope.py). Workers see their declared
-blackboard sections plus that brief -- so context is pushed down by the one role
-routed to a wide-context member, never pulled up by roles that cannot afford it.
 """
 
 from __future__ import annotations
@@ -28,31 +22,18 @@ from __future__ import annotations
 import json
 import logging
 import re
-import shlex
 import subprocess
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
 from agent.harness.blackboard import Blackboard
-from agent.harness.envelope import Brief, Report, parse_brief, parse_report
-from agent.harness.loop import Stats, run_role
-from agent.harness.roles import SESSION_ORCHESTRATE, SESSION_ROLES
+
 
 logger = logging.getLogger("harness")
 
 STATE_DIR = ".harness"
 NOTES_FILENAMES = ("NOTES.md", "notes.md")
-MAX_STEPS = 24
-# Roles whose value is what they *say*; the rest are judged by what they did.
-_REPORTING = {"explore", "review"}
-# Consecutive explores tolerated once the files are known. Observed on the
-# first live run: nine of twelve steps were `explore`, re-reading the same four
-# files, because reading is the move an orchestrator can always justify. At some
-# point somebody has to write something.
-MAX_CONSECUTIVE_EXPLORE = 2
-_EXIT_RE = re.compile(r"^exit=(-?\d+)", re.MULTILINE)
 
 
 # ---------------------------------------------------------------------------
@@ -324,84 +305,6 @@ def read_notes(workdir: Path, limit: int = 4_000) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Turning a role's raw result into a report.
-# ---------------------------------------------------------------------------
-
-def _exit_code(output: str):
-    match = _EXIT_RE.search(output or "")
-    return int(match.group(1)) if match else None
-
-
-def build_report(action: str, result) -> Report:
-    """What a role achieved, judged by the right thing for that role.
-
-    A reporting role is taken at its word about what it *found*. An acting role
-    is not: its status comes from its tool effects. A model that says "tests
-    pass" about a failing run must not be able to end a session, and under a
-    review model where nobody reads the code, it would end it convincingly.
-    """
-    if action in _REPORTING:
-        return parse_report(result.text)
-
-    evidence, ran_ok = [], None
-    for call in result.calls:
-        if call["name"] != "run_command":
-            continue
-        code = _exit_code(call["output"])
-        evidence.append([str(call["args"].get("command", "?")), code])
-        if code is not None:
-            ran_ok = code == 0 if ran_ok is None else (ran_ok and code == 0)
-
-    applied = [out for name, out in result.outputs
-               if name in {"replace_in_file", "create_file"} and out.startswith("ok:")]
-
-    if action == "execute":
-        status = "DONE" if ran_ok else ("PARTIAL" if evidence else "BLOCKED")
-        finding = (f"ran {len(evidence)} command(s); "
-                   f"{'all succeeded' if ran_ok else 'something failed'}"
-                   ) if evidence else "ran nothing"
-    else:
-        status = "DONE" if applied else "PARTIAL"
-        finding = applied[-1] if applied else (result.text or "nothing applied")[:200]
-
-    # A role that reports INSUFFICIENT_CONTEXT while doing nothing is telling
-    # the orchestrator something it needs to hear, so let the text override an
-    # inferred PARTIAL -- but never let it override a demonstrated success.
-    if status != "DONE" and "INSUFFICIENT_CONTEXT" in (result.text or "").upper():
-        return Report(status="INSUFFICIENT_CONTEXT",
-                      finding=parse_report(result.text).finding, evidence=evidence)
-
-    return Report(status=status, finding=finding, evidence=evidence)
-
-
-def _absorb(action: str, report: Report, result, bb: Blackboard) -> None:
-    """Fold a step into the blackboard. The only channel between roles."""
-    if report.finding:
-        bb.add_note(f"[{action}] {report.finding}")
-    if action == "explore":
-        bb.add_files(_paths(result))
-    elif action in {"write", "document"}:
-        for name, out in result.outputs:
-            if name in {"replace_in_file", "create_file"} and out.startswith("ok:"):
-                bb.add_edit(out)
-    elif action == "execute":
-        outputs = [out for name, out in result.outputs if name == "run_command"]
-        if outputs:
-            bb.set_exec(outputs[-1], _exit_code(outputs[-1]) == 0)
-    bb.record(action, f"{report.status}: {report.finding[:80]}")
-
-
-_PATH_RE = re.compile(r"(/[\w./\-]+\.\w+)")
-
-
-def _paths(result) -> list:
-    found = []
-    for _, out in result.outputs:
-        found.extend(_PATH_RE.findall(out))
-    return found
-
-
-# ---------------------------------------------------------------------------
 # The rationale: what the human actually reads.
 # ---------------------------------------------------------------------------
 
@@ -476,121 +379,6 @@ def append_to_notes(workdir: Path, session_id: str, outcome: str,
              f"Full rationale: `{rationale_path.as_posix()}`\n")
     with path.open("a", encoding="utf-8") as handle:
         handle.write(entry)
-
-
-# ---------------------------------------------------------------------------
-# The loop.
-# ---------------------------------------------------------------------------
-
-def run_session(model, backend, toolset, task: str, workdir: Path, config=None,
-                max_steps: int = MAX_STEPS, session_id: str = "") -> tuple:
-    """Run one session. Returns (blackboard, stats, outcome, steps)."""
-    config = config or {}
-    workdir = Path(workdir)
-    session_id = session_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
-    notes = read_notes(workdir)
-    full_task = task if not notes else f"{task}\n\n# Project notes\n{notes}"
-    bb = Blackboard(task=full_task)
-
-    journal = Journal(workdir / STATE_DIR / "journal.jsonl")
-    transcript = Transcript(workdir / STATE_DIR / TRANSCRIPT_DIR)
-    resumed = replay(journal, bb)
-    if resumed:
-        logger.info(f"Resuming: {resumed} step(s) replayed from the journal.")
-
-    git = Git(workdir)
-    git.start(session_id)
-    bb.set_diff(git.diff())
-
-    stats = Stats()
-    step_no = resumed
-    reviewed = False
-    forced = None
-    recent = []
-    outcome = "exhausted"
-
-    while step_no < max_steps:
-        if forced:
-            brief, forced = forced, None
-        else:
-            decision = run_role(model, SESSION_ORCHESTRATE, toolset, bb, config, stats)
-            transcript.write("orchestrate", decision)
-            brief = parse_brief(decision.text)
-
-        if brief.action == "GIVEUP":
-            outcome = "giveup"
-            break
-
-        if brief.action == "DONE":
-            # An unverified "done" is the `stopping` failure class wearing a
-            # confident face. Two deterministic push-backs, then it is accepted:
-            # run the code, and have someone look at it.
-            if not bb.exec_ok:
-                bb.record("orchestrate", "DONE refused: nothing has run yet")
-                brief = Brief(action="EXECUTE", goal="Verify the change actually works.",
-                              context=brief.context,
-                              done_when="A command has run and its exit code is known.")
-            elif not reviewed:
-                bb.record("orchestrate", "DONE refused: nothing has been reviewed")
-                brief = Brief(action="REVIEW", goal="Check the change does what was asked.",
-                              context=brief.context,
-                              done_when="You have judged the change correct or named what is wrong.")
-            else:
-                outcome = "done"
-                break
-
-        if (brief.action == "EXPLORE" and bb.files
-                and recent[-MAX_CONSECUTIVE_EXPLORE:].count("explore")
-                >= MAX_CONSECUTIVE_EXPLORE):
-            bb.record("orchestrate", "EXPLORE refused: already explored twice")
-            brief = Brief(
-                action="WRITE",
-                goal="Apply the change the task asks for.",
-                context=(brief.context or "") + "\n" + "\n".join(bb.notes[-2:]),
-                done_when="An edit has been applied to a file.")
-
-        role = SESSION_ROLES.get(brief.action.lower())
-        if role is None:
-            bb.record("orchestrate", f"unknown action {brief.action!r}; exploring")
-            role = SESSION_ROLES["explore"]
-            brief = Brief(action="EXPLORE", goal=brief.goal, context=brief.context)
-
-        step_no += 1
-        result = run_role(model, role, toolset, bb, config, stats,
-                          force_summary=role.reports, brief=brief)
-        transcript.write(role.name, result, brief=brief)
-        report = build_report(role.name, result)
-        recent.append(role.name)
-        _absorb(role.name, report, result, bb)
-        journal.append(Step(n=step_no, action=role.name, goal=brief.goal,
-                            status=report.status, finding=report.finding,
-                            evidence=report.evidence,
-                            context=brief.context, done_when=brief.done_when))
-
-        if role.name == "review":
-            reviewed = report.status == "DONE"
-        if role.name in {"write", "document"} and report.status == "DONE":
-            git.commit(f"{role.name}: {(brief.goal or report.finding)[:60]}")
-            bb.set_diff(git.diff())
-            # "Check what you just changed" is always the right next move, so it
-            # is not worth a model call to be told so.
-            if role.name == "write":
-                forced = Brief(action="EXECUTE",
-                               goal="Check the change that was just applied.",
-                               context=report.finding,
-                               done_when="A command has run and its exit code is known.")
-
-    steps = journal.read()
-    reports_dir = workdir / STATE_DIR / "reports"
-    rationale_path = reports_dir / f"session-{session_id}.md"
-    bb.set_diff(git.diff())
-    write_rationale(rationale_path, session_id, full_task, steps, outcome,
-                    bb.diff, git.branch)
-    append_to_notes(workdir, session_id, outcome, rationale_path,
-                    _summarize(steps, outcome))
-    git.commit(f"session {session_id}: {outcome}")
-    return bb, stats, outcome, steps
 
 
 def _summarize(steps: list, outcome: str) -> str:

@@ -14,11 +14,12 @@ from pathlib import Path
 
 from agent.harness.blackboard import Blackboard
 from agent.harness.envelope import Brief, parse_brief, parse_report
-from agent.harness.loop import RoleResult, Stats, run_role
-from agent.harness.roles import SESSION_ORCHESTRATE, SESSION_ROLES
-from agent.harness.session import (Git, Journal, Step, Transcript,
-                                   append_to_notes, build_report, read_notes,
-                                   replay, run_session, write_rationale)
+from agent.harness.graph import build_report, mermaid, run_session
+from agent.harness.record import (Git, Journal, Step, Transcript,
+                                  append_to_notes, read_notes, replay,
+                                  write_rationale)
+from agent.harness.roles import ORCHESTRATE, ROLES
+from agent.harness.runner import RoleResult, Stats, run_role
 from agent.harness.tools import make_tools
 from agent.restricted_backend import RestrictedShellBackend
 from tests.agent.test_harness import FIXED, ScriptedModel, ai, check, seed_project
@@ -71,8 +72,8 @@ def test_labels_parse_when_they_share_a_line():
 def test_the_writer_can_read():
     """`replace_in_file` needs an exact `old_text`. A writer that cannot look
     reported BLOCKED with 'no tool for reading files is provided'."""
-    check("write can read", "read_lines" in SESSION_ROLES["write"].tools)
-    check("but still cannot search", "search_code" not in SESSION_ROLES["write"].tools)
+    check("write can read", "read_lines" in ROLES["write"].tools)
+    check("but still cannot search", "search_code" not in ROLES["write"].tools)
 
 
 def test_report_never_invents_success():
@@ -232,11 +233,11 @@ def test_rationale_is_built_from_the_journal():
 
 def test_judgement_roles_declare_a_context_floor():
     check("the orchestrator cannot decide on a narrow view",
-          SESSION_ORCHESTRATE.min_context > 12_000)
+          ORCHESTRATE.min_context > 12_000)
     for name in ("document", "review"):
-        check(f"{name} needs breadth", SESSION_ROLES[name].min_context > 12_000)
+        check(f"{name} needs breadth", ROLES[name].min_context > 12_000)
     for name in ("explore", "write", "execute"):
-        check(f"{name} runs anywhere", SESSION_ROLES[name].min_context == 0)
+        check(f"{name} runs anywhere", ROLES[name].min_context == 0)
 
 
 def test_narrow_roles_still_fit_the_smallest_member():
@@ -258,7 +259,7 @@ def test_narrow_roles_still_fit_the_smallest_member():
     worst = 0
     for name in ("explore", "write", "execute"):
         stats = Stats()
-        run_role(ScriptedModel([ai("ok")]), SESSION_ROLES[name], toolset, bb, {},
+        run_role(ScriptedModel([ai("ok")]), ROLES[name], toolset, bb, {},
                  stats, brief=brief)
         worst = max(worst, stats.prompt_tokens)
     check(f"worst narrow-role prompt {worst} tok must fit a 6k-TPM model",
@@ -267,6 +268,53 @@ def test_narrow_roles_still_fit_the_smallest_member():
 
 
 # --- the loop --------------------------------------------------------------
+
+def test_the_graph_is_the_shape_we_document():
+    """The graph draws itself, so this pins the shape the docs describe.
+
+    Before this was a StateGraph the topology lived in a `while` and a string
+    variable, and the only picture of it was an ASCII drawing in a docstring
+    that nothing checked.
+    """
+    picture = mermaid()
+    for role in ROLES:
+        check(f"{role} is a node", f"{role}(" in picture)
+
+    # Every worker returns to the hub, so the orchestrator decides every step.
+    for role in ROLES:
+        if role != "write":
+            check(f"{role} returns to the orchestrator",
+                  f"{role} --> orchestrate;" in picture)
+
+    # Except a write, which goes straight to running the code when it landed.
+    check("an applied edit runs the code without asking",
+          "write -.-> execute;" in picture)
+    check("and asks again when it did not",
+          "write -.-> orchestrate;" in picture)
+    check("only the orchestrator can end the run", "orchestrate -.-> __end__;" in picture)
+
+
+def test_the_budget_counts_steps_not_supersteps():
+    """LangGraph's recursion_limit counts supersteps; the scenario timeout and
+    every cost figure are reasoned about in journal steps. The budget stays a
+    step budget, and recursion_limit is only the backstop."""
+    root = seed_project()
+    backend = RestrictedShellBackend(root_dir=str(root), allow_git=True)
+    toolset = make_tools(backend)
+    # An orchestrator that only ever explores, and an explorer that finds
+    # nothing: the run has no way to end except the budget.
+    model = ScriptedModel([
+        ai("ACTION: EXPLORE|GOAL: look|CONTEXT: |DONE_WHEN: x"),
+        ai("STATUS: PARTIAL | FINDING: nothing yet"),
+    ] * 20)
+
+    bb, stats, outcome, steps = run_session(model, backend, toolset, "fix it",
+                                            root, max_steps=3)
+    check(f"outcome was {outcome}", outcome == "exhausted")
+    check(f"exactly the budget in journal steps, got {len(steps)}", len(steps) == 3)
+    check("and it still wrote its rationale",
+          list((root / ".harness" / "reports").glob("session-*.md")))
+
 
 def test_session_end_to_end():
     """write -> (auto) execute -> DONE refused -> review -> DONE."""
