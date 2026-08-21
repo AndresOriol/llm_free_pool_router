@@ -597,9 +597,18 @@ def test_done_is_refused_when_the_session_broke_something():
 
 def test_the_writer_is_told_tests_are_not_its_to_edit():
     """It can now see the test that contradicts its brief, so it needs the rule
-    that keeping it ignorant used to supply for free."""
-    prompt = WORKERS["write"].prompt
-    check("the rule is stated", "never edit a test" in prompt.lower())
+    that keeping it ignorant used to supply for free.
+
+    The rule is about the file, not the motive. Stated as "do not weaken a
+    test" it read as permission to strengthen one, and a run that scored f2p
+    4/4 and p2p 3/3 was still voided for appending two cases to a suite the
+    scenario had frozen.
+    """
+    prompt = WORKERS["write"].prompt.lower()
+    check("the rule is stated", "never edit an existing test file" in prompt)
+    check("adding to one is covered too", "add a case" in prompt)
+    check("and the good version of the instinct has somewhere to go",
+          "new file" in prompt)
 
 
 def test_the_writer_sees_the_evidence_against_its_own_work():
