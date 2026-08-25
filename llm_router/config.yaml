@@ -57,20 +57,26 @@ models:
   # panel as a member that only ever errors (llm_router/quota/).
 
   # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
-  # Newest Gemini first: this tier exists for judgement over a wide view, and
+  # Gemini first: this tier exists for judgement over a wide view, and
   # gpt-oss-120b cannot hold one -- its 8k ceiling is a tenth of what the
   # Geminis take. It stays in the tier as the fallback for when the flash
   # models' 20-a-day runs out, which on a working afternoon it will.
-  - name: Gemini_3_7_Flash
+  #
+  # 3.7 sits behind 3.6 despite being newer. Measured 2026-08-25: 3.7 answered
+  # in 33-54s and 503'd once in four calls ("experiencing high demand"), against
+  # 0.9s for 3.6. It thinks before it writes -- asked for 5 output tokens it
+  # returned MAX_TOKENS and no text -- so it is the better model and the worse
+  # first choice for a loop that makes a call per step.
+  - name: Gemini_3_6_Flash
     platform: gemini
-    model: gemini-3.7-flash
+    model: gemini-3.6-flash
     priority: 1
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
 
-  - name: Gemini_3_6_Flash
+  - name: Gemini_3_7_Flash
     platform: gemini
-    model: gemini-3.6-flash
+    model: gemini-3.7-flash
     priority: 2
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
