@@ -50,14 +50,13 @@ accounts:
     api_key_env: GEMINI_API_KEY_1
 
 models:
-  # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
-  - name: Llama3_70b
-    platform: groq
-    model: llama-3.3-70b-versatile
-    priority: 1
-    max_input_tokens: 12000
-    limits: {rpm: 30, tpm: 12000, rpd: 1000, tpd: 100000}
+  # Groq retired its whole Llama line (3.3-70b, 3.1-8b, 4-scout) and qwen3-32b;
+  # all four answered 404 model_not_found when probed and are removed. A dead
+  # entry is not free: the router walks it, and a 404 is not transient, so it
+  # propagates and kills the run. `python -m llm_router.quota status --probe`
+  # is the cheap way to catch the next retirement.
 
+  # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
   - name: GptOss120b
     platform: groq
     model: openai/gpt-oss-120b
@@ -73,13 +72,6 @@ models:
     limits: {rpm: 5, tpm: 250000, rpd: 20}
 
   # -- Mid tier: solid for well-scoped implementation steps.
-  - name: Qwen3_32b
-    platform: groq
-    model: qwen/qwen3-32b
-    priority: 10
-    max_input_tokens: 6000
-    limits: {rpm: 60, tpm: 6000, rpd: 1000, tpd: 100000}
-
   - name: Qwen3_6_27b
     platform: groq
     model: qwen/qwen3.6-27b
@@ -105,13 +97,6 @@ models:
   # shared org-wide request budget) routinely dumps whole tasks here once the
   # reasoning/mid tiers exhaust, so quality here matters more than the tier
   # name implies. See docs/03-pool-model.md#34-priority-tiers.
-  - name: Llama4Scout
-    platform: groq
-    model: meta-llama/llama-4-scout-17b-16e-instruct
-    priority: 20
-    max_input_tokens: 30000
-    limits: {rpm: 30, tpm: 30000, rpd: 1000, tpd: 100000}
-
   - name: GptOss20b
     platform: groq
     model: openai/gpt-oss-20b
@@ -134,14 +119,6 @@ models:
     limits: {rpm: 10, tpm: 250000, rpd: 20}
 
   # -- Last resort: only when everything above is in cooldown.
-  - name: Llama3_8b
-    platform: groq
-    model: llama-3.1-8b-instant
-    priority: 30
-    max_input_tokens: 6000
-    limits: {rpm: 30, tpm: 6000, rpd: 14400, tpd: 100000}
-
-  # Gemma has unlimited TPM, so its ceiling is the model's context window.
   - name: Gemma4_31b
     platform: gemini
     model: gemma-4-31b-it

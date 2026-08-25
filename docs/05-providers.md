@@ -86,17 +86,19 @@ what a person reads, the config is what the panel believes.
 
 | Model | RPM | TPM | RPD | TPD |
 | :--- | :---: | :---: | :---: | :---: |
-| `llama-3.1-8b-instant` | 30 | 6K | 14.4K | 100K |
-| `llama-3.3-70b-versatile` | 30 | 12K | 1K | 100K |
-| `meta-llama/llama-4-scout-17b-16e-instruct` | 30 | 30K | 1K | 100K |
 | `openai/gpt-oss-20b` | 30 | 8K | 1K | 100K |
 | `openai/gpt-oss-120b` | 30 | 8K | 1K | 100K |
-| `qwen/qwen3-32b` | 60 | 6K | 1K | 100K |
 | `qwen/qwen3.6-27b` | 30 | 8K | 1K | 100K |
+
+Groq's Llama line (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`,
+`meta-llama/llama-4-scout-17b-16e-instruct`) and `qwen/qwen3-32b` were retired
+upstream and are gone from both this table and the config: all four answer
+`404 model_not_found`. `python -m llm_router.quota status --probe` re-checks
+every member for one request each ([14.4](14-quota-panel.md#144-the-probe)).
 
 The published per-model limits are misleading in one important way: in practice
 Groq's free tier behaves as a **single shared request budget across every model
-on the account**, so these do not add up to seven independent pools. See
+on the account**, so these do not add up to three independent pools. See
 [3.4](03-pool-model.md#34-priority-tiers).
 
 ### Gemini
