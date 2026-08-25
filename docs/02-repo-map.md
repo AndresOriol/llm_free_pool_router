@@ -94,7 +94,7 @@ Worth knowing before debugging something that "should work":
   bug ([13.4](13-roadmap.md#134-open-questions)).
 - `llm_router/.usage/` — this machine's usage ledger and pool snapshot.
   Gitignored, rebuilt as the router runs; deleting it only loses history
-  ([14.2](14-quota-panel.md#142-two-files-written-by-the-router)).
+  ([14.3](14-quota-panel.md#143-three-files-under-llm_routerusage)).
 - `evals/.worktrees/` — throwaway checkouts, safe to delete.
 - LangSmith runs — useful for watching, but they expire, which is precisely why
   the local trace exists ([7. Observability](07-observability.md)).

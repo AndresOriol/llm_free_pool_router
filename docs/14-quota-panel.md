@@ -14,7 +14,35 @@ accounts to work unattended this afternoon?* Nothing could answer it, because
 nothing was writing down what had been spent, and the vendors' consoles answer
 only one account per login.
 
-## 14.2 Three files, under `llm_router/.usage/`
+## 14.2 The path of one number
+
+Nothing is computed twice and nothing is fetched at read time. Three writers put
+files on disk; one reader joins them by provider name.
+
+```
+config.yaml ──limits──► loader.py ─────────────► .usage/pool.json ──┐
+                                                                    │
+  agent ──► RouterChatModel ──► the provider call                   │
+                  │                    │                            ├──► build_report()
+                  └─ usage.record ─────┴──────► .usage/ledger.jsonl ┤     joins on the
+                       (one line per attempt)                       │     provider name
+        --probe ──► probe.py ──one call──────► .usage/vendor.json ──┘          │
+                                                                               ▼
+                                                        table · --json · panel.html
+```
+
+- **What it cost us**: the failover loop calls `usage.record` on every attempt it
+  makes, served or refused, naming the provider that served it.
+- **What it is allowed to cost**: the loader writes the declared `limits` for the
+  pool it just built, so the ceilings always match the running config.
+- **What the vendor thinks**: only when `--probe` asks, and only where a vendor
+  will say ([14.4](#145-the-probe)).
+
+`build_report` joins the three on the `provider` name (`GptOss120b_groq_1`),
+which is why that name is generated in one place and never re-parsed. Reading is
+side-effect free: `status` and `panel` open three files and touch no network.
+
+## 14.3 Three files, under `llm_router/.usage/`
 
 Gitignored; `LLM_ROUTER_USAGE_DIR` moves the directory.
 
@@ -28,7 +56,7 @@ They move on different clocks, which is why they are not one file. The ledger
 only grows. The snapshot is rebuilt from the pool the loader *actually built*, so
 a model skipped for a missing key never appears as an idle account with quota to
 spare. The vendor readings are bought one at a time and go stale
-([14.4](#144-the-probe)).
+([14.4](#145-the-probe)).
 
 `python -m llm_router` writes the snapshot without making a call, for the case
 where the panel is opened before any agent has run.
@@ -47,7 +75,7 @@ Writing to any of these can never fail a run. The writers swallow their own
 errors and log at debug: an unattended agent losing an afternoon's work to a full
 disk, over a convenience, would be a self-inflicted wound.
 
-## 14.3 Two sources, and they are not equal
+## 14.4 Two sources, and they are not equal
 
 The ledger counts what *this router* spent. The vendor counts what the *account*
 spent — which is a different number the moment anything else touches the key:
@@ -56,7 +84,7 @@ exists it wins, and every figure on the panel says which source it came from. A
 panel that mixed them silently would be worse than one that only counted
 locally, because it would look authoritative while being neither.
 
-## 14.4 The probe
+## 14.5 The probe
 
 **There is no usage endpoint to ask.** Measured against both platforms on
 2026-08-25:
@@ -99,7 +127,7 @@ service account and a different auth story, not something an AI Studio key can
 do. Gemini members are recorded as *unable to report*, which reads differently on
 the panel from *not asked yet*.
 
-## 14.5 What the report says
+## 14.6 What the report says
 
 Per account × model, per window: requests, tokens, and how much of each declared
 limit that is, marked `vendor` where the vendor answered. A limit the vendor
@@ -124,7 +152,7 @@ which is [5.4](05-providers.md#54-current-free-tier-limits) in a form a program
 can read. **Update both when a vendor moves a limit**; the table is what a person
 reads, the config is what the panel measures against.
 
-## 14.6 Reading it
+## 14.7 Reading it
 
 [`llm_router/quota/`](../llm_router/quota/) — Python, standard library only.
 
@@ -149,7 +177,7 @@ live — the question is asked once, before a run — and a file has no port to
 collide with, no process left running on a machine meant to be running agents,
 and can be kept next to a run's results when a session is worth explaining later.
 
-## 14.7 What it deliberately doesn't do
+## 14.8 What it deliberately doesn't do
 
 **It never gates a call.** The router routes on availability, not on arithmetic
 against a budget: it learns an account is exhausted by being told so, and that
