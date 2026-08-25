@@ -92,6 +92,15 @@ def fetch_tree(root_run_id: str) -> Optional[dict]:
     for attempt in range(_POLL_ATTEMPTS):
         try:
             run = client.read_run(root_run_id, load_child_runs=True)
+            # Climb to the real root before trusting what came back. The id the
+            # caller has is whatever the local collector could name, which is
+            # not necessarily the root -- and asking for a leaf returns a
+            # perfectly valid one-span tree that looks like a working trace
+            # until you count the spans. LangSmith's own `trace_id` is the
+            # authority on which run is the root, so re-read from it.
+            trace_id = getattr(run, "trace_id", None)
+            if trace_id and str(trace_id) != str(run.id):
+                run = client.read_run(str(trace_id), load_child_runs=True)
             return _serialize(run)
         except Exception as exc:  # noqa: BLE001 - not ingested yet, or offline
             if attempt == _POLL_ATTEMPTS - 1:

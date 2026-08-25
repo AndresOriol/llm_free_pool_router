@@ -40,12 +40,12 @@ def build(floor: int):
     if not providers:
         raise SystemExit("No providers loaded. Set your keys in llm_router/.env.")
     router = AutonomousLLMRouter(providers)
-    check_floor(router, floor)
+    members = check_floor(router, floor)
     # A step must be able to walk the whole pool once before giving up: with a
     # hard floor the eligible set is smaller than the pool, and an unlucky
     # ordering of benched accounts must not end the run.
     model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    return model.for_context(floor, strict=True)
+    return model.for_context(floor, strict=True), members
 
 
 def main() -> None:
@@ -60,7 +60,7 @@ def main() -> None:
         raise SystemExit("No task given.")
 
     floor = int(os.environ.get("DEEP_CONTEXT_FLOOR") or CONTEXT_FLOOR)
-    model = build(floor)
+    model, members = build(floor)
 
     shell = os.environ.get("HARNESS_SHELL") == "1"
     if shell:
@@ -69,7 +69,7 @@ def main() -> None:
 
     trace_file = os.environ.get("DEEP_TRACE_FILE")
     final, written = run_session(
-        model, task, workdir, allow_shell=shell,
+        model, task, workdir, floor=floor, members=members, allow_shell=shell,
         trace_path=Path(trace_file) if trace_file else None)
 
     _summary(final, written)

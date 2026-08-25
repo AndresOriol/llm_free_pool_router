@@ -1,85 +1,111 @@
 """One deepagents session over one workdir, on the pool.
 
-This is the second agent architecture, built to be measured against the first
-rather than to replace it (docs/12-development-harness.md#127). The narrow-role
-graph in `agent/harness/` splits work so every call fits the pool's *narrowest*
+The second agent architecture, built to be measured against the first rather
+than to replace it (docs/12-development-harness.md#127). The narrow-role graph
+in `agent/harness/` splits work so every call fits the pool's *narrowest*
 member; this one keeps a conversation and makes it fit by staying on the pool's
-*widest* members and letting the SDK summarize when the history grows.
+*widest* members and letting the SDK compact the history.
 
-Almost nothing here is agent design. `create_deep_agent` already assembles the
-todo list, the filesystem tools, the subagent `task` tool and summarization; the
-`execute` tool switches on by itself because `RestrictedShellBackend` satisfies
-`SandboxBackendProtocol`. What this file owns is the three seams that are ours:
+`build_agent` is this project's `create_cli_agent`
+(`libs/code/deepagents_code/agent.py`, MIT): the function that turns a generic
+deep agent into a coding agent. What it configures, in the same order dcode
+does:
+
+| dcode | here |
+| --- | --- |
+| generated system prompt, interactive or headless | `prompt.build`, always headless |
+| `LocalContextMiddleware` (git, tree) | `context.section`, once into the prompt |
+| `ShellAllowListMiddleware` when non-interactive | `shell.ShellAllowListMiddleware`, always |
+| `LocalShellBackend`, `virtual_mode=False` | `RestrictedShellBackend`, jailed |
+| `general-purpose` subagent so `task` exists | same |
+| `AskUserMiddleware` | never installed -- nobody is watching |
+| HITL approval, cost tracking, MCP, skills, rubric | not carried over |
+
+The three seams that are ours rather than dcode's:
 
 1. **The model is the pool.** `resolve_model` returns a `BaseChatModel`
-   unchanged, and `RouterChatModel` is one, so the router drops in with no
-   adapter (docs/04-failover.md#45-the-failover-loop).
-2. **A hard context floor.** Groq's members top out at 8,000 input tokens and
-   100,000 tokens *per day*; one full-context request would spend an account's
-   entire daily budget. A conversational harness cannot be trimmed to fit them,
-   so it refuses to route below the floor and waits for a wide member instead.
-   Groq stays in the pool for work that fits it.
-3. **The record is a run tree**, fetched from LangSmith (agent/deep/trace.py).
+   unchanged and `RouterChatModel` is one, so the router drops in with no
+   adapter ([4.5](../../docs/04-failover.md#45-the-failover-loop)).
+2. **A hard context floor.** Groq's members hold 8,000 input tokens and 100,000
+   *per day*; one full-context request would spend an account's entire daily
+   budget. A conversation cannot be trimmed to fit them, so this refuses to
+   route below the floor and waits for a wide member. Groq stays in the pool for
+   work that fits it.
+3. **The record is a run tree** fetched from LangSmith (agent/deep/trace.py).
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 from langchain_core.messages import HumanMessage
 from langchain_core.tracers.context import collect_runs
 
+from agent.deep import context, prompt
 from agent.deep import trace as run_trace
+from agent.deep.shell import ShellAllowListMiddleware
 
 logger = logging.getLogger("harness.deep")
 
 # The floor, in input tokens. Sized to admit both Gemini families (250,000) and
-# Gemma (128,000) while excluding every Groq member (8,000). It is a property of
-# the *pool*, not a guess: raising it past 128,000 would drop Gemma and leave
-# only the request-scarce Gemini accounts (llm_router/config.yaml).
+# Gemma (128,000) while excluding every Groq member (8,000). A property of the
+# pool, not a guess: raising it past 128,000 drops Gemma and leaves only the
+# request-scarce Gemini accounts (llm_router/config.yaml).
 CONTEXT_FLOOR = 128_000
 
 # Supersteps, not agent turns. A backstop against a loop that never settles --
-# the real budget on a free pool is the daily request quota, which the run hits
-# long before this.
+# on a free pool the daily request quota binds long before this does.
 RECURSION_LIMIT = 120
 
-SYSTEM_PROMPT = """\
-You are working on the project rooted at `/`, which is the only directory you \
-can reach. Paths are relative to it.
-
-Before you claim a task is done, run the project's tests yourself and read the \
-output. A change you have not executed is not finished, and a test you did not \
-read the result of did not pass.
-
-Change only what the task asks for. Do not refactor code you were not asked to \
-touch, and do not add features nobody requested.
-
-If you get stuck on the same failure three times, stop and write down what you \
-tried and what you think is wrong, rather than trying a fourth variation.\
-"""
+# Kept in step with RestrictedShellBackend's own allowlist. The backend is the
+# boundary; this is what the model gets told (agent/deep/shell.py).
+ALLOWED_PROGRAMS = ("python", "python3", "py", "pytest", "git")
 
 
-def build_agent(workdir: Path, model, allow_shell: bool = False):
-    """The compiled deep agent over a jailed backend."""
+def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
+                members: int = 0, allow_shell: bool = False,
+                extra_middleware: Optional[Sequence] = None):
+    """The compiled coding agent over a jailed backend."""
     from deepagents import create_deep_agent
+    from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 
     from agent.runtime.backend import RestrictedShellBackend
 
+    workdir = Path(workdir)
     backend = RestrictedShellBackend(root_dir=str(workdir), allow_git=True,
                                      allow_shell=allow_shell)
-    return create_deep_agent(model=model, backend=backend,
-                             system_prompt=SYSTEM_PROMPT)
+
+    project = context.section(workdir)
+    system_prompt = prompt.build(floor, members=members,
+                                 extra_sections=[project] if project else None)
+
+    middleware = list(extra_middleware or [])
+    # Only meaningful while the backend still has an allowlist to mirror. With
+    # allow_shell the backend permits anything, and a middleware refusing what
+    # the backend would run is a rule that exists in one place only -- worse
+    # than no rule, because it reads like a boundary and is not one.
+    if not allow_shell:
+        middleware.append(ShellAllowListMiddleware(ALLOWED_PROGRAMS))
+
+    return create_deep_agent(
+        model=model,
+        system_prompt=system_prompt,
+        backend=backend,
+        middleware=middleware,
+        # dcode always ships this one so the `task` tool exists at all; without
+        # a subagent the SDK does not install SubAgentMiddleware.
+        subagents=[GENERAL_PURPOSE_SUBAGENT],
+    )
 
 
-def check_floor(router, floor: int = CONTEXT_FLOOR) -> None:
-    """Fail before the run rather than during it.
+def check_floor(router, floor: int = CONTEXT_FLOOR) -> int:
+    """Fail before the run rather than during it. Returns the eligible count.
 
-    With a hard floor and no member wide enough, every step would walk its
-    retry budget and die on "all providers exhausted" -- an error that describes
-    a rate limit, not a pool that never could have served this agent.
+    With a hard floor and no member wide enough, every step would walk its retry
+    budget and die on "all providers exhausted" -- an error that describes a
+    rate limit, not a pool that could never have served this agent.
     """
     wide = [p for p in router.providers
             if p.max_input_tokens is None or p.max_input_tokens >= floor]
@@ -90,6 +116,7 @@ def check_floor(router, floor: int = CONTEXT_FLOOR) -> None:
             f"`python -m agent.harness`, which is built for narrow members.")
     logger.info(f"{len(wide)} of {len(router.providers)} providers meet the "
                 f"{floor:,}-token floor.")
+    return len(wide)
 
 
 def _root_run_id(runs) -> Optional[str]:
@@ -111,6 +138,7 @@ def _root_run_id(runs) -> Optional[str]:
 
 
 def run_session(model, task: str, workdir: Path, config=None,
+                floor: int = CONTEXT_FLOOR, members: int = 0,
                 allow_shell: bool = False,
                 trace_path: Optional[Path] = None) -> tuple:
     """Run one session. Returns (final_state, trace_written)."""
@@ -118,7 +146,8 @@ def run_session(model, task: str, workdir: Path, config=None,
     config.setdefault("recursion_limit", RECURSION_LIMIT)
     workdir = Path(workdir)
 
-    agent = build_agent(workdir, model, allow_shell=allow_shell)
+    agent = build_agent(workdir, model, floor=floor, members=members,
+                        allow_shell=allow_shell)
 
     # `collect_runs` learns the root run id from the same callbacks LangSmith's
     # tracer uses, so the fetch afterwards knows what to ask for without a
@@ -135,7 +164,8 @@ def run_session(model, task: str, workdir: Path, config=None,
             "root_run_id": root_id,
             "workdir": str(workdir),
             "harness": "deepagents",
-            "context_floor": CONTEXT_FLOOR,
+            "context_floor": floor,
+            "eligible_providers": members,
             "tracing_enabled": run_trace.tracing_enabled(),
         })
         if written:
