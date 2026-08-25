@@ -11,7 +11,7 @@ They answer different questions and have different lifetimes.
 | | LangSmith | Local JSONL trace |
 | --- | --- | --- |
 | Answers | *What is this run doing right now?* | *What exactly happened in this run, forever?* |
-| Lifetime | Expires | On disk, committed with the run's results |
+| Lifetime | Expires | On disk, for as long as the run directory is kept |
 | Cost | A hosted dependency | None |
 | Used by | A human eyeballing a live run | Every automatic metric in [10. Metrics](10-metrics.md) |
 
