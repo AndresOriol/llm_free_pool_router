@@ -1,5 +1,7 @@
-import time
 import logging
+import math
+import re
+import time
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
@@ -8,15 +10,59 @@ from langchain_core.language_models.chat_models import BaseChatModel
 logger = logging.getLogger("LLMRouter")
 
 
+_UNITS = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
+_DURATION = re.compile(r"(\d+(?:\.\d+)?)\s*(ms|s|m|h)(?![a-z])", re.I)
+# Google returns a RetryInfo block: "'retryDelay': '37s'".
+_RETRY_FIELD = re.compile(r"""retry[_ ]?delay["']?\s*[:=]\s*["']?([\d.]+\s*[a-z]+)""", re.I)
+# Both vendors also say it in prose: "Please try again in 33.2025s" (Groq),
+# "Please retry in 37.677718404s" (Google).
+_RETRY_PROSE = re.compile(
+    r"(?:try again|retry)(?:\s+in)?\s+((?:\d+(?:\.\d+)?\s*(?:ms|s|m|h)\s*)+)", re.I)
+
+
+def _duration_seconds(text: str) -> Optional[float]:
+    """"1m26.4s" -> 86.4. Vendors quote waits in compound units, not seconds."""
+    parts = _DURATION.findall(text or "")
+    if not parts:
+        return None
+    return sum(float(value) * _UNITS[unit.lower()] for value, unit in parts)
+
+
 def _retry_after(exc: Exception) -> Optional[int]:
-    """Best-effort read of a Retry-After hint from a provider exception."""
+    """How long the provider asked us to wait, from wherever it said so.
+
+    The header is the polite place to put it and the one place our providers
+    reliably don't. Google's quota refusal carries the wait twice -- once as a
+    `retryDelay` field, once in prose -- and `langchain_google_genai` re-raises
+    the whole thing as a plain exception with no response object, so headers are
+    unreachable and the only copy left is the message text. That is not an edge
+    case: it is every Gemini rate limit, which is most of the refusals this pool
+    sees.
+
+    Every hint found is collected and the longest wins, then rounded up. The
+    structured field truncates (`37s` for a 37.68s wait) and retrying a fraction
+    of a second early buys another refusal, so erring long costs nothing and
+    erring short costs a request.
+    """
+    hints = []
+
     response = getattr(exc, "response", None)
     headers = getattr(response, "headers", None)
     if headers:
         value = headers.get("retry-after") or headers.get("Retry-After")
-        if value and str(value).isdigit():
-            return int(value)
-    return None
+        try:
+            hints.append(float(value))
+        except (TypeError, ValueError):
+            pass  # an HTTP-date, or nothing at all
+
+    message = str(getattr(exc, "message", "") or exc)
+    for pattern in (_RETRY_FIELD, _RETRY_PROSE):
+        found = pattern.search(message)
+        seconds = _duration_seconds(found.group(1)) if found else None
+        if seconds is not None:
+            hints.append(seconds)
+
+    return math.ceil(max(hints)) if hints else None
 
 
 def estimate_tokens(messages, tools=None) -> int:
