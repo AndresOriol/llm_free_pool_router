@@ -68,6 +68,34 @@ def provider_error_detail(exc: Exception) -> Optional[str]:
     return "; ".join(parts) or None
 
 
+_RATE_LIMIT_SIGNALS = (
+    "rate_limit",
+    "rate limit",
+    "too many requests",
+    # Gemini signals quota/rate exhaustion as RESOURCE_EXHAUSTED and its
+    # LangChain wrapper (ChatGoogleGenerativeAIError) exposes no numeric
+    # status, so match the wording -- a free-tier quota hit is transient.
+    "resource_exhausted",
+    "exceeded your current quota",
+)
+
+
+def is_rate_limited(exc: Exception) -> bool:
+    """Did the provider refuse this call for want of quota?
+
+    Its own predicate because two callers need the same judgement for different
+    reasons: `is_transient` reroutes on it, and the usage ledger records it as a
+    distinct outcome so the panel can show an account being turned away rather
+    than merely failing (see usage.py).
+
+    Free tiers signal it inconsistently -- Groq returns HTTP 413 ("Request too
+    large", for tokens-per-minute) with a `rate_limit_exceeded` body rather than
+    a 429 -- so this matches on the wording, and is asked before any status.
+    """
+    message = str(getattr(exc, "message", "") or exc).lower()
+    return any(signal in message for signal in _RATE_LIMIT_SIGNALS)
+
+
 def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     """Classify an exception raised while calling a provider.
 
@@ -81,13 +109,10 @@ def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     ("Request too large" for tokens-per-minute) with a `rate_limit_exceeded`
     body, not 429 -- so we match on the rate-limit signal first, before status.
     """
-    message = str(getattr(exc, "message", "") or exc).lower()
-    if ("rate_limit" in message or "rate limit" in message or "too many requests" in message
-            # Gemini signals quota/rate exhaustion as RESOURCE_EXHAUSTED and its
-            # LangChain wrapper (ChatGoogleGenerativeAIError) exposes no numeric
-            # status, so match the wording -- a free-tier quota hit is transient.
-            or "resource_exhausted" in message or "exceeded your current quota" in message):
+    if is_rate_limited(exc):
         return True, _retry_after(exc)
+
+    message = str(getattr(exc, "message", "") or exc).lower()
 
     # A malformed tool call is a per-model output glitch (small models sometimes
     # emit the args inside the tool name); Groq rejects it as HTTP 400
@@ -125,10 +150,18 @@ class LLMProvider(ABC):
 
     def __init__(self, name: str, url: str, model: str, api_key: str,
                  priority: int, temperature: float = 0.2,
-                 max_input_tokens: Optional[int] = None):
+                 max_input_tokens: Optional[int] = None,
+                 platform: str = "", account: str = ""):
         self.name = name
         self.url = url
         self.model = model
+        # Which signup and which vendor this member draws on. The composed
+        # `name` already encodes both, but only as a string to be re-split;
+        # the usage ledger needs them apart, because a free tier's real budget
+        # is per account (Groq shares one across every model on it) and per
+        # platform, not per pool member.
+        self.platform = platform
+        self.account = account
         self.api_key = api_key
         self.priority = priority
         self.temperature = temperature

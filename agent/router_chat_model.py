@@ -17,7 +17,9 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import ConfigDict
 
-from llm_router.base_provider import estimate_tokens, is_transient, provider_error_detail
+from llm_router import usage
+from llm_router.base_provider import (estimate_tokens, is_rate_limited,
+                                      is_transient, provider_error_detail)
 
 logger = logging.getLogger("LLMRouter")
 
@@ -87,6 +89,7 @@ class RouterChatModel(BaseChatModel):
                 # nesting and trips the tracer's run_map ("No indexed run ID").
                 message = self._underlying(provider).invoke(
                     messages, stop=stop, **kwargs)
+                usage.record_call(provider, message)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
                 if not self._handle_failure(provider, exc, run_manager):
@@ -104,6 +107,13 @@ class RouterChatModel(BaseChatModel):
         attach it to the run via `on_text` so the failed attempt shows up in
         LangSmith instead of vanishing behind the successful reroute.
         """
+        # Recorded before the classification, and whatever the verdict: a
+        # refused attempt still spent a request against the account's free-tier
+        # budget, so a run that spent its afternoon being turned away should
+        # look expensive in the panel rather than free (llm_router/usage.py).
+        usage.record(provider,
+                     outcome="rate_limited" if is_rate_limited(exc) else "error")
+
         transient, retry_after = is_transient(exc)
         detail = provider_error_detail(exc)
         if not transient:
