@@ -1,47 +1,19 @@
 """Turning attempts into the question a human actually asks: how close is each
 free account to the wall, and when does it clear.
 
-Everything here is derived from `ledger.jsonl`. Nothing is fetched, and no
-figure is a vendor's. That is a real limit and is stated on the panel rather
-than hidden: **the ledger sees only what went through this router**, so a key
-also used from another machine, or by hand, is under-counted here.
+Everything is derived from `ledger.jsonl` -- nothing is fetched, so the ledger's
+blind spot is the report's: a key used outside this router is under-counted.
 
-## The window model
+Two assumptions carry the arithmetic, both argued in
+[14. Quota panel](../../docs/14-quota-panel.md):
 
-A budget is assumed to work like this: the first request starts the window, and
-the window ends one length later, whatever happened in between. So to know when
-the current window began, look back one length from now and take the *oldest*
-attempt in that span -- that attempt opened it, and the budget resets one length
-after it.
+- a window opens with its first attempt and ends one length later (14.5), and
+- a refused attempt spent a request and no tokens; one that got no answer spent
+  neither (14.6).
 
-That is why `used` and `resets_in` come from the same span: every attempt in the
-last minute belongs to the same minute-window, because the oldest of them opened
-it no earlier than a minute ago.
-
-The assumption is not free. A vendor running a leaky bucket (Groq's request
-budget refills continuously) clears earlier than this predicts, and one running
-a calendar day (Gemini resets at midnight Pacific) clears at a time this cannot
-know. It errs toward saying a budget is still spent, which is the safe
-direction: it will not promise headroom that isn't there. Where the provider
-told us better -- a `Retry-After` on a refusal -- that is used instead.
-
-## Two views of the same ledger
-
-A model is fanned across every account on its platform, so `gemini-3.5-flash`
-may be three pool members. Each is its own budget with its own clock, and the
-`Row` for it is one account × one model -- windows are never mixed.
-
-But the question that made this panel worth building is *how much Gemini do I
-have left*, not *how much is left on key two*. So the rows are also folded into
-a `ModelSummary` per platform × model: capacity adds up across accounts (three
-keys at 20 requests a day are 60 requests a day), and consumption adds up with
-it. That is the default view; the per-account rows are what you filter down to
-once you know which model is running out.
-
-Nothing is summed across *platforms*, and no platform is given a total ceiling:
-Groq meters one org-wide request budget across every model on an account, so
-adding its per-model limits together would invent capacity that does not exist
-([3.4](../../docs/03-pool-model.md#34-priority-tiers)).
+Rows are one account x model, because windows never mix. `ModelSummary` folds
+them across accounts -- the default view -- and nothing is ever summed across
+platforms (14.7).
 """
 
 import time
@@ -55,6 +27,13 @@ DAY_SECONDS = 86_400
 WINDOWS = {"rpm": MINUTE_SECONDS, "tpm": MINUTE_SECONDS,
            "rpd": DAY_SECONDS, "tpd": DAY_SECONDS}
 _LIMIT_NAMES = ("rpm", "tpm", "rpd", "tpd")
+
+
+def _earlier(mine: Optional[float], theirs: Optional[float]) -> Optional[float]:
+    """The older of two window starts, either of which may be missing."""
+    if mine is None or theirs is None:
+        return mine if theirs is None else theirs
+    return min(mine, theirs)
 
 
 @dataclass
@@ -114,10 +93,8 @@ class Usage:
         self.rate_limited += other.rate_limited
         self.errors += other.errors
         self.unanswered += other.unanswered
-        for name in ("opened", "opened_tokens"):
-            mine, theirs = getattr(self, name), getattr(other, name)
-            if theirs is not None:
-                setattr(self, name, theirs if mine is None else min(mine, theirs))
+        self.opened = _earlier(self.opened, other.opened)
+        self.opened_tokens = _earlier(self.opened_tokens, other.opened_tokens)
 
 
 @dataclass
@@ -146,7 +123,6 @@ class Row:
     platform: str
     model: str
     priority: Optional[int]
-    limits: dict
     #: The per-request token ceiling the router routes by, for the same reason
     #: it matters there: a member that cannot hold the job is not capacity.
     max_input_tokens: Optional[int] = None
@@ -215,7 +191,6 @@ class PlatformSummary:
 @dataclass
 class Report:
     generated: float
-    pool_generated: Optional[float] = None
     config: Optional[str] = None
     #: Timestamp of the oldest call on record, or None on an empty ledger.
     since: Optional[float] = None
@@ -344,8 +319,7 @@ def _fold_models(rows: List[Row]) -> List[ModelSummary]:
         summary.model))
 
 
-def _fold_platforms(models: List[ModelSummary],
-                    accounts: List[AccountSummary]) -> List[PlatformSummary]:
+def _fold_platforms(models: List[ModelSummary]) -> List[PlatformSummary]:
     """What each platform served today. No ceiling: see the module docstring."""
     platforms: Dict[str, PlatformSummary] = {}
     for summary in models:
@@ -355,10 +329,9 @@ def _fold_platforms(models: List[ModelSummary],
         platform.minute.merge(summary.minute)
         platform.day.merge(summary.day)
         platform.total.merge(summary.total)
-    for account in accounts:
-        platform = platforms.get(account.platform)
-        if platform is not None and account.account not in platform.accounts:
-            platform.accounts.append(account.account)
+        for account in summary.accounts:
+            if account not in platform.accounts:
+                platform.accounts.append(account)
     return sorted(platforms.values(), key=lambda platform: platform.platform)
 
 
@@ -374,19 +347,20 @@ def build_report(calls: List[dict], pool: Optional[dict],
 
     rows: Dict[str, Row] = {}
     refusals: Dict[str, List[dict]] = {}
+    limits: Dict[str, dict] = {}
 
     def row_for(provider: str, call: Optional[dict] = None) -> Row:
         if provider in rows:
             return rows[provider]
         member = members.get(provider)
         source = member or call or {}
+        limits[provider] = (member or {}).get("limits") or {}
         rows[provider] = Row(
             provider=provider,
             account=source.get("account", "unknown"),
             platform=source.get("platform", "unknown"),
             model=source.get("model", "unknown"),
             priority=(member or {}).get("priority"),
-            limits=(member or {}).get("limits") or {},
             max_input_tokens=(member or {}).get("max_input_tokens"),
             configured=member is not None,
         )
@@ -418,7 +392,7 @@ def build_report(calls: List[dict], pool: Optional[dict],
 
     accounts: Dict[str, AccountSummary] = {}
     for row in rows.values():
-        row.gauges = _gauges_for(row.limits, row.minute, row.day, now)
+        row.gauges = _gauges_for(limits[row.provider], row.minute, row.day, now)
         with_limits = [gauge for gauge in row.gauges if gauge.ratio is not None]
         row.tightest = max(with_limits, key=lambda gauge: gauge.ratio, default=None)
         row.blocked_for = _blocked_for(refusals.get(row.provider, []), now)
@@ -440,7 +414,6 @@ def build_report(calls: List[dict], pool: Optional[dict],
 
     report = Report(
         generated=now,
-        pool_generated=(pool or {}).get("generated"),
         config=(pool or {}).get("config"),
         since=since,
         calls=len(calls),
@@ -450,7 +423,7 @@ def build_report(calls: List[dict], pool: Optional[dict],
         accounts=sorted(accounts.values(), key=lambda a: (a.platform, a.account)),
     )
     report.models = _fold_models(report.rows)
-    report.platforms = _fold_platforms(report.models, report.accounts)
+    report.platforms = _fold_platforms(report.models)
     report.notes = _notes(report, pool)
     return report
 

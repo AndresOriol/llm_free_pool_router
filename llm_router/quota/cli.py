@@ -18,9 +18,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import List, Optional
 
+from .. import usage
 from .format import ago, compact, duration, percent, scaled, stamp
 from .html import render_panel
-from .ledger import read_ledger, read_pool, usage_dir
+from .ledger import read_ledger, read_pool
 from .report import (Report, _fold_models, _fold_platforms, build_report,
                      declared_limits)
 
@@ -147,7 +148,7 @@ def _only(report: Report, account: str) -> Report:
     # The folds are rebuilt from what survived, so a narrowed report never
     # carries a model total that includes an account it no longer shows.
     report.models = _fold_models(report.rows)
-    report.platforms = _fold_platforms(report.models, report.accounts)
+    report.platforms = _fold_platforms(report.models)
     return report
 
 
@@ -168,7 +169,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--out", help="panel only: where to write the HTML")
     args = parser.parse_args(argv)
 
-    directory = usage_dir(args.dir)
+    directory = Path(args.dir) if args.dir else usage.usage_dir()
     report = build_report(read_ledger(directory), read_pool(directory))
     if args.account:
         report = _only(report, args.account)

@@ -15,7 +15,7 @@ def compact(value: float) -> str:
 
 def scaled(name: str, value: float) -> str:
     """Tokens read better rounded; requests are small integers and don't."""
-    return compact(value) if name.startswith("t") or name == "tokens" else str(round(value))
+    return compact(value) if name.startswith("t") else str(round(value))
 
 
 def percent(ratio: Optional[float]) -> str:

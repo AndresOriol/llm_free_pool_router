@@ -16,12 +16,6 @@ import json
 from pathlib import Path
 from typing import Any, List, Optional
 
-from .. import usage
-
-
-def usage_dir(override: Optional[str] = None) -> Path:
-    """Where the three files live. `override` beats the env var and the default."""
-    return Path(override) if override else usage.usage_dir()
 
 
 def read_ledger(directory: Path) -> List[dict]:
