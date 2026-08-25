@@ -57,10 +57,18 @@ class RouterChatModel(BaseChatModel):
     # wide-context member instead of whichever narrow account happens to be
     # warm. None (the default) leaves routing exactly as it was.
     min_context: Optional[int] = None
+    # Whether that floor is a hard filter. False keeps the original behaviour --
+    # prefer a wide member, settle for a narrow one rather than stall. True
+    # refuses to route below the floor and waits instead, which is what a
+    # conversational harness needs: its history cannot be trimmed to fit an
+    # 8,000-token member without dropping what it is reasoning about.
+    strict_context: bool = False
 
-    def for_context(self, min_context: Optional[int]) -> "RouterChatModel":
+    def for_context(self, min_context: Optional[int],
+                    strict: bool = False) -> "RouterChatModel":
         """A copy of this model that demands a context floor."""
-        return self.model_copy(update={"min_context": min_context})
+        return self.model_copy(update={"min_context": min_context,
+                                       "strict_context": strict})
 
     @property
     def _llm_type(self) -> str:
@@ -90,7 +98,8 @@ class RouterChatModel(BaseChatModel):
         # Size the request once so routing can skip models it would overflow.
         estimated = estimate_tokens(messages, self.bound_tools)
         for _ in range(self.max_retries):
-            provider = self.router.get_best_provider(estimated, self.min_context)
+            provider = self.router.get_best_provider(estimated, self.min_context,
+                                                     self.strict_context)
             if provider is None:
                 if self._wait_for_cooldown():
                     continue
@@ -168,7 +177,10 @@ class RouterChatModel(BaseChatModel):
     def _wait_for_cooldown(self) -> bool:
         """Sleep until the soonest account leaves cooldown. Returns False when
         nothing is coming back (no account in cooldown to wait for)."""
-        wait = self.router.seconds_until_available()
+        # Asked with the same floor selection used, or the two disagree and the
+        # loop gives up while a wide member is seconds from returning.
+        wait = self.router.seconds_until_available(
+            self.min_context if self.strict_context else None)
         if wait is None:
             return False
         delay = min(wait, _MAX_WAIT_SECONDS)
