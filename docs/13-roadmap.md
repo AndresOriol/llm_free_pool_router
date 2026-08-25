@@ -24,18 +24,45 @@ doesn't start until told to.
 
 In order. The ordering is the argument.
 
-1. **Fix the dead-model crash.** `404 model_not_found` propagates and kills a
-   run ([4.6](04-failover.md#46-known-gaps)). Half of all measured runs died on
-   it. Everything downstream of measurement is untrustworthy until this is
-   fixed, which makes it the only thing with a claim to being first. A
-   decommissioned model should be disabled *permanently*, the way a
+1. **Author scenarios at L1 and L2.** The single blocking item. The one L0
+   scenario is *exhausted as an instrument*: seven configurations were run
+   against it and none could be distinguished from another, with one
+   configuration scoring 3/3 and 1/3 on consecutive batches
+   ([6.14.1](06-agent.md#682-the-pass-column-is-noise)).
+   More reps cannot fix that — only a task that discriminates can. Until this
+   lands, every proposed improvement is back to being decided by argument.
+2. **Fix the dead-model crash properly.** `404 model_not_found` propagates and
+   kills a run ([4.6](04-failover.md#46-known-gaps)). Evals work around it with
+   a trimmed pool (`llm_router/config.eval.yaml`); the shipping pool still dies
+   on it. A decommissioned model should be disabled *permanently*, the way a
    rate-limited one is benched *temporarily*.
-2. **Author scenarios at L1 and L2.** With one L0 scenario there is nothing to
-   compare configurations on ([11.4](11-eval-status.md#114-blockers)). This is
-   the single biggest unblocker in the repo: without it, every proposed
-   improvement is back to being decided by argument.
-3. **Re-baseline at n=5**, and record it in the ledger.
+3. **Re-baseline at n=5** now that scenarios exist, and record it in the ledger.
 4. **Then** the judge (P2), then compare/report (P3).
+
+### 13.2.1 What the architecture work settled, and what it did not
+
+`harness/adhoc-router` holds the agent ([6.1](06-agent.md#61-what-it-is)). Seven
+variants and a conversational baseline were measured before it; all of them are
+in `git log` now. What that measurement established, and what a fresh session
+should not redo:
+
+- **Cost replicated: 7.3 calls and 5,756 input tokens against the conversational
+  loop's 20.0 and 226,854.** A 39× reduction, stable across every rep and batch.
+  This is why the architecture is what it is.
+- **Pass rates on L0 are noise.** Do not re-run configurations against
+  `retry-after-case`; the answer will be a different random ordering
+  ([6.8.2](06-agent.md#682-the-pass-column-is-noise)).
+- **Every failure was `reasoning`** — 12 of 13, zero `retrieval`, zero
+  `tooling`. Each configuration found the file, edited it, ran the tests, and
+  got the fix conceptually wrong
+  ([6.8.3](06-agent.md#683-every-failure-is-reasoning)).
+  **This is the load-bearing result**: topology changes address retrieval,
+  tooling and stopping, and none of those is the bottleneck. Further
+  architecture work has close to nothing left to give on correctness.
+
+So the architecture is a *cost* win whose *correctness* is still unpriced. What
+prices it is a scenario set and a diagnosis of what actually goes wrong inside a
+run, not more topologies.
 
 ### Evaluation build order
 
@@ -59,8 +86,16 @@ plan that ignores one of them is wrong.
   *accounts* buys real capacity ([3.4](03-pool-model.md#34-priority-tiers)).
 - **Gemini's shape is the mirror image**: huge token budgets, very few requests
   per day. The pool only works because the two shapes complement each other.
-- **A one-line fix costs ~10 provider calls across 5–7 models.** Throughput, not
-  intelligence, is the binding constraint on long tasks.
+- **A one-line fix cost ~20 provider calls and ~227,000 input tokens** on the
+  conversational loop this replaced. Throughput is the binding constraint on
+  long tasks — though
+  on the one scenario measured so far, *correctness* failures were all
+  `reasoning`, so throughput and capability are separate problems and only the
+  first has been solved.
+- **Two Groq models are decommissioned** (`llama-4-scout`, `qwen3-32b`) and 404.
+  A dead model is only reached if a request is small enough to pass the size
+  filter, so cheaper agents trip landmines that token-heavy ones never reach —
+  audit the pool before reading any efficiency result.
 - **Cooldown state is per process.** Two concurrent agents on the same keys each
   rediscover which accounts are hot.
 - **A full comparison costs a meaningful fraction of a day's quota**
@@ -79,8 +114,7 @@ Live, unresolved, and worth deciding when the evidence arrives — not before.
 | How does a free-pool judge get validated? | It must agree with the Claude judge on a labelled set before its scores can be trusted. |
 | Where does shared cooldown state live, if it ever needs to be shared across processes? | A second concurrent consumer actually existing. |
 | Where do per-provider curated docs live once the provider list grows? | The provider list growing past what one page holds ([5. Providers](05-providers.md)). |
-| Should deepagents' summarization be tuned for the pool's real (much smaller) context windows? | It's a candidate change like any other — measure it. Proposed as S5 in [6.9](06-agent.md#69-proposed-strategies). |
-| Should the agent keep the `task`/subagent tool at all? It costs 31% of the per-step budget and is never configured. | An L2 multi-file scenario run with and without it. See the tension in [6.9.1](06-agent.md#691-the-one-real-tension). |
+| Should a node's slice of the log grow when the pool has the room, or stay narrow on principle? | An L2 scenario run with `write` given the `notes` and `exec` kinds. The recorded failure it targets is a writer acting on a brief that carried nothing ([6.5](06-agent.md#65-what-each-role-sees)). |
 
 ## 13.5 Settled decisions
 

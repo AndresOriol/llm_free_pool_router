@@ -155,6 +155,50 @@ def _status_of(exc: Exception) -> Optional[int]:
     return code if isinstance(code, int) else None
 
 
+def is_decommissioned(exc: Exception) -> bool:
+    """Is this pool member gone upstream, rather than busy?
+
+    Free platforms retire models without notice and the SDK reports it as an
+    ordinary 404. `is_transient` correctly refuses to retry a 4xx, so the error
+    propagates and kills the whole run -- which has now happened three times,
+    for `llama-4-scout`, `qwen3-32b` and `llama-3.3-70b-versatile`. The
+    workaround each time was to delete the model from the eval pool by hand,
+    which fixes the measurement and leaves an unattended run dying on the next
+    retirement.
+
+    A retired model is neither transient nor a bug in the caller: it is a member
+    that will never work again. So it is dropped from the pool for the rest of
+    the process and the run carries on with the others -- which is the whole
+    point of holding a pool.
+
+    **The status is not always reachable.** `langchain_google_genai` catches the
+    SDK's `APIError` and re-raises its own `ChatGoogleGenerativeAIError`, which
+    is a plain exception: no `.status_code`, no `.code`, just the original text
+    in the message. So `_status_of` returns None and the 404 test below never
+    fires. That is how `gemini-2.5-flash` -- retired with "no longer available
+    to new users" -- killed both runs of a batch after this function was
+    supposedly written to prevent exactly that. The status is therefore read out
+    of the message too, which is the only place a wrapped error still has it.
+    """
+    message = str(getattr(exc, "message", "") or exc).lower()
+    for signal in ("model_not_found",
+                   "does not exist or you do not have access",
+                   "is not found for api version",
+                   # Google's wording when a model is closed to new users. It
+                   # is a retirement, whatever the status says.
+                   "no longer available"):
+        if signal in message:
+            return True
+    if _status_of(exc) == 404:
+        return True
+    # A wrapped 404, read out of the text. Both halves are required: a bare
+    # `404` appears in plenty of messages that are not retirements (a token
+    # count, a port, an id), and "not found" alone is said about files and
+    # fields as often as about models.
+    return bool(re.search(r"\b404\b", message)
+                and ("not_found" in message or "not found" in message))
+
+
 def reached_provider(exc: Exception) -> bool:
     """Did this failed attempt actually get an answer from the provider?
 
@@ -244,6 +288,9 @@ class LLMProvider(ABC):
         self.is_available = True
         self.cooldown_until = 0.0
         self.consecutive_failures = 0
+        # Set once the platform says this model no longer exists. Distinct from
+        # a cooldown, which is a wait: this one never ends.
+        self.decommissioned = False
         self._chat: Optional[BaseChatModel] = None
 
     @abstractmethod
@@ -260,12 +307,27 @@ class LLMProvider(ABC):
 
     def check_availability(self) -> bool:
         """Check whether the provider has served its penalty time."""
+        if self.decommissioned:
+            return False
         if not self.is_available and time.time() > self.cooldown_until:
             self.is_available = True
             self.consecutive_failures = 0
             logger.info(f"{self.name} has finished its cooldown and is available again.")
 
         return self.is_available
+
+    def retire(self, reason: str = "") -> None:
+        """Drop this member from the pool for the rest of the process.
+
+        Not a cooldown. Nothing brings it back, because nothing upstream is
+        going to un-retire the model -- the fix is to delete it from the config,
+        which is why this logs at ERROR naming the model to delete.
+        """
+        self.decommissioned = True
+        self.is_available = False
+        logger.error(f"{self.name} is gone upstream (model={self.model}); dropping it "
+                     f"from the pool for this process. Remove it from the config. "
+                     f"{reason}".rstrip())
 
     def trigger_cooldown(self, retry_after: Optional[int] = None):
         """Temporarily block the provider. Uses Retry-After or exponential backoff."""

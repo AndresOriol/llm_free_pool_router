@@ -20,7 +20,7 @@ import yaml
 
 # What actually launches the agent. Overridable so the pipeline can be tested
 # against a stub without spending free-tier quota on the real pool.
-DEFAULT_AGENT_CMD = ["python", "-m", "agent.coding_agent", "{workdir}"]
+DEFAULT_AGENT_CMD = ["python", "-m", "agent.harness", "{workdir}"]
 
 
 def read_env_file(path: Path) -> dict:
@@ -59,7 +59,8 @@ class AgentConfig:
     def fingerprint(self) -> str:
         # Secrets are deliberately excluded: which key served a run is not part
         # of what makes two configurations the same, and the fingerprint is
-        # written to results that get committed.
+        # written into every run's `run.json` and quoted from there into
+        # reports, which do get committed.
         payload = json.dumps({"sha": self.sha, "env": self.env,
                               "router_config": self.router_config,
                               "agent_cmd": self.agent_cmd}, sort_keys=True)

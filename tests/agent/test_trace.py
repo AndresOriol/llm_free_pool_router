@@ -12,21 +12,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from agent.trace import JsonlTracer, tracer_from_env
+from agent.runtime.trace import JsonlTracer, tracer_from_env
 
 
 class _Generation:
     """Stand-in for a ChatGeneration: a .message carrying .usage_metadata."""
 
-    def __init__(self, usage):
+    def __init__(self, usage, text=""):
         self.message = type("M", (), {"usage_metadata": usage})()
+        self.text = text
 
 
 class _Response:
     """Stand-in for an LLMResult."""
 
-    def __init__(self, usage=None, llm_output=None):
-        self.generations = [[_Generation(usage)]] if usage is not None else [[]]
+    def __init__(self, usage=None, llm_output=None, text=""):
+        self.generations = [[_Generation(usage, text)]] if usage is not None else [[]]
         self.llm_output = llm_output
 
 
@@ -58,6 +59,20 @@ def _run():
         assert start == {"ts": start["ts"], "event": "llm_start", "run_id": "r1",
                          "model": "llama-3.3-70b"}, start
         assert (end["tokens_in"], end["tokens_out"], end["ok"]) == (11, 7, True), end
+
+        # What the model actually said is kept, clipped like everything else.
+        # Without it a `<think>` block that poisoned a finding is invisible:
+        # once envelope.py has parsed the reply, a model that wrote nonsense
+        # and a parser that mangled sense look identical.
+        tracer.on_chat_model_start({"name": "ChatOpenAI"}, [], run_id="rt")
+        tracer.on_llm_end(_Response(usage={"input_tokens": 1, "output_tokens": 2},
+                                    text="<think>hmm</think>STATUS: DONE"),
+                          run_id="rt")
+        said = _lines(target)[-1]
+        assert "<think>" in said["text"], said
+        tracer.on_llm_end(_Response(usage={"input_tokens": 1}, text="z" * 50_000),
+                          run_id="rt")
+        assert "50000 chars" in _lines(target)[-1]["text"]
 
         # A rerouted attempt is an llm_error -- this is the failover-bounce count.
         tracer.on_llm_error(RuntimeError("rate_limit_exceeded"), run_id="r2")
@@ -96,6 +111,13 @@ def _run():
         assert _lines(target)[-1]["model"] == "unknown"
 
     print("trace: all checks passed")
+
+
+def test_trace():
+    """Collected by pytest -- see the note in test_restricted_backend.py. The
+    trace's event shape is a contract (docs/07-observability.md#74), and a
+    contract nothing runs is not one."""
+    _run()
 
 
 if __name__ == "__main__":

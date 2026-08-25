@@ -37,17 +37,63 @@ def _execute(config, workdir: Path, prompt: str, trace_path: Path,
         env["ROUTER_CONFIG"] = str((config.repo / config.router_config).resolve())
 
     started = time.time()
+    # Popen rather than subprocess.run: on a timeout, `run` kills the agent and
+    # then drains the pipes, and the drain blocks on any *grandchild* still
+    # holding the inherited stdout handle. The agent spawns `python -m pytest`,
+    # so that grandchild exists routinely -- and a batch died on exactly this,
+    # one run sitting 66 minutes past its 1800s timeout while the trace showed
+    # it still calling models. Killing the tree first is what makes the timeout
+    # mean something.
+    process = subprocess.Popen(cmd, cwd=config.worktree, stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, errors="replace", env=env)
     try:
-        result = subprocess.run(cmd, cwd=config.worktree, input=prompt, text=True,
-                                capture_output=True, errors="replace",
-                                timeout=timeout_s, env=env)
-        return {"stdout": result.stdout, "stderr": result.stderr,
-                "exit_code": result.returncode, "wall_time_s": time.time() - started,
+        stdout, stderr = process.communicate(input=prompt, timeout=timeout_s)
+        return {"stdout": stdout, "stderr": stderr,
+                "exit_code": process.returncode, "wall_time_s": time.time() - started,
                 "timed_out": False}
-    except subprocess.TimeoutExpired as exc:
-        return {"stdout": exc.stdout or "", "stderr": (exc.stderr or "") + "\n[runner] TIMEOUT",
+    except subprocess.TimeoutExpired:
+        _kill_tree(process)
+        # Give the drain a bounded second chance; the tree is gone, so the pipes
+        # are closed and this returns immediately unless something is very wrong.
+        try:
+            stdout, stderr = process.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = "", ""
+        return {"stdout": stdout or "",
+                "stderr": (stderr or "") + "\n[runner] TIMEOUT",
                 "exit_code": -1, "wall_time_s": time.time() - started,
                 "timed_out": True}
+
+
+def _kill_tree(process) -> None:
+    """Kill the agent and everything it spawned. Best effort, never raises."""
+    if os.name == "nt":
+        # taskkill /T is the only thing on Windows that reaches grandchildren;
+        # Popen.kill() terminates the named process alone.
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                       capture_output=True)
+    try:
+        process.kill()
+    except OSError:
+        pass
+
+
+def _collect_session_artifacts(workdir: Path, out_dir: Path) -> None:
+    """Keep what a session wrote about itself. No-op for a task-shaped agent."""
+    state = workdir / ".harness"
+    journal = state / "journal.jsonl"
+    if journal.is_file():
+        shutil.copyfile(journal, out_dir / "journal.jsonl")
+    reports = sorted((state / "reports").glob("session-*.md"))
+    if reports:
+        shutil.copyfile(reports[-1], out_dir / "rationale.md")
+    # The per-turn transcript: prompt in, reply out. It is the only artifact
+    # that says what a role was given, so a post-mortem that loses it can
+    # report where a run went wrong but not why.
+    steps = state / "steps"
+    if steps.is_dir():
+        shutil.copytree(steps, out_dir / "steps", dirs_exist_ok=True)
 
 
 def _outcome(execution: dict, verification: dict, tampered: list) -> str:
@@ -92,6 +138,11 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
                              out_dir / "trace.jsonl", scenario.timeout_s)
 
         tampered = verify_mod.check_integrity(before, workdir)
+        # Before pruning: a session writes its rationale and journal into the
+        # workdir's .harness/, which prune_artifacts deletes. Those two files
+        # are the deliverable under a review model where nobody reads the code,
+        # so losing them would leave the judge grading the diff alone.
+        _collect_session_artifacts(workdir, out_dir)
         verify_mod.prune_artifacts(workdir)
         patch = verify_mod.make_diff(seed, workdir)
         verification = verify_mod.verify(repo, scenario, workdir, base / "verified")

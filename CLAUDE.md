@@ -11,11 +11,16 @@ This is infrastructure, not a demo. It must be boring and reliable: an agent
 running unattended for hours should never stall just because one free account
 hit its rate limit.
 
-**Phase 2 (not started, direction only):** once the free pool is solid, wire
-it as the model backend for [deep agents](https://github.com/langchain-ai/deepagents)
-(LangGraph/LangSmith) to get a real autonomous coding agent loop running on
-top of it. Do not start building the deep-agents integration until told to —
-right now the router itself is the whole project.
+**Phase 2 (in progress):** a **standing maintainer** — an agent that works a
+project unattended for hours on its own branch, updates its documentation, and
+writes an account a human reviews instead of the code. The daily cycle and what
+it requires are argued in
+[docs/design/long-run-harness.md](docs/design/long-run-harness.md); the graph is
+[agent/harness/graph.py](agent/harness/graph.py).
+
+A deepagents/LangGraph conversational loop was the first attempt at this and was
+measured against the current one: 226,854 input tokens against 5,756 on the same
+task, replicated. It is deleted, not disabled — `git log` is the record.
 
 ## Non-goals
 
@@ -39,9 +44,16 @@ right now the router itself is the whole project.
   every account serving it, filterable down to a single account. A terminal
   table, `--json` for an agent, and a static HTML panel. It reports; it never
   gates a call ([14. Quota panel](docs/14-quota-panel.md)).
-- [agent](agent/) — `RouterChatModel` (the failover loop, as a LangChain
-  `BaseChatModel`) plus a deepagents coding loop that runs on it, jailed to a
-  workdir with `python`/`pytest` execution.
+- [agent/runtime](agent/runtime/) — the substrate: `RouterChatModel` (the
+  failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
+  `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
+  nothing about sessions.
+- [agent/harness](agent/harness/) — the agent itself: a LangGraph state machine
+  of narrow nodes over one shared log ([log.py](agent/harness/log.py)), each
+  node reading only the kinds of entry it declares. One file per node in
+  [nodes/](agent/harness/nodes/); the edges and the vetoes in
+  [graph.py](agent/harness/graph.py); what a session leaves behind in
+  [record/](agent/harness/record/).
 - [evals](evals/) — the harness that decides whether a change to either of the
   above helped. Scenarios live in the separate `agent_evals` repo.
 - Providers today: Groq, Gemini. Expect more free-tier providers (Cerebras,

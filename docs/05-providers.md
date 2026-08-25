@@ -55,6 +55,17 @@ uses it to swap the model pool without editing the checked-in file
 ([8.4](08-evaluation-method.md#84-what-a-configuration-is)); unset, the default
 is used.
 
+**`llm_router/config.eval.yaml`** is such a pool: `config.yaml` minus the models
+that are dead upstream. Groq returns `404 model_not_found` for
+`meta-llama/llama-4-scout-17b-16e-instruct` and `qwen/qwen3-32b`, and a 404 is
+not transient, so it propagates and kills a run. Every eval configuration points
+at this file, so both sides of a comparison draw from an identical pool.
+
+It is a workaround for the measurement, **not the fix** — the shipping pool
+still dies on those models. Regenerate it after editing `config.yaml`, and
+delete it once the router disables decommissioned models permanently
+([13.2](13-roadmap.md#132-what-to-do-next)).
+
 ## 5.3 Why `max_input_tokens` matters
 
 It is not documentation. It is the number the router uses to decide whether a

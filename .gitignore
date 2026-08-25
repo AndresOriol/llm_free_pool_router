@@ -6,11 +6,16 @@ __pycache__/
 # Eval worktrees are throwaway checkouts of this repo.
 evals/.worktrees/
 
-# Run results stay on disk but out of git. They are still the durable record
-# that replaces expiring hosted traces -- keep the directory, and commit a run
-# by hand (`git add -f`) when it is the evidence behind a verdict. The twelve
-# already committed stay tracked; .gitignore does not untrack anything.
+# Run output is an artifact, not source. It stays on disk as the durable record
+# that replaces expiring hosted traces, and none of it belongs in git -- a run
+# is megabytes of log that no one reads back through a diff, and it would sit
+# in the history forever. Cite a run by its id from a report; keep the files.
 evals/results/runs/
+
+# Same for the per-run post-mortems the trace-reviewer writes. The README that
+# explains the directory is prose, and stays.
+evals/results/reviews/*
+!evals/results/reviews/README.md
 
 # What this machine's accounts have spent, plus the pool snapshot the quota
 # panel measures it against. Local state, rewritten as the router runs.

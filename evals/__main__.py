@@ -3,6 +3,7 @@
     validate [--topic T] [--scenario TAG]     the untouched/gold-patch gate
     run --config NAME [...]                   execute runs and record them
     show [--config NAME]                      summarize recorded runs
+    bundle [--config NAME] [--out FILE]       collect a batch's evidence for J2
 
 Scenarios are data and live in a separate repo (default: the `agent_evals`
 sibling of this one); point elsewhere with --scenarios or EVAL_SCENARIOS.
@@ -14,7 +15,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from evals import agent_config, run as run_mod, scenario as scenario_mod, verify as verify_mod
+from evals import (agent_config, bundle as bundle_mod, run as run_mod,
+                   scenario as scenario_mod, verify as verify_mod)
 
 REPO = Path(__file__).resolve().parents[1]
 CONFIGS = REPO / "evals" / "configs"
@@ -123,6 +125,23 @@ def cmd_show(args) -> int:
     return 0
 
 
+def cmd_bundle(args) -> int:
+    rows = run_mod.load_records(Path(args.results))
+    if args.config:
+        rows = [r for r in rows if r["config"] in args.config]
+    if args.since:
+        rows = [r for r in rows if r["run_id"][-17:] >= args.since]
+    if not rows:
+        sys.exit("No matching runs.")
+    text = bundle_mod.build(Path(args.results), rows)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"{len(rows)} run(s) -> {args.out}")
+    else:
+        print(text)
+    return 0
+
+
 def _mean(rows: list, key: str) -> float:
     values = [r.get(key) or 0 for r in rows]
     return sum(values) / len(values) if values else 0.0
@@ -158,6 +177,15 @@ def main() -> int:
     show.add_argument("--config", action="append")
     show.add_argument("--results", default=str(RESULTS))
     show.set_defaults(func=cmd_show)
+
+    # The J2 analyst reads a batch, not a run. Assembling the evidence here
+    # keeps the skill's context spent on analysis rather than on globbing.
+    bundle = sub.add_parser("bundle", help="collect a batch's evidence for analysis")
+    bundle.add_argument("--config", action="append")
+    bundle.add_argument("--since", default="", help="UTC stamp, e.g. 20260806T000000Z")
+    bundle.add_argument("--results", default=str(RESULTS))
+    bundle.add_argument("--out", default="", help="write here instead of stdout")
+    bundle.set_defaults(func=cmd_bundle)
 
     args = parser.parse_args()
     return args.func(args)

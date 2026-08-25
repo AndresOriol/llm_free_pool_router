@@ -11,9 +11,65 @@ rate improves beyond interval overlap, or success rate holds flat while a
 secondary metric improves materially. Anything else is a draw, and a draw keeps
 the simpler configuration.
 
+> **The configurations in this table no longer exist as files.** The harness was
+> reduced to one architecture — `evals/configs/session.yaml` — and the deep-agents
+> baseline and seven variants were deleted. These rows stay because a ledger of
+> what was tried and what it showed is the point of the file; `git log` has the
+> code behind each name.
+
 | Config | Ref / SHA | Change | Suite | Result | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| `baseline` | `master` | — | `scenario/http-headers/retry-after-case` L0, n=2 | 1 pass, 1 crash | reference point |
+| `baseline` | `master` | — | L0 `retry-after-case`, n=3 | 3/3 | reference point |
+| `adhoc-harness` | `harness/adhoc-router` | Narrow per-role agents over a shared blackboard | L0, n=6 | 4/6, 15k tok | **draw** — keep measuring |
+| `harness-v3-merged` | `harness/adhoc-router` | One `investigate` role replaces locate + inspect | L0, n=6 | 4/6, 10.5k tok | **draw** — its 3/3 did not replicate |
+| `harness-v6-guarded` | `harness/adhoc-router` | Forced summary + no-note guard on edit | L0, n=3 | 2/3, **5.8k tok** | cheapest by far; undecided |
+| `harness-v5-lean` | `harness/adhoc-router` | Seeded files + edit retry + two-tool locate | L0, n=3 | 1/3 | **dropped** |
+| `harness-v2-seeded` | `harness/adhoc-router` | Glob the file list, skip `locate` | L0, n=3 | 0/3 | **dropped** |
+| `harness-v7-orchestrated` | `harness/adhoc-router` | Hub and spoke; execution as an agent | L0, n=3 | 0/3, most calls | **dropped for this task shape** |
+| `harness-v8-session` | `harness/adhoc-router` | A session: briefed roles, journal, branch, docs and rationale as deliverables | L1+L2 `session`, n=2 | 2/4 | **no verdict** — ran alone, no baseline |
+
+### harness-v8-session, first batch (2026-08-07)
+
+Full analysis in
+[results/reports/2026-08-07-first-session-batch.md](results/reports/2026-08-07-first-session-batch.md).
+
+Not a promotion decision: one configuration, no interleaved comparison. What it
+established is that **both new scenarios discriminate** — each passed once and
+failed once, which is precisely what `retry-after-case` stopped being able to do.
+
+Three defects in the *instrument* were found by reading the evidence: `.git`
+survived the diff prune (read-only objects, Windows), a clean "exhausted" was
+recorded as `crash`, and every rationale reported "Files changed: 0". All fixed.
+**No diff-derived metric from this batch is usable**; the hidden-test ratios and
+the journals are.
+
+### The harness family, 2026-08-06
+
+Full write-up in
+[docs/06-agent.md](../docs/06-agent.md#68-why-it-is-shaped-this-way). Three
+things worth carrying forward:
+
+**No promotion.** Nothing beat baseline on the gating axis, and nothing is
+distinguishable from anything else. `harness-v3-merged` scored 3/3 in one batch
+and 1/3 in the next on an identical configuration — direct evidence that one L0
+task at n=3 sits inside the noise floor, exactly as
+[docs/08-evaluation-method.md](../docs/08-evaluation-method.md#86-fair-comparison)
+predicts. Any ranking read off these pass rates would be invented.
+
+**The cost result is real.** Token and call counts replicated across every rep
+and batch, with between-configuration spread far exceeding within-configuration
+variance: `harness-v6-guarded` runs the task on 7.3 calls / 5,756 input tokens
+against baseline's 20.0 / 226,854. A 39× reduction, on a pool where tokens are
+the binding constraint.
+
+**Every failure is `reasoning`** — 12 of 13, with one `stopping` and zero
+`retrieval` or `tooling`. Every variant found the file, edited it, and ran the
+tests; they got the fix conceptually wrong. Architecture changes cannot move
+that number, which is the strongest available argument for spending the next
+effort on scenarios and model tiering rather than on more topologies.
+
+**Do not re-run these on L0.** They are exhausted as a comparison. The next
+useful measurement is the same set against a scenario that can discriminate.
 
 ### baseline, first measurement (2026-07-29)
 

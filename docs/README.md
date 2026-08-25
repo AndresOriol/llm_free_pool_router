@@ -11,6 +11,33 @@ source, and read the source only when you're about to change it.
 New here? Start with [1. Overview](01-overview.md), then
 [2. Repo map](02-repo-map.md).
 
+## Where things stand right now
+
+*The three facts most likely to mislead someone picking this up cold. Everything
+else on this page is design and changes rarely; this block is state.*
+
+- **Active work lives on the `harness/adhoc-router` branch, not `master`.** The
+  agent there is a LangGraph state machine of narrow roles, and it is now the
+  only one: the conversational baseline it beat on cost by 39×, and the seven
+  variants tried along the way, are in `git log` rather than in the tree
+  ([6.1](06-agent.md#61-what-it-is)).
+- **The one L0 scenario is exhausted as a measuring instrument.** Seven
+  configurations were run against it; none could be distinguished from another,
+  and one scored 3/3 and 1/3 on consecutive batches. Re-running them will
+  produce a different random ordering, not an answer
+  ([6.8.2](06-agent.md#682-the-pass-column-is-noise)).
+  There are now four more scenarios, at L1 and L2, and none has been run past
+  n=2 ([11.2](11-eval-status.md#112-whats-built)).
+- **The instrument being built is diagnostic, not a score.** Pass rates are
+  noise at affordable sample sizes, so what is being invested in is evidence:
+  every role's prompt and reply is recorded per turn
+  ([7.6](07-observability.md#76-what-a-session-records-about-itself)), and a
+  per-run post-mortem reads it
+  ([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
+  Every measured failure so far was `reasoning`, never `retrieval` or `tooling`,
+  which is why more architecture work is not the next move
+  ([6.8.3](06-agent.md#683-every-failure-is-reasoning)).
+
 ---
 
 ## Index
@@ -61,26 +88,23 @@ New here? Start with [1. Overview](01-overview.md), then
 
 ### Part III — The agent
 
-**[6. The coding agent](06-agent.md)** — what it can do, what it costs per step, and how to make it better
+**[6. The coding agent](06-agent.md)** — one graph of narrow roles, and where every branch is decided
 &nbsp;&nbsp;&nbsp;&nbsp;[6.1](06-agent.md#61-what-it-is) What it is ·
 [6.2](06-agent.md#62-the-blast-radius) The blast radius ·
 [6.3](06-agent.md#63-the-agents-instructions) The agent's instructions ·
-[6.4](06-agent.md#64-what-the-model-actually-receives) What the model actually receives ·
-[6.5](06-agent.md#65-the-librarys-prompts-and-what-they-cost-us) The library's prompts, and what they cost ·
-[6.6](06-agent.md#66-loop-budget) Loop budget ·
-[6.7](06-agent.md#67-what-failover-looks-like-in-practice) Failover in practice
-&nbsp;&nbsp;&nbsp;&nbsp;⚠ *proposals under review:*
-[6.8](06-agent.md#68-why-the-agent-underperforms-the-measured-diagnosis) The measured diagnosis ·
-[6.9](06-agent.md#69-proposed-strategies) Proposed strategies ·
-[6.10](06-agent.md#610-repo-level-configuration) Repo-level configuration ·
-[6.11](06-agent.md#611-proposed-baseline-implementation) Proposed baseline implementation
+[6.4](06-agent.md#64-the-graph) The graph ·
+[6.5](06-agent.md#65-what-each-role-sees) What each role sees ·
+[6.6](06-agent.md#66-one-role-call) One role call ·
+[6.7](06-agent.md#67-what-failover-looks-like-in-practice) Failover in practice ·
+[6.8](06-agent.md#68-why-it-is-shaped-this-way) Why it is shaped this way
 
 **[7. Observability](07-observability.md)** — two traces, deliberately
 &nbsp;&nbsp;&nbsp;&nbsp;[7.1](07-observability.md#71-why-two) Why two ·
 [7.2](07-observability.md#72-langsmith) LangSmith ·
 [7.3](07-observability.md#73-the-local-trace) The local trace ·
 [7.4](07-observability.md#74-the-shape-is-a-contract) The shape is a contract ·
-[7.5](07-observability.md#75-reading-routing-decisions-live) Reading routing decisions live
+[7.5](07-observability.md#75-reading-routing-decisions-live) Reading routing decisions live ·
+[7.6](07-observability.md#76-what-a-session-records-about-itself) What a session records about itself
 
 ### Part IV — Evaluation
 

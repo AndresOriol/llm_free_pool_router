@@ -48,13 +48,20 @@ accounts:
     type: gemini
     url: https://generativelanguage.googleapis.com/v1beta/models
     api_key_env: GEMINI_API_KEY_1
+  - name: gemini_2
+    user: [EMAIL_ADDRESS]
+    platform: gemini
+    type: gemini
+    url: https://generativelanguage.googleapis.com/v1beta/models
+    api_key_env: GEMINI_API_KEY_2
 
 models:
   # Groq retired its whole Llama line (3.3-70b, 3.1-8b, 4-scout) and qwen3-32b;
-  # all four answered 404 model_not_found when probed and are removed. A dead
-  # entry is not free: the router walks it, and a 404 is not transient, so it
-  # propagates and kills the run. The next retirement shows up in the quota
-  # panel as a member that only ever errors (llm_router/quota/).
+  # all four were probed dead and removed. The router now retires a model the
+  # platform 404s on rather than dying on it, so the next retirement costs one
+  # logged attempt instead of the run, and shows up in the quota panel as a
+  # member that only ever errors (llm_router/quota/) -- but a known-dead entry
+  # is still noise, and does not belong here.
 
   # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
   # Gemini first: this tier exists for judgement over a wide view, and
@@ -150,6 +157,7 @@ models:
     limits: {rpm: 10, tpm: 250000, rpd: 20}
 
   # -- Last resort: only when everything above is in cooldown.
+  # Gemma has unlimited TPM, so its ceiling is the model's context window.
   - name: Gemma4_31b
     platform: gemini
     model: gemma-4-31b-it

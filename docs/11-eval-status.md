@@ -5,82 +5,98 @@
 *The running state. This is the one page in the wiki expected to change often —
 everything else describes design; this describes today.*
 
-**Last updated: 2026-07-29.** Update it when a phase lands, a scenario is added,
+**Last updated: 2026-08-20.** Update it when a phase lands, a scenario is added,
 or a comparison is decided. A status page nobody updates is worse than none.
 
 ## 11.1 One-paragraph summary
 
-The pipeline works end to end. It has **one scenario**, at the easiest
-difficulty level, so it cannot yet compare two configurations — and half of the
-runs so far crashed on an unrelated infrastructure bug. Nothing measured today
-says anything about the agent's capability. The next moves are: fix the crash,
-author scenarios, re-baseline.
+The pipeline works end to end. The measurement is no longer bottlenecked on
+having a single L0 scenario: there are now **five scenarios across four
+topics**, three of them L1 or L2, including the set's first `trap`. Pass rates
+are still noise at the sample sizes affordable here, so the instrument being
+built out is the *diagnostic* one — a per-turn transcript of what every role was
+given, and a per-run post-mortem that reads it
+([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
+The next move is a batch at n=5 over the new scenarios, with a second Gemini
+account making that affordable.
 
 ## 11.2 What's built
 
 | Phase | State | What it covers |
 | --- | --- | --- |
-| **P0** trace capture | **done** | `EVAL_TRACE_FILE` makes the agent append one JSON object per LLM/tool event ([trace.py](../agent/trace.py)). Every automatic metric is a sum over that file. |
+| **P0** trace capture | **done** | `EVAL_TRACE_FILE` makes the agent append one JSON object per LLM/tool event ([trace.py](../agent/runtime/trace.py)). Every automatic metric is a sum over that file. A session also writes a per-turn transcript of what each role was handed ([7.6](07-observability.md#76-what-a-session-records-about-itself)). |
 | **P1** runner | **done** | [evals/](../evals/): materialize → run → verify → integrity → record, plus `validate` and `show`. Metrics automatic, including the failure taxonomy. |
 | **P2** judge | not started | `claude -p` with a pinned rubric and diff-hash cache. Quality scoring is manual until then. |
 | **P3** compare/report | not started | Leaderboard and written comparisons. `show` covers the basics today. |
-| **P4** scenario library | **1 of ~15** | Only one L0 scenario exists. **This is the main gap.** |
+| **P4** scenario library | **5 of ~15** | Four topics. `retry-after-case` (L0, exhausted), `duration-notes` (L1), `threshold-off-by-one` (L2), `stale-categories` (L1, symptom-only), `count-and-share` (L2, trap). Still the main gap, but no longer a blocker. |
 | **P5** SWE-bench L3 | not started | Needs Docker. Deliberately last. |
 
 ## 11.3 Where the numbers stand
 
-**One scenario, one configuration, n=2.** This establishes the pipeline works
-end to end. It is not yet a measurement of anything about the agent — see
-[8.6](08-evaluation-method.md#86-fair-comparison) for why nothing should be
-concluded at this sample size.
+**All of this is `retry-after-case` (L0) only**, n=3, interleaved on an
+identical pool. It predates the four scenarios added since, and no
+configuration has been run against those more than n=2.
 
-| config | runs | pass | rate | calls | bounces | failure classes |
-| --- | --- | --- | --- | --- | --- | --- |
-| `baseline` | 2 | 1 | 50% | 10.5 | 6.5 | stopping=1 |
+| config | runs | pass | calls | bounces | `tokens_in` |
+| --- | --- | --- | --- | --- | --- |
+| `baseline` | 3 | 3/3 | 20.0 | 6.5 | 226,854 |
+| `adhoc-harness` | 6 | 4/6 | 16.8 | 4.2 | 15,067 |
+| `harness-v3-merged` | 6 | 4/6 | 12.8 | 4.7 | 10,499 |
+| `harness-v6-guarded` | 3 | 2/3 | **7.3** | **2.0** | **5,756** |
+| `harness-v5-lean` | 3 | 1/3 | 15.0 | 4.7 | 12,827 |
+| `harness-v2-seeded` | 3 | 0/3 | 15.7 | 4.0 | 13,755 |
+| `harness-v7-orchestrated` | 3 | 0/3 | 19.7 | 7.3 | 12,543 |
 
-Per-run detail:
+Raw evidence in `evals/results/runs/` — on the machine that ran it, not in
+git; the ledger is in
+[evals/CONFIGS.md](../evals/CONFIGS.md); the architecture is
+[6.1](06-agent.md#61-what-it-is).
 
-| | rep 1 | rep 2 |
-| --- | --- | --- |
-| outcome | pass | crash (`stopping`) |
-| steps | 6 | 5 |
-| provider calls | 11 | 10 |
-| failover bounces | 4 | 8 |
-| tokens in | 89,260 | 55,126 |
-| distinct models | 5 | 7 |
-| wall time | 21.6s | 12.7s |
+**None of these configurations still exists.** They collapsed into one when the
+harness was reduced to a single architecture; the rows stay because the
+measurements are the project's data, and `git log` has the code each one names.
 
-Raw evidence in `evals/results/runs/`; the ledger row is in
-[evals/CONFIGS.md](../evals/CONFIGS.md).
+Four observations:
 
-Two observations, both n=2, and both about the **harness** rather than the
-agent:
-
-1. **The one failure was infrastructure, not capability** — see blockers below.
-2. **A one-line fix costs ~10 provider calls across 5–7 distinct models and tens
-   of thousands of input tokens.** Failover works, but the pool is walked hard
-   for trivial work. Worth understanding before reading anything into efficiency
-   numbers.
+1. **The old 50% crash rate was two dead models, not the agent.** Groq 404s on
+   `llama-4-scout` and `qwen3-32b`, and a 404 is not transient, so it killed the
+   run. With both dropped from the eval pool the baseline goes 3/3. Every
+   earlier number on this page was measuring that bug.
+2. **The pass column is noise, demonstrably.** `harness-v3-merged` scored 3/3 in
+   one batch and 1/3 in the next on an identical configuration, hours apart. Any
+   ranking read off these rates would be invented — see
+   [6.14.1](06-agent.md#682-the-pass-column-is-noise).
+3. **The cost result is real and replicated.** 5,756 against 226,854 input
+   tokens for the same task, stable across every rep and batch, with
+   between-configuration spread far exceeding within-configuration variance.
+4. **Every failure is `reasoning`** — 12 of 13, with zero `retrieval` and zero
+   `tooling`. Every configuration found the file, edited it and ran the tests,
+   then got the fix conceptually wrong. No change of topology can move that
+   ([6.14.2](06-agent.md#683-every-failure-is-reasoning)).
 
 ## 11.4 Blockers
 
 | Issue | Impact | State |
 | --- | --- | --- |
-| Groq returns `404 model_not_found` for `meta-llama/llama-4-scout-17b-16e-instruct`; 404 isn't in the router's transient set, so it propagates and kills the run | ~50% of runs crash for a reason unrelated to the task, which makes any pass rate meaningless | Flagged as separate work; fix on a branch and measure it ([4.6](04-failover.md#46-known-gaps)) |
-| Only one scenario, at L0 | Nothing to compare configurations on. L0 is a canary, not a comparison instrument ([9.7](09-scenarios.md#97-the-difficulty-ladder)) | P4 |
+| Five scenarios, none run more than n=2 | No longer *the* blocker, but nothing here has enough reps to compare configurations. `retry-after-case` (L0) is exhausted as an instrument ([9.7](09-scenarios.md#97-the-difficulty-ladder)) | P4 |
+| Five of the eight scenario categories are still unwritten | `feature`, `tests`, `refactor`, `long-context` and `ambiguous` have never been run, so nothing probes size-based routing or multi-file construction ([9.6](09-scenarios.md#96-categories-to-cover)) | P4 |
+| `404 model_not_found` still propagates and kills a run | Worked around for evals via `llm_router/config.eval.yaml`, not fixed. Any run on the default pool still dies on it | [13.2](13-roadmap.md#132-what-to-do-next) |
 | `agent_evals` local history has diverged from its GitHub remote after the restructure | Scenarios aren't backed up | Needs a force-push decision |
 
 ## 11.5 What to do next
 
-1. **Fix the dead-model crash.** Nothing measured is trustworthy while half the
-   runs die on it. It's a candidate change like any other: branch, add a
-   configuration, measure against baseline.
-2. **Author scenarios** — L1 and L2, across the categories in
-   [9.6](09-scenarios.md#96-categories-to-cover). The comparison instrument is
-   whatever currently lands between roughly 20% and 80% pass rate; L0 alone
-   can't distinguish two configurations.
-3. **Re-baseline at n=5** once those two are done, and record it in the ledger.
-4. **P2, the judge** — worth building only once there are enough scenarios that
+1. **Run a batch at n=5** over the four non-exhausted scenarios. The second
+   Gemini account roughly doubles the affordable reps, and enough *varied
+   failures to read* is what the diagnostic loop is short of — not more
+   architecture.
+2. **Post-mortem every run in it**, then J2 over the batch. The per-run reviewer
+   is built and has never been run against a real session.
+3. **Keep authoring scenarios** — `long-context` next, since size-based routing
+   is half the architecture and nothing probes it.
+4. **Fix the dead-model crash properly.** The eval pool works around it; the
+   shipping pool still dies on it. A decommissioned model should be disabled
+   permanently, the way a rate-limited one is benched temporarily.
+5. **P2, the judge** — worth building only once there are enough scenarios that
    reading diffs by hand hurts.
 
 ---

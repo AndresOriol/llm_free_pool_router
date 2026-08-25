@@ -1,0 +1,22 @@
+# The harness: a session rather than a task.
+#
+# An orchestrator on a wide-context member briefs narrow workers, the run
+# commits incrementally on its own branch, journals every step so a crash
+# resumes, and finishes by updating the docs and appending its rationale to the
+# project's notes. The graph is agent/harness/graph.py.
+#
+# This is the only agent configuration. Everything it used to be compared
+# against -- the deep-agents baseline and seven harness variants -- is in git,
+# along with what each one showed.
+#
+# HARNESS_SHELL is deliberately absent: the Executor is more capable with a real
+# shell, but eval runs are not containerized, and the default must not widen the
+# blast radius silently (docs/design/long-run-harness.md#42-bash-for-the-executor).
+name: session
+repo: ../..
+ref: harness/adhoc-router
+env_file: ../../llm_router/.env
+agent_cmd: ["python", "-m", "agent.harness", "{workdir}"]
+overrides:
+  router_config: llm_router/config.eval.yaml
+  env: {}

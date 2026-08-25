@@ -1,7 +1,10 @@
 dotenv
 pyyaml
 
-# Agent stack (deepagents on the pooled router)
+# The agent stack. `deepagents` is here for its FilesystemBackend only -- the
+# path-jailed glob/grep/read that RestrictedShellBackend extends. The library's
+# agent loop is not used: it accumulated the whole conversation into every call,
+# which a 6,000-token pool member cannot serve.
 deepagents
 langgraph
 langchain-core

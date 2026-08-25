@@ -29,12 +29,29 @@ Selection and state. Never makes an API call itself.
 
 ## 2.3 `agent/` — the coding agent
 
+`agent/runtime/` is the substrate anything agentic runs on. Nothing in it knows
+what a session is.
+
 | File | The question it answers |
 | --- | --- |
-| [router_chat_model.py](../agent/router_chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
-| [coding_agent.py](../agent/coding_agent.py) | *How is the pool wired into an agent loop?* — builds the deepagents graph, the CLI entry point |
-| [restricted_backend.py](../agent/restricted_backend.py) | *What is the agent allowed to execute?* — `FilesystemBackend` + an `execute` allowlist of `python`/`pytest` |
-| [trace.py](../agent/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
+| [chat_model.py](../agent/runtime/chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
+| [backend.py](../agent/runtime/backend.py) | *What is the agent allowed to execute?* — a filesystem jail plus an `execute` allowlist of `python`/`pytest`/`git` |
+| [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
+| [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
+
+`agent/harness/` is the agent itself: a LangGraph state machine of narrow nodes
+over one shared log. See [6.4](06-agent.md#64-the-graph).
+
+| File | The question it answers |
+| --- | --- |
+| [nodes/](../agent/harness/nodes/) | *Who does what, with which tools, and how is it judged?* — one file per node, each declaring its prompt, its tools, the log entries it reads, and how its result is read |
+| [nodes/base.py](../agent/harness/nodes/base.py) | *What is a node, and what does one call look like?* — the `Node` fields, then build the prompt, a few tool rounds, throw the conversation away |
+| [graph.py](../agent/harness/graph.py) | *What happens when, and what is the model not allowed to decide?* — the edges between nodes and every deterministic veto |
+| [log.py](../agent/harness/log.py) | *What does a node get to see?* — everything the session knows, as one ordered log, and the per-kind caps that **are** the context budget |
+| [protocol.py](../agent/harness/protocol.py) | *How does context get from the orchestrator to a node?* — the brief down, the report back |
+| [record/](../agent/harness/record/) | *What does a session leave behind?* — git, the journal, the per-turn transcript, the rationale, the notes file |
+| [session.py](../agent/harness/session.py) | *What is one run, start to finish?* — wiring, the step budget, resume, and the account it writes |
+| [`__main__.py`](../agent/harness/__main__.py) | CLI: workdir as an argument, task on stdin |
 
 ## 2.4 `evals/` — the measurement harness
 
@@ -52,7 +69,7 @@ Code lives with the code it measures; scenario *data* does not (see
 | [`fake_agent.py`](../evals/fake_agent.py) | Stub agent, so the runner's own paths can be exercised without spending quota |
 | [`configs/*.yaml`](../evals/configs/) | One file per agent configuration under test |
 | [`CONFIGS.md`](../evals/CONFIGS.md) | The ledger: every configuration tried, its verdict, and why |
-| `results/runs/<run_id>/` | One self-contained directory per run — durable evidence, gitignored by default; commit one with `git add -f` when a verdict rests on it |
+| `results/runs/<run_id>/` | One self-contained directory per run — durable evidence, on disk only. Gitignored: an artifact, never committed. Cite a run by its id |
 | `.worktrees/` | Scratch checkouts of configurations under test (gitignored) |
 
 ## 2.5 Everything else
@@ -63,7 +80,7 @@ Code lives with the code it measures; scenario *data* does not (see
 | [README.md](../README.md) | Human entry point: quick start and links out. Also short on purpose. |
 | `docs/` | This wiki. The place to understand the system without reading source. |
 | [.claude/settings.json](../.claude/settings.json) | The `Stop` hook that keeps this wiki from drifting ([12.4](12-development-harness.md#124-how-the-docs-stay-current)) |
-| [.claude/reports/](../.claude/reports/) | Deep one-off investigations, kept verbatim. Currently: the deepagents internals report. |
+| [.claude/reports/](../.claude/reports/) | Deep one-off investigations, kept verbatim. |
 | `tests/` | `llm_router/` and `agent/` unit tests, plus `smoke_test.py` — a single real prompt through the pool to check keys and config are wired |
 
 ## 2.6 Related repos
