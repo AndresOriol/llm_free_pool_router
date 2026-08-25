@@ -47,11 +47,50 @@ make many attempts affordable.
 
 ## 2. Constraints (facts, not preferences)
 
+> **C1 was retired for coding work on 2026-08-25.** It is the constraint the
+> whole narrow-role design answers, so read [§2.1](#21-why-c1-stopped-applying)
+> before treating anything below as current.
+
 **C1 — Per-call size is capped, and the cap differs by pool member.** Groq's
 cheapest members top out at 6,000 input tokens; Gemini's run to six figures. The
 router excludes any provider whose ceiling the request does not fit
 ([4.2](../04-failover.md#42-size-aware-selection)). No amount of patience buys a
 bigger single call from a small member.
+
+### 2.1 Why C1 stopped applying
+
+C1 is true about the pool and was *misapplied* to the session. It says a call
+must fit the member that serves it. It was read as: every call must fit the
+**narrowest** member, therefore split the work until it does.
+
+That reading only holds if narrow members can usefully serve a coding session,
+and they cannot. A Groq account carries **100,000 tokens per day**, so one wide
+request would spend an account's entire daily budget. Those members were never
+going to carry a conversation — the choice was between a session that fits them
+and a session that never routes to them, not between a cheap session and an
+expensive one.
+
+So a coding session now declares a **hard** floor of 128,000 input tokens and the
+router refuses to route below it, waiting for a wide member rather than settling
+for a narrow one ([4.2](../04-failover.md#42-size-aware-selection)). Fourteen of
+seventeen pool members clear it; Groq keeps serving everything else.
+
+**What this does to the rest of this document.** C2's tiering argument survives
+intact — breadth still has to be spent where judgement lives, and the pool is
+still request-scarce exactly where it is context-rich. What weakens is the
+*inference* from C1 to the handoff envelope ([§8.1](#81-the-handoff-envelope)):
+pushing context down in a labelled brief exists because a role could not be
+trusted to hold the conversation, and above the floor it can. The envelope may
+still be the better design; it is no longer the only one available, which is why
+there are now two arms and a measurement rather than one architecture
+([6.1](../06-agent.md#61-two-architectures-one-question)).
+
+**The cost of being wrong is asymmetric, which is why this is measured rather
+than switched.** The narrow-role harness ran this class of task on 5,756 input
+tokens; the deepagents arm's first two runs took 134,000–162,000. If that gap
+holds under the runner, "the constraint was lifted" will have been true and
+irrelevant — a session that costs 25× more is not better for having been
+permitted.
 
 **C2 — Context is scarce per tier, not globally, and that is a lever.** Splitting
 work into small pieces so it fits Groq can starve a role of the breadth it needs
@@ -433,7 +472,7 @@ missing" — that turns a wasted cycle into a cheap, informative one.
 **Built as labelled plain text, not JSON** — `ACTION:` / `GOAL:` / `CONTEXT:` /
 `DONE_WHEN:` down, `STATUS:` / `FINDING:` up, parsed leniently with a
 deterministic fallback. JSON is checkable, but the `write_todos` lesson
-([6.5](../06-agent.md#61-what-it-is)) is that
+([6.1](../06-agent.md#61-two-architectures-one-question)) is that
 small models fumble structure, and a session must not end because a model wrote
 a sentence where a word was asked for.
 

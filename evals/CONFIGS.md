@@ -27,6 +27,28 @@ the simpler configuration.
 | `harness-v2-seeded` | `harness/adhoc-router` | Glob the file list, skip `locate` | L0, n=3 | 0/3 | **dropped** |
 | `harness-v7-orchestrated` | `harness/adhoc-router` | Hub and spoke; execution as an agent | L0, n=3 | 0/3, most calls | **dropped for this task shape** |
 | `harness-v8-session` | `harness/adhoc-router` | A session: briefed roles, journal, branch, docs and rationale as deliverables | L1+L2 `session`, n=2 | 2/4 | **no verdict** — ran alone, no baseline |
+| `deepagents` | `harness/deepagents` | A conversation instead of narrow roles: `create_deep_agent` on the pool behind a hard 128k context floor, configured like `deepagents-code` | — | **never run** | **no verdict** — the comparison it exists for has not happened |
+
+### deepagents, before any eval run (2026-08-25)
+
+The arm exists and works; nothing about it is comparable to anything yet. Two
+ad-hoc runs outside the runner — no scenario, no hidden tests — are recorded in
+[docs/11-eval-status.md](../docs/11-eval-status.md#the-deepagents-arm-first-look-2026-08-25)
+because they bear on whether the comparison is worth its quota.
+
+The short version: both runs produced a correct minimal fix, and neither
+spec-gamed. But at 134k–162k input tokens against the narrow-role harness's
+5,756, **the cost gap did not close** — it is ~30% under the conversational
+baseline that was deleted for exactly this reason, not an order of magnitude.
+n=1 per task, different tasks, and short enough that summarization likely never
+fired, so this is a reason to run the comparison carefully rather than a result.
+
+**Run it interleaved against `session`, never alone** — that was
+`harness-v8-session`'s mistake and it is why that row still says no verdict:
+
+```bash
+python -m evals run --config session --config deepagents --reps 3
+```
 
 ### harness-v8-session, first batch (2026-08-07)
 

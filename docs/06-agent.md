@@ -2,37 +2,53 @@
 
 # 6. The coding agent
 
-*One architecture: a graph of narrow roles, each seeing a slice of shared state.
-What it can do, what it is not allowed to do, how context reaches each step, and
-where every branch is decided.*
+*Two architectures over one pool and one jail, and the comparison that is meant
+to end with one of them deleted. What each can do, what neither is allowed to
+do, and where every branch is decided.*
 
-## 6.1 What it is
+## 6.1 Two architectures, one question
 
-A **session**: one long unattended run over one project, driven by a LangGraph
-state machine whose every model call routes through the pool
-([4. Failover](04-failover.md)). An orchestrator picks the next worker and
-writes its brief; the worker acts; the result is folded into shared state and
-appended to a journal; repeat.
+Both run the same shape of job — a **session**: one long unattended run over one
+project, task on stdin, process exits at EOF, every model call routed through
+the pool ([4. Failover](04-failover.md)). They disagree about one thing: what a
+single call is allowed to contain.
 
-```bash
-python -m agent.harness workdir < brief.md
-```
+| | `agent/harness/` — narrow roles | `agent/deep/` — one conversation |
+| --- | --- | --- |
+| Run it | `python -m agent.harness workdir < brief.md` | `python -m agent.deep workdir < brief.md` |
+| A call holds | one role's slice of a shared log ([6.5](#65-what-each-role-sees)) | the conversation, compacted when it grows |
+| Fits | the pool's **narrowest** member (8,000 tokens) | the pool's **widest** (≥128,000, enforced) |
+| Built from | this repo ([6.4](#64-the-graph)) | `create_deep_agent`, configured like `deepagents-code` ([6.9](#69-the-deepagents-arm)) |
+| Its record | four files under `.harness/` ([7.6](07-observability.md#76-what-a-session-records-about-itself)) | one LangSmith run tree ([7.7](07-observability.md#77-the-record-one-run-tree)) |
+| Branch | `harness/adhoc-router` | `harness/deepagents` |
 
-`workdir` is the project. The task arrives on stdin and the process exits at
-EOF, which is what makes it drivable from a script or from an orchestrating
-agent ([12.5](12-development-harness.md#125-driving-the-free-agents)).
+**Why the second one exists.** The narrow-role design is an answer to a
+constraint: a call must fit an 8,000-token Groq member, so work gets split until
+it does. That constraint has been **lifted for coding work**. A Groq account
+holds 100,000 tokens *per day*, so a single wide request would spend the whole
+day's budget — those members can never serve a conversation, and pretending they
+might is what forced the splitting. A coding session now declares a hard floor
+and routes only above it ([4.2](04-failover.md#42-size-aware-selection)); Groq
+stays in the pool for work that fits it.
 
-**Why not one conversational agent.** The obvious design — one loop, all the
-tools, the whole history in every call — was built first, on
-[deepagents](https://github.com/langchain-ai/deepagents), and measured against
-this one. Its fixed overhead was ~6,100 tokens *before the task text*, of which
-91% was tool schemas; more than two members of this pool can accept at all. On
-the same task it spent 226,854 input tokens against this harness's 5,756, on
-every rep of every batch ([6.8.1](#681-the-cost-result-is-the-one-that-replicated)).
-That comparison is settled and the loser is deleted; `git log` has it.
+**Why this is not simply a reversal.** A conversational loop was built first, on
+[deepagents](https://github.com/langchain-ai/deepagents), and lost: 226,854
+input tokens against 5,756 on the same task, replicated on every rep of every
+batch ([6.8.1](#681-the-cost-result-is-the-one-that-replicated)). That result
+still stands, and it is the reason this is a *configuration* rather than a
+merge. What has changed since is not the argument but its inputs — the SDK now
+ships summarization, message eviction and tool-output offloading, and the pool's
+floor for this work is 128,000 tokens rather than 6,000. Whether that is enough
+to move a 39× gap is an empirical question, and the first measurement is not
+encouraging ([11.3](11-eval-status.md#113-where-the-numbers-stand)).
 
-So the trade here is **more turns, each small enough that the whole pool can
-serve it.** Everything else on this page follows from that.
+**A draw keeps the simpler configuration**
+([8.7](08-evaluation-method.md#87-the-promotion-rule)) — and "simpler" here means
+the one this repo does not have to maintain.
+
+`workdir` is the project in both. The task arrives on stdin and the process
+exits at EOF, which is what makes either drivable from a script or from an
+orchestrating agent ([12.5](12-development-harness.md#125-driving-the-free-agents)).
 
 ## 6.2 The blast radius
 
@@ -265,6 +281,74 @@ satisfy the test it could see; the hidden set, which checks other casings,
 failed it. This is what the withheld-test design exists to catch
 ([9.3](09-scenarios.md#93-anatomy)), and it is not a token-budget problem. **A
 cheaper agent reaches this failure mode sooner, not later.**
+
+## 6.9 The deepagents arm
+
+[agent/deep/](../agent/deep/). Almost none of this is agent design.
+`create_deep_agent` already assembles the todo list, the filesystem tools, the
+subagent `task` tool and summarization, and the `execute` tool switches itself
+on because `RestrictedShellBackend` satisfies `SandboxBackendProtocol`. Two
+things are worth knowing.
+
+### 6.9.1 The pool drops in with no adapter
+
+`resolve_model` returns a `BaseChatModel` unchanged, and `RouterChatModel` is
+one. So the pool is passed where a model id would go, and every failover
+guarantee on [4. Failover](04-failover.md) holds inside a harness this repo did
+not write. That is the whole integration.
+
+The floor is enforced, not preferred. `for_context(128_000, strict=True)` makes
+the router *refuse* to route below it and wait for a wide member to leave
+cooldown, rather than falling back to a narrow one
+([4.2](04-failover.md#42-size-aware-selection)). Selection and the cooldown wait
+have to be asked the same question — a wait computed over the whole pool reports
+"someone is free" because a Groq member is warm, and the run dies with a wide
+member seconds from returning.
+
+### 6.9.2 What makes a deep agent a *coding* agent
+
+The configuration is ported from `deepagents-code`'s `create_cli_agent` (MIT):
+the generated system prompt, the project overview put in front of the model, and
+a shell allowlist that refuses a command **as a tool message** rather than as an
+exception, so the model reads the reason and corrects itself instead of retrying.
+
+| Ported | Where |
+| --- | --- |
+| System prompt: understand → build → test → verify; match the spec exactly; parallel tool calls; paginated reads; git safety; root-cause debugging; stop after three identical failures | [system_prompt.md](../agent/deep/system_prompt.md) |
+| Prompt assembly and its interpolated sections | [prompt.py](../agent/deep/prompt.py) |
+| `LocalContextMiddleware` — git branch, status, a depth-limited tree | [context.py](../agent/deep/context.py) |
+| `ShellAllowListMiddleware` | [shell.py](../agent/deep/shell.py) |
+
+Three parts are **adapted rather than copied**, and each adaptation is a fact
+about this pool rather than a preference:
+
+- **Identity is a pool, not a model.** dcode writes *"You are running as model
+  X, your context window is N tokens"* because a run has one model. Here the
+  router picks per call and a session is routinely served by four or five
+  models, so naming one is false by the second step. The prompt states the
+  *floor* every eligible member clears, which is the part that stays true.
+- **Headless always.** dcode defaults to an interactive TUI where the agent may
+  ask and wait. Nobody is watching a session here, so `ask_user` is never
+  installed and the prompt takes the branch that says assume and proceed
+  ([design note §3, R3](design/long-run-harness.md#3-what-helpful-requires-draft--v3)).
+- **Paths root at the jail.** dcode runs `virtual_mode=False` and tells the
+  model to build absolute host paths. This backend's `/` *is* the workdir
+  ([6.2](#62-the-blast-radius)), so copying that instruction verbatim would fail
+  every tool call.
+
+Not carried over: human-in-the-loop approval, auto mode, cost tracking, MCP, the
+code interpreter, the TUI. Worth revisiting: skills, memory — dcode's `AGENTS.md`
+convention is the same idea as this project's `NOTES.md`
+([6.3](#63-the-agents-instructions)) — and the rubric self-grader, which belongs
+to the evaluation question rather than this one.
+
+**The context section earns its place.** Without it the first thing any agent
+does is spend two or three calls discovering the shape of the project, and those
+are the most expensive calls in a run because nothing has been compacted yet.
+Adding it took a measured run from 21 model calls to 14 and removed every `glob`
+call. Unlike dcode it is built once into the prompt rather than injected per
+call: the tree barely moves inside a run, and on a pool where each step spends a
+request against a daily quota, re-sending it buys nothing.
 
 ---
 

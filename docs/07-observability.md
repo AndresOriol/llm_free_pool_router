@@ -2,23 +2,36 @@
 
 # 7. Observability
 
-*Two traces, deliberately. One to watch a run, one to score it later.*
+*What a run leaves behind, and why the answer is changing.*
 
 ## 7.1 Why two
 
-They answer different questions and have different lifetimes.
+Watching a run and scoring it later are different questions with different
+lifetimes.
 
-| | LangSmith | Local JSONL trace |
+| | LangSmith | The durable record |
 | --- | --- | --- |
 | Answers | *What is this run doing right now?* | *What exactly happened in this run, forever?* |
 | Lifetime | Expires | On disk, for as long as the run directory is kept |
 | Cost | A hosted dependency | None |
 | Used by | A human eyeballing a live run | Every automatic metric in [10. Metrics](10-metrics.md) |
 
-The rule that follows: **LangSmith is for watching, never for the record.** A
-verdict must rest entirely on files on disk. This is not a preference — hosted
-traces expiring would silently invalidate old comparisons, which is exactly the
-failure mode an evaluation system exists to prevent.
+The rule that followed was **LangSmith is for watching, never for the record** —
+a verdict must rest entirely on files on disk, because hosted traces expiring
+would silently invalidate old comparisons.
+
+**The requirement stands; the rule that implemented it was too strong.** What
+expiry actually forbids is *depending on the hosted copy at scoring time*. It
+does not forbid asking LangSmith for the tree once, while it still exists, and
+writing it down. That distinction is what [7.7](#77-the-record-one-run-tree)
+takes, and it is the difference between snapshotting a structure that already
+exists and rebuilding it by hand from callbacks.
+
+The two arms are at different points in that move
+([6.1](06-agent.md#61-two-architectures-one-question)): the narrow-role harness
+still composes its record locally ([7.3](#73-the-local-trace),
+[7.6](#76-what-a-session-records-about-itself)); the deepagents arm fetches the
+tree.
 
 ## 7.2 LangSmith
 
@@ -124,7 +137,7 @@ The trace answers *what happened*. A session harness run also has to answer
 | `reports/session-*.md` | session | The rationale, built from the journal — the artefact a human reviews instead of the code |
 
 The split is a cost decision. The journal is the crash-resume substrate
-([6.12](06-agent.md#61-what-it-is)),
+([6.1](06-agent.md#61-two-architectures-one-question)),
 re-read line by line every time a killed session resumes, so the bulk stays out
 of it. The transcript runs to a few kilobytes per turn and is only opened when a
 step needs explaining.
@@ -140,6 +153,47 @@ different things, and only the second changes anything.
 The eval runner copies all three into the run's results directory, before it
 prunes the workdir. They are what the per-run post-mortem reads
 ([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
+
+## 7.7 The record: one run tree
+
+What [7.6](#76-what-a-session-records-about-itself) describes is four files, and
+three of them exist to record handoffs *between narrow roles*. A conversation
+has no handoffs, so for the deepagents arm
+([6.9](06-agent.md#69-the-deepagents-arm)) most of that record has nothing to
+describe — and the part that remains is a flat event log that a reader has to
+re-assemble into the tree it came from.
+
+So that arm records the tree instead, at
+[agent/deep/trace.py](../agent/deep/trace.py): one nested JSON object per run,
+each span carrying its inputs, outputs, timing, token counts and error, exactly
+as LangSmith already built it.
+
+```bash
+DEEP_TRACE_FILE=run-tree.json python -m agent.deep workdir < brief.md
+```
+
+**Two ids, and the difference is the whole trap.** `collect_runs()` learns
+locally which runs happened, so no network call is needed during the run. But it
+appends in **completion order**, so its first entry is the innermost LLM call —
+and asking LangSmith for a leaf returns a perfectly valid *one-span* tree that
+looks like a working trace until you count the spans. It was recorded that way
+twice before the count was checked. The fetch therefore climbs to the root
+itself using LangSmith's own `trace_id`, which makes it correct regardless of
+which span id the caller hands it.
+
+**Everything the vendor returns is kept**, and the meta block is written even
+when the fetch fails, so a run with no trace says so on disk instead of leaving
+an absent file to explain later. Deciding which fields are surplus is a question
+to answer against a real tree rather than in advance — and the first real tree
+answers it: of 93 spans in a one-line fix, **72 were middleware wrappers
+carrying no information, and they were 79% of the bytes.** Keeping only the
+`llm` and `tool` spans leaves 21% of the size with everything a metric or a
+post-mortem reads. That pruning is not done yet; the number is recorded so it
+can be.
+
+**It needs `LANGSMITH_TRACING=1` and a key.** Without them the run is unaffected
+and the record says `"trace": null` — which is the right failure, because losing
+a record is bad and losing the *run* because recording it failed is worse.
 
 ---
 

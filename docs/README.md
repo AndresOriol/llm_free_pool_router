@@ -16,11 +16,14 @@ New here? Start with [1. Overview](01-overview.md), then
 *The three facts most likely to mislead someone picking this up cold. Everything
 else on this page is design and changes rarely; this block is state.*
 
-- **Active work lives on the `harness/adhoc-router` branch, not `master`.** The
-  agent there is a LangGraph state machine of narrow roles, and it is now the
-  only one: the conversational baseline it beat on cost by 39×, and the seven
-  variants tried along the way, are in `git log` rather than in the tree
-  ([6.1](06-agent.md#61-what-it-is)).
+- **There are two agents, and the comparison between them is the open
+  question.** `agent/harness/` splits work into narrow roles so every call fits
+  the pool's *narrowest* member; `agent/deep/` keeps a conversation on the
+  pool's *widest* members, configured the way `deepagents-code` configures one.
+  The second exists because the constraint that justified the first was lifted:
+  coding work now routes only to members holding ≥128,000 input tokens
+  ([6.1](06-agent.md#61-two-architectures-one-question)). Neither is settled;
+  the deepagents arm lives on `harness/deepagents`.
 - **The one L0 scenario is exhausted as a measuring instrument.** Seven
   configurations were run against it; none could be distinguished from another,
   and one scored 3/3 and 1/3 on consecutive batches. Re-running them will
@@ -28,15 +31,13 @@ else on this page is design and changes rarely; this block is state.*
   ([6.8.2](06-agent.md#682-the-pass-column-is-noise)).
   There are now four more scenarios, at L1 and L2, and none has been run past
   n=2 ([11.2](11-eval-status.md#112-whats-built)).
-- **The instrument being built is diagnostic, not a score.** Pass rates are
-  noise at affordable sample sizes, so what is being invested in is evidence:
-  every role's prompt and reply is recorded per turn
-  ([7.6](07-observability.md#76-what-a-session-records-about-itself)), and a
-  per-run post-mortem reads it
-  ([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
-  Every measured failure so far was `reasoning`, never `retrieval` or `tooling`,
-  which is why more architecture work is not the next move
-  ([6.8.3](06-agent.md#683-every-failure-is-reasoning)).
+- **The record of a run is being moved to one object.** The narrow-role arm
+  composes four local files; the deepagents arm fetches a single LangSmith run
+  tree and writes it down
+  ([7.7](07-observability.md#77-the-record-one-run-tree)). This reverses
+  "LangSmith is for watching, never for the record" — the expiry argument is
+  answered by snapshotting the tree, not by rebuilding it by hand
+  ([13.5](13-roadmap.md#135-settled-decisions)).
 
 ---
 
@@ -88,23 +89,25 @@ else on this page is design and changes rarely; this block is state.*
 
 ### Part III — The agent
 
-**[6. The coding agent](06-agent.md)** — one graph of narrow roles, and where every branch is decided
-&nbsp;&nbsp;&nbsp;&nbsp;[6.1](06-agent.md#61-what-it-is) What it is ·
+**[6. The coding agent](06-agent.md)** — two architectures over one pool, and the comparison meant to end with one of them deleted
+&nbsp;&nbsp;&nbsp;&nbsp;[6.1](06-agent.md#61-two-architectures-one-question) Two architectures ·
 [6.2](06-agent.md#62-the-blast-radius) The blast radius ·
 [6.3](06-agent.md#63-the-agents-instructions) The agent's instructions ·
 [6.4](06-agent.md#64-the-graph) The graph ·
 [6.5](06-agent.md#65-what-each-role-sees) What each role sees ·
 [6.6](06-agent.md#66-one-role-call) One role call ·
 [6.7](06-agent.md#67-what-failover-looks-like-in-practice) Failover in practice ·
-[6.8](06-agent.md#68-why-it-is-shaped-this-way) Why it is shaped this way
+[6.8](06-agent.md#68-why-it-is-shaped-this-way) Why it is shaped this way ·
+[6.9](06-agent.md#69-the-deepagents-arm) The deepagents arm
 
-**[7. Observability](07-observability.md)** — two traces, deliberately
+**[7. Observability](07-observability.md)** — what a run leaves behind, and why the answer is changing
 &nbsp;&nbsp;&nbsp;&nbsp;[7.1](07-observability.md#71-why-two) Why two ·
 [7.2](07-observability.md#72-langsmith) LangSmith ·
 [7.3](07-observability.md#73-the-local-trace) The local trace ·
 [7.4](07-observability.md#74-the-shape-is-a-contract) The shape is a contract ·
 [7.5](07-observability.md#75-reading-routing-decisions-live) Reading routing decisions live ·
-[7.6](07-observability.md#76-what-a-session-records-about-itself) What a session records about itself
+[7.6](07-observability.md#76-what-a-session-records-about-itself) What a session records about itself ·
+[7.7](07-observability.md#77-the-record-one-run-tree) The record: one run tree
 
 ### Part IV — Evaluation
 

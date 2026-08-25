@@ -7,41 +7,65 @@ wiki describes what exists; this one is where scope gets argued and settled.*
 
 ## 13.1 The two phases of the project
 
-**Phase 1 — the pool (current).** Make pooled free-tier capacity boring and
-reliable enough that an agent can run unattended on it. The router *is* the
-whole project right now.
+**Phase 1 — the pool (done enough).** Make pooled free-tier capacity boring and
+reliable enough that an agent can run unattended on it. Failover, size-aware
+selection, cooldown, retirement and the quota panel are all in place.
 
-**Phase 2 — the agent loop (direction only, not started).** Once the free pool
-is solid, wire it as the model backend for
-[deep agents](https://github.com/langchain-ai/deepagents) (LangGraph/LangSmith)
-to get a real autonomous coding agent loop running on top of it.
+**Phase 2 — the agent loop (in progress).** A standing maintainer: a session
+that works one project unattended on its own branch, updates its docs, and
+writes an account a human reviews instead of the code
+([design note](design/long-run-harness.md)).
 
-The `agent/` package is a working *proof* that the pool serves a real agent
-loop — it is not Phase 2. Phase 2 means investing in the loop itself, and it
-doesn't start until told to.
+The open question inside Phase 2 is **which harness**, and it is now an
+experiment rather than a plan
+([6.1](06-agent.md#61-two-architectures-one-question)). Both arms exist,
+both run end to end, and the comparison has not been made:
+
+| Arm | What it bets |
+| --- | --- |
+| `agent/harness/` | Splitting work so every call fits the narrowest member is what makes an unattended run affordable |
+| `agent/deep/` | A maintained SDK harness plus a 128,000-token floor now does that job well enough that maintaining a bespoke one is not worth it |
+
+**The redirection that produced the second arm** was to stop treating Groq's
+8,000-token ceiling as a constraint on *coding* work. A Groq account holds
+100,000 tokens per day, so one wide request would spend the whole day's budget —
+those members can never serve a conversation. A coding session therefore
+declares a hard floor and routes only above it
+([4.2](04-failover.md#42-size-aware-selection)), and Groq stays in the pool for
+work that fits it.
 
 ## 13.2 What to do next
 
 In order. The ordering is the argument.
 
-1. **Author scenarios at L1 and L2.** The single blocking item. The one L0
-   scenario is *exhausted as an instrument*: seven configurations were run
-   against it and none could be distinguished from another, with one
-   configuration scoring 3/3 and 1/3 on consecutive batches
-   ([6.14.1](06-agent.md#682-the-pass-column-is-noise)).
-   More reps cannot fix that — only a task that discriminates can. Until this
-   lands, every proposed improvement is back to being decided by argument.
-2. **Fix the dead-model crash properly.** `404 model_not_found` propagates and
+1. **Run the two arms interleaved.** The blocking item, and the reason both
+   exist. `session` against `deepagents`, n=3 to start, over the four scenarios
+   that still discriminate. Until this lands the choice of harness is back to
+   being decided by argument, which is the thing this repo exists not to do.
+   Budget it first: a deepagents run cost 14–21 model calls in the spike, and
+   the flash tier is 20 requests per day per model per account
+   ([8.9](08-evaluation-method.md#89-budget)).
+2. **Back up `agent_evals`.** Four of five scenario tags and three of four topic
+   branches exist only on the machine that made them. Tags are never pushed by
+   default, so this is one command and it is the only item here that loses data
+   if left ([11.4](11-eval-status.md#114-blockers)).
+3. **Keep authoring scenarios.** `long-context` next: size-based routing is half
+   the architecture and nothing probes it — and it is now the axis the two arms
+   most obviously differ on.
+4. **Fix the dead-model crash properly.** `404 model_not_found` propagates and
    kills a run ([4.6](04-failover.md#46-known-gaps)). Evals work around it with
    a trimmed pool (`llm_router/config.eval.yaml`); the shipping pool still dies
    on it. A decommissioned model should be disabled *permanently*, the way a
    rate-limited one is benched *temporarily*.
-3. **Re-baseline at n=5** now that scenarios exist, and record it in the ledger.
-4. **Then** the judge (P2), then compare/report (P3).
+5. **Prune the run tree.** 79% of a recorded tree was middleware wrapper spans
+   carrying nothing ([7.7](07-observability.md#77-the-record-one-run-tree)).
+   Worth doing once a metric actually reads the tree, not before.
+6. **Then** the judge (P2), then compare/report (P3).
 
 ### 13.2.1 What the architecture work settled, and what it did not
 
-`harness/adhoc-router` holds the agent ([6.1](06-agent.md#61-what-it-is)). Seven
+`harness/adhoc-router` holds the narrow-role arm
+([6.1](06-agent.md#61-two-architectures-one-question)). Seven
 variants and a conversational baseline were measured before it; all of them are
 in `git log` now. What that measurement established, and what a fresh session
 should not redo:
@@ -64,6 +88,13 @@ So the architecture is a *cost* win whose *correctness* is still unpriced. What
 prices it is a scenario set and a diagnosis of what actually goes wrong inside a
 run, not more topologies.
 
+**The deepagents arm is not a new topology, and this section is not an argument
+against it.** Everything above says that rearranging *this repo's* roles cannot
+buy correctness. The question the second arm asks is different: whether a
+harness this repo does not maintain does the same job well enough that the
+maintenance is not worth paying for. That is a cost-of-ownership question with a
+correctness floor, and the same measurement answers it.
+
 ### Evaluation build order
 
 | Phase | State | Scope |
@@ -72,7 +103,7 @@ run, not more topologies.
 | P1 — runner | done | materialize → run → verify → integrity → record, plus `validate`. Automatic metrics including the failure taxonomy. |
 | P2 — judge | next after scenarios | `claude -p`, pinned rubric, diff-hash cache. |
 | P3 — compare/report | after P2 | Leaderboard, written comparisons, interleaved execution reporting. |
-| P4 — scenario library | **in progress, 1 of ~15** | L0–L2 across the category list; `langwatch/scenario` adapter for the ambiguous category. |
+| P4 — scenario library | **in progress, 5 of ~15** | L0–L2 across the category list; `langwatch/scenario` adapter for the ambiguous category. |
 | P5 — L3 | last | SWE-bench Lite behind Docker, as an absolute-progress marker. Optionally the OpenAI-compatible router shim if driving external harnesses is ever wanted. |
 | Later | — | A free-pool judge, validated for agreement against the Claude judge on a labelled set before it replaces it. |
 
@@ -86,12 +117,17 @@ plan that ignores one of them is wrong.
   *accounts* buys real capacity ([3.4](03-pool-model.md#34-priority-tiers)).
 - **Gemini's shape is the mirror image**: huge token budgets, very few requests
   per day. The pool only works because the two shapes complement each other.
-- **A one-line fix cost ~20 provider calls and ~227,000 input tokens** on the
-  conversational loop this replaced. Throughput is the binding constraint on
-  long tasks — though
-  on the one scenario measured so far, *correctness* failures were all
-  `reasoning`, so throughput and capability are separate problems and only the
-  first has been solved.
+- **A conversation costs one to two orders of magnitude more than narrow roles.**
+  A one-line fix ran to ~20 calls and ~227,000 input tokens on the original
+  conversational loop, and 14–21 calls and 134,000–162,000 tokens on the current
+  deepagents arm, against 7.3 and 5,756 for narrow roles. Throughput is the
+  binding constraint on long tasks — though on the scenarios measured so far,
+  *correctness* failures were all `reasoning`, so throughput and capability are
+  separate problems and only the first has been solved.
+- **A wide-context session is request-bound, not token-bound.** At ~20 calls a
+  run and 20 requests per day per flash model per account, the flash tier funds
+  roughly nine runs a day; the lite and Gemma tiers are what make a real batch
+  affordable ([5.4](05-providers.md#54-current-free-tier-limits)).
 - **Two Groq models are decommissioned** (`llama-4-scout`, `qwen3-32b`) and 404.
   A dead model is only reached if a request is small enough to pass the size
   filter, so cheaper agents trip landmines that token-heavy ones never reach —
@@ -108,6 +144,9 @@ Live, unresolved, and worth deciding when the evidence arrives — not before.
 
 | Question | What would settle it |
 | --- | --- |
+| **Which harness ships** — narrow roles, or the deepagents arm? | An interleaved comparison on the scenarios that still discriminate ([13.2](#132-what-to-do-next)). A draw keeps the one this repo does not have to maintain. |
+| Does the deepagents arm need the parts of `deepagents-code` not carried over — skills, memory, the rubric grader? | A failure the comparison produces that one of them would have prevented. Not before ([6.9.2](06-agent.md#692-what-makes-a-deep-agent-a-coding-agent)). |
+| Which run-tree fields are worth keeping? | A metric actually reading the tree. 79% of the bytes are middleware wrappers, but "unused today" is not "surplus" ([7.7](07-observability.md#77-the-record-one-run-tree)). |
 | Default repetition count: 3 is cheap but weak, 5 costs most of a day's quota on a full suite. | The first real baseline's observed run-to-run variance. |
 | Should **pinned-model mode** be the default comparison mode, with pool mode reserved for final validation? | Whether pool-mode variance actually swamps the effect sizes we care about. |
 | Does the agent get a git tool? | If yes, scenarios can ship real history ("find the commit that broke this") and materialization becomes a bundle restore instead of `git archive`. |
@@ -130,7 +169,8 @@ still holds.
 | Provider SDKs run with `max_retries=0`. | The SDK would retry the same dead account — the job the router owns one level up. |
 | Scenarios live in a separate repo from the harness. | Configurations are branches of this repo; anything shared and append-only would conflict on every merge. |
 | Results are one directory per run, with no index. | Same reason. A summary is a glob. |
-| LangSmith is for watching, never for the record. | Hosted traces expire; a verdict must rest on files on disk. |
+| ~~LangSmith is for watching, never for the record.~~ **Reopened.** The record is now the run tree LangSmith already built, *snapshotted* to disk after the run. | The requirement — a verdict rests on files on disk — is met by the snapshot. What expiry forbids is depending on the hosted copy at scoring time, not asking for the tree once while it exists ([7.7](07-observability.md#77-the-record-one-run-tree)). |
+| ~~One architecture; the conversational loop is deleted, not disabled.~~ **Reopened.** | Its inputs changed: the SDK now ships summarization and offloading, and the floor for coding work is 128,000 tokens rather than 6,000. The 39× result still stands, which is why the new arm is a configuration and not a merge ([6.1](06-agent.md#61-two-architectures-one-question)). |
 | Only the sync path is implemented. | Both callers are sync. A hand-written async loop was built, found unused, and removed. |
 | Docker is optional until L3. | L0–L2 scenarios are authored dependency-free, so the restricted `python`/`pytest` backend suffices. |
 

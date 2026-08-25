@@ -45,7 +45,7 @@ The repo is three layers, each usable on its own, stacked:
 | Layer | What it owns | Read |
 | --- | --- | --- |
 | **The pool** (`llm_router/`) | Which free account/model should serve the next request, and which ones are currently benched. Selection only — it never makes a call. | [3](03-pool-model.md), [4](04-failover.md), [5](05-providers.md) |
-| **The agent** (`agent/`) | A LangGraph state machine of narrow roles whose single model is the pool. It reads and edits a jailed working directory, runs its own tests, and commits to its own branch. | [6](06-agent.md), [7](07-observability.md) |
+| **The agent** (`agent/`) | Two harnesses over one jail, whose single model is the pool: narrow roles over a shared log, and a conversation configured like `deepagents-code`. Either reads and edits a jailed working directory, runs its own tests, and commits to its own branch. | [6](06-agent.md), [7](07-observability.md) |
 | **The evaluation** (`evals/`) | Deciding whether a change to either of the above actually helped, by running scenarios and comparing distributions — not by argument. | [8](08-evaluation-method.md), [9](09-scenarios.md), [10](10-metrics.md), [11](11-eval-status.md) |
 
 The layering is one-directional: `evals` drives `agent`, `agent` uses
@@ -80,19 +80,21 @@ Honest summary, as of the last update to [11. Evaluation status](11-eval-status.
   conversational loop this replaced ~20 provider calls and ~227,000 input
   tokens — failover functions, but the pool gets walked hard, which is the whole
   reason the agent is shaped the way it is.
-- The agent runs real tasks end to end, writes files, and runs its own tests.
-- The evaluation harness runs end to end and has run its first real comparison.
-  It still has **one scenario**, at the easiest level, and that scenario is now
-  *exhausted as an instrument*: seven configurations were run against it and
-  none was distinguishable from another. **Authoring L1/L2 scenarios is the
-  single blocking item** ([13.2](13-roadmap.md#132-what-to-do-next)).
+- Both agents run real tasks end to end, write files, and run their own tests.
+- **There are five scenarios now**, three at L1/L2, but nothing has been run
+  past n=2 and the original L0 is *exhausted as an instrument*: seven
+  configurations were run against it and none was distinguishable from another.
+- **The blocking item is now the harness comparison**, not scenario authoring:
+  two arms exist, neither has been measured against the other, and until that
+  happens the choice between them is back to argument
+  ([13.2](13-roadmap.md#132-what-to-do-next)).
 - Two Groq models are decommissioned and return `404 model_not_found`, which is
   not in the transient set, so it kills a run
   ([4.6](04-failover.md#46-known-gaps)). Evals work around it with a trimmed
   pool; the shipping pool does not.
-- An alternative agent architecture lives unmerged on `harness/adhoc-router`:
-  same task for 39× fewer tokens, but no demonstrated correctness gain
-  ([6.12](06-agent.md#61-what-it-is)).
+- The scenario repo is **not backed up**: four of five scenario tags exist only
+  on the machine that authored them
+  ([11.4](11-eval-status.md#114-blockers)).
 
 **Work in progress lives on a branch, not on `master`.** Check `git branch` before
 assuming what is present.

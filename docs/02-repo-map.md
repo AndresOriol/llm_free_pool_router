@@ -39,8 +39,8 @@ what a session is.
 | [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
 | [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
 
-`agent/harness/` is the agent itself: a LangGraph state machine of narrow nodes
-over one shared log. See [6.4](06-agent.md#64-the-graph).
+`agent/harness/` is the **narrow-role arm**: a LangGraph state machine of narrow
+nodes over one shared log. See [6.4](06-agent.md#64-the-graph).
 
 | File | The question it answers |
 | --- | --- |
@@ -52,6 +52,20 @@ over one shared log. See [6.4](06-agent.md#64-the-graph).
 | [record/](../agent/harness/record/) | *What does a session leave behind?* — git, the journal, the per-turn transcript, the rationale, the notes file |
 | [session.py](../agent/harness/session.py) | *What is one run, start to finish?* — wiring, the step budget, resume, and the account it writes |
 | [`__main__.py`](../agent/harness/__main__.py) | CLI: workdir as an argument, task on stdin |
+
+`agent/deep/` is the **conversational arm**: `create_deep_agent` over the same
+jailed backend, configured as a coding agent the way `deepagents-code` does it.
+See [6.9](06-agent.md#69-the-deepagents-arm). It is mostly configuration —
+the loop, the tools and the compaction come from the SDK.
+
+| File | The question it answers |
+| --- | --- |
+| [session.py](../agent/deep/session.py) | *What turns a generic deep agent into this coding agent?* — backend, middleware, prompt, subagent, and the context floor check that fails before the run rather than during it |
+| [prompt.py](../agent/deep/prompt.py) + [system_prompt.md](../agent/deep/system_prompt.md) | *What is the agent told?* — the ported prompt, and the three sections only the running configuration can fill |
+| [context.py](../agent/deep/context.py) | *What does it know before its first tool call?* — git branch, status and a depth-limited tree, so orientation isn't bought with model calls |
+| [shell.py](../agent/deep/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
+| [trace.py](../agent/deep/trace.py) | *What happened during a run, durably?* — the LangSmith run tree, fetched and written down ([7.7](07-observability.md#77-the-record-one-run-tree)) |
+| [`__main__.py`](../agent/deep/__main__.py) | CLI: same shape as the other arm, so a config swaps one for the other by changing `agent_cmd` |
 
 ## 2.4 `evals/` — the measurement harness
 
