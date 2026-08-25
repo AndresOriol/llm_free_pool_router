@@ -34,6 +34,10 @@ right now the router itself is the whole project.
   filters to the ones available and large enough for the request, and returns
   the highest-priority one. Selection only; it never makes a call.
   Configured via [llm_router/config.yaml](llm_router/config.yaml).
+- [llm_router/quota](llm_router/quota/) — a TypeScript submodule that reads the
+  usage ledger the router now writes and answers "how much free tier is left":
+  a terminal table, `--json` for an agent, and a static HTML panel. It reports;
+  it never gates a call ([14. Quota panel](docs/14-quota-panel.md)).
 - [agent](agent/) — `RouterChatModel` (the failover loop, as a LangChain
   `BaseChatModel`) plus a deepagents coding loop that runs on it, jailed to a
   workdir with `python`/`pytest` execution.
@@ -56,6 +60,7 @@ this file is the agent entry point (goal, standards, this index) — both stay
 short and link into the wiki rather than growing inline.
 
 Quick pointers: [4. Failover](docs/04-failover.md) for how the router works,
+[14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
 [5. Providers](docs/05-providers.md) for accounts and limits,
 [12. Development harness](docs/12-development-harness.md) for which model tier
 does what, [13. Roadmap and scope](docs/13-roadmap.md) for what's next and

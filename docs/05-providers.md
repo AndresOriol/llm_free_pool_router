@@ -76,6 +76,12 @@ degrades routing.
 These are the numbers `max_input_tokens` is derived from. They change; treat
 this table as a snapshot to re-check, not as truth.
 
+They are also declared per model as `limits:` in
+[config.yaml](../llm_router/config.yaml), which is this table in a form a program
+can read: the quota panel measures recorded usage against it
+([14. Quota panel](14-quota-panel.md)). **Update both together** — the table is
+what a person reads, the config is what the panel believes.
+
 ### Groq
 
 | Model | RPM | TPM | RPD | TPD |
