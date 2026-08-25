@@ -69,7 +69,7 @@ Code lives with the code it measures; scenario *data* does not (see
 | [`fake_agent.py`](../evals/fake_agent.py) | Stub agent, so the runner's own paths can be exercised without spending quota |
 | [`configs/*.yaml`](../evals/configs/) | One file per agent configuration under test |
 | [`CONFIGS.md`](../evals/CONFIGS.md) | The ledger: every configuration tried, its verdict, and why |
-| `results/runs/<run_id>/` | One self-contained directory per run — durable evidence, gitignored by default; commit one with `git add -f` when a verdict rests on it |
+| `results/runs/<run_id>/` | One self-contained directory per run — durable evidence, on disk only. Gitignored: an artifact, never committed. Cite a run by its id |
 | `.worktrees/` | Scratch checkouts of configurations under test (gitignored) |
 
 ## 2.5 Everything else

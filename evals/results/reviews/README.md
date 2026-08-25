@@ -9,7 +9,9 @@ run's `run.json`, computed from hidden tests.
 
 These are the open-coding notes the J2 batch analysis works from
 (`.claude/skills/j2-error-analysis/`). J2 counts and ranks; a review explains
-one run. Both are kept forever, for the same reason: a diagnosis that quietly
-stops being true between two runs is itself a finding.
+one run. Both are kept forever on disk, for the same reason: a diagnosis that
+quietly stops being true between two runs is itself a finding. Neither is
+committed — like the runs they read, they are artifacts. What reaches the repo
+is a report in `../reports/`.
 
 See `docs/design/long-run-harness.md#9-reading-one-session-back-the-post-mortem`.

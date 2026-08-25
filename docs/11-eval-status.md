@@ -47,7 +47,8 @@ configuration has been run against those more than n=2.
 | `harness-v2-seeded` | 3 | 0/3 | 15.7 | 4.0 | 13,755 |
 | `harness-v7-orchestrated` | 3 | 0/3 | 19.7 | 7.3 | 12,543 |
 
-Raw evidence in `evals/results/runs/`; the ledger is in
+Raw evidence in `evals/results/runs/` — on the machine that ran it, not in
+git; the ledger is in
 [evals/CONFIGS.md](../evals/CONFIGS.md); the architecture is
 [6.1](06-agent.md#61-what-it-is).
 

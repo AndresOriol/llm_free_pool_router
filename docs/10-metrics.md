@@ -122,8 +122,10 @@ configuration branch can never conflict over results
 ([8.3](08-evaluation-method.md#83-where-things-live)).
 
 It also keeps the *evidence* behind each row, which is the part hosted tracing
-loses. Written conclusions go in `evals/results/reports/<date>-<topic>.md`, and
-the one-line verdict goes in the ledger, [evals/CONFIGS.md](../evals/CONFIGS.md).
+loses. It is gitignored — an artifact of a run, kept on the machine that made
+it. What goes in the repo is the writing over it: conclusions in
+`evals/results/reports/<date>-<topic>.md`, citing runs by id, and the one-line
+verdict in the ledger, [evals/CONFIGS.md](../evals/CONFIGS.md).
 
 ---
 
