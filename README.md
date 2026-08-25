@@ -51,6 +51,6 @@ Everything beyond the quick start lives in the wiki — start at
   [12. Development harness](docs/12-development-harness.md)
 - **How much of the free tier is left?** →
   [14. Quota panel](docs/14-quota-panel.md) —
-  `node llm_router/quota/src/cli.ts status`
+  `python -m llm_router.quota status`
 - **Where is this going next?** → [13. Roadmap and scope](docs/13-roadmap.md)
 - **Project goals and standards** → [CLAUDE.md](CLAUDE.md)

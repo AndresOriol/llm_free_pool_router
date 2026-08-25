@@ -23,7 +23,7 @@ Selection and state. Never makes an API call itself.
 | [router.py](../llm_router/router.py) | *Which account is best right now?* — `AutonomousLLMRouter.get_best_provider()` |
 | [__main__.py](../llm_router/__main__.py) | *What are my limits, before I've run anything?* — `python -m llm_router` builds the pool and writes its snapshot, calling nothing |
 | [usage.py](../llm_router/usage.py) | *What has this pool spent?* — the append-only ledger and the pool snapshot behind [14. Quota panel](14-quota-panel.md) |
-| [quota/](../llm_router/quota/) | *How close is each account to its wall?* — the TypeScript reader over that ledger: table, JSON, HTML panel |
+| [quota/](../llm_router/quota/) | *How close is each account to its wall?* — the reader over that ledger and over the vendors' own figures: table, JSON, HTML panel |
 | [config.yaml](../llm_router/config.yaml) | *What's in the pool?* — accounts, models and their declared `limits`, see [5.2](05-providers.md#52-config-schema) |
 | `.env` (gitignored) | The actual API keys. Never in code or config. |
 
