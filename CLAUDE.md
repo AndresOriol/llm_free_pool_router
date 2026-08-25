@@ -34,11 +34,10 @@ right now the router itself is the whole project.
   filters to the ones available and large enough for the request, and returns
   the highest-priority one. Selection only; it never makes a call.
   Configured via [llm_router/config.yaml](llm_router/config.yaml).
-- [llm_router/quota](llm_router/quota/) — answers "how much free tier is left":
-  a terminal table, `--json` for an agent, and a static HTML panel, over the
-  usage ledger the router now writes plus, on `--probe`, the vendors' own
-  figures. It reports; it never gates a call
-  ([14. Quota panel](docs/14-quota-panel.md)).
+- [llm_router/quota](llm_router/quota/) — answers "how much free tier is left",
+  entirely from the usage ledger the router now writes: a terminal table,
+  `--json` for an agent, and a filterable HTML panel. It reports; it never gates
+  a call ([14. Quota panel](docs/14-quota-panel.md)).
 - [agent](agent/) — `RouterChatModel` (the failover loop, as a LangChain
   `BaseChatModel`) plus a deepagents coding loop that runs on it, jailed to a
   workdir with `python`/`pytest` execution.

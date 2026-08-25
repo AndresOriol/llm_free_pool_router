@@ -93,8 +93,7 @@ what a person reads, the config is what the panel believes.
 Groq's Llama line (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`,
 `meta-llama/llama-4-scout-17b-16e-instruct`) and `qwen/qwen3-32b` were retired
 upstream and are gone from both this table and the config: all four answer
-`404 model_not_found`. `python -m llm_router.quota status --probe` re-checks
-every member for one request each ([14.5](14-quota-panel.md#145-the-probe)).
+`404 model_not_found`.
 
 The published per-model limits are misleading in one important way: in practice
 Groq's free tier behaves as a **single shared request budget across every model

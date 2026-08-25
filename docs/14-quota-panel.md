@@ -16,47 +16,44 @@ only one account per login.
 
 ## 14.2 The path of one number
 
-Nothing is computed twice and nothing is fetched at read time. Three writers put
+Nothing is computed twice and nothing is fetched at read time. Two writers put
 files on disk; one reader joins them by provider name.
 
 ```
 config.yaml ──limits──► loader.py ─────────────► .usage/pool.json ──┐
                                                                     │
-  agent ──► RouterChatModel ──► the provider call                   │
-                  │                    │                            ├──► build_report()
-                  └─ usage.record ─────┴──────► .usage/ledger.jsonl ┤     joins on the
-                       (one line per attempt)                       │     provider name
-        --probe ──► probe.py ──one call──────► .usage/vendor.json ──┘          │
-                                                                               ▼
-                                                        table · --json · panel.html
+  agent ──► RouterChatModel ──► the provider call                   ├──► build_report()
+                  │                    │                            │     joins on the
+                  └─ usage.record ─────┴──────► .usage/ledger.jsonl ┘     provider name
+                       (one line per attempt)                              │
+                                                                           ▼
+                                                    table · --json · panel.html
 ```
 
 - **What it cost us**: the failover loop calls `usage.record` on every attempt it
   makes, served or refused, naming the provider that served it.
 - **What it is allowed to cost**: the loader writes the declared `limits` for the
   pool it just built, so the ceilings always match the running config.
-- **What the vendor thinks**: only when `--probe` asks, and only where a vendor
-  will say ([14.4](#145-the-probe)).
 
-`build_report` joins the three on the `provider` name (`GptOss120b_groq_1`),
-which is why that name is generated in one place and never re-parsed. Reading is
-side-effect free: `status` and `panel` open three files and touch no network.
+`build_report` joins the two on the `provider` name (`GptOss120b_groq_1`), which
+is why that name is generated in one place and never re-parsed. Reading is
+side-effect free: `status` and `panel` open two files and touch no network, so an
+agent may ask as often as it likes.
 
-## 14.3 Three files, under `llm_router/.usage/`
+## 14.3 Two files, under `llm_router/.usage/`
 
 Gitignored; `LLM_ROUTER_USAGE_DIR` moves the directory.
 
 | File | Written by | Holds |
 | --- | --- | --- |
-| `ledger.jsonl` | [usage.py](../llm_router/usage.py), one line per attempt | `{ts, provider, account, platform, model, tokens_in, tokens_out, outcome}` |
+| `ledger.jsonl` | [usage.py](../llm_router/usage.py), one line per attempt | `{ts, provider, account, platform, model, tokens_in, tokens_out, outcome, retry_after}` |
 | `pool.json` | [loader.py](../llm_router/loader.py), on every pool build | the pool as configured, with each model's declared `limits` |
-| `vendor.json` | [probe.py](../llm_router/quota/probe.py), when asked | what each vendor last said it had left |
 
 They move on different clocks, which is why they are not one file. The ledger
 only grows. The snapshot is rebuilt from the pool the loader *actually built*, so
 a model skipped for a missing key never appears as an idle account with quota to
-spare. The vendor readings are bought one at a time and go stale
-([14.4](#145-the-probe)).
+spare, and an edited `config.yaml` cannot leave the panel measuring against
+limits nobody is using.
 
 `python -m llm_router` writes the snapshot without making a call, for the case
 where the panel is opened before any agent has run.
@@ -66,131 +63,138 @@ failover loop in [`RouterChatModel`](../agent/router_chat_model.py). Token count
 are the provider's own numbers, never `estimate_tokens` — a panel reporting a
 chars/4 guess as consumption would be worse than reporting nothing.
 
-**`outcome` is `ok`, `rate_limited` or `error`, and a refused attempt is recorded
-rather than dropped.** It still spent a request against the account's budget, and
-how often an account is being turned away is the most useful thing the ledger has
-to say about a free tier.
-
-Writing to any of these can never fail a run. The writers swallow their own
+Writing to either file can never fail a run. The writers swallow their own
 errors and log at debug: an unattended agent losing an afternoon's work to a full
 disk, over a convenience, would be a self-inflicted wound.
 
-## 14.4 Two sources, and they are not equal
+## 14.4 One source, and what it misses
 
-The ledger counts what *this router* spent. The vendor counts what the *account*
-spent — which is a different number the moment anything else touches the key:
-another machine, another checkout, a script run by hand. Where a vendor reading
-exists it wins, and every figure on the panel says which source it came from. A
-panel that mixed them silently would be worse than one that only counted
-locally, because it would look authoritative while being neither.
+Every figure comes off the ledger, which counts what *this router* spent. The
+account may have spent more: a key used from another machine, another checkout,
+or by hand is invisible here. The panel says so rather than hiding it.
 
-## 14.5 The probe
+The alternative was tried and removed. Groq reports its remaining budget in
+`x-ratelimit-*` headers, but only on a real completion — there is no usage
+endpoint on either platform (`GET /models` carries nothing on Groq, and neither
+Gemini endpoint carries anything at all). So a vendor reading cost a request per
+member, went stale the moment it was taken, existed for one of the two
+platforms, and put a second kind of number on a page whose whole job is to be
+unambiguous. One source that is complete about what we did beats two sources
+that disagree about what happened. The probe is in `git log`.
 
-**There is no usage endpoint to ask.** Measured against both platforms on
-2026-08-25:
+What is kept from that experiment is the part the vendor gives away for free: a
+`Retry-After` on a refusal, recorded in the ledger at the moment it was said
+([14.5](#145-windows-and-when-they-reset)).
 
-| Request | Reports usage? |
-| --- | --- |
-| Groq `GET /v1/models` | no |
-| Groq `POST /v1/chat/completions` | **yes** — `x-ratelimit-{limit,remaining,reset}-{requests,tokens}` |
-| Gemini `GET /v1beta/models` | no |
-| Gemini `:generateContent` | no — only `X-Gemini-Service-Tier` |
+## 14.5 Windows, and when they reset
 
-So a reading costs one request. `--probe` buys it deliberately: a one-token
-completion per member that can answer, about 70 tokens and one request each
-against budgets of 8,000/minute and 1,000/day. It is never implicit — an agent
-polling `status --json` must not quietly spend the budget it is asking about.
+A budget is assumed to work like this: **the first attempt opens the window, and
+the window ends one length later**, whatever happens in between. So to find the
+window in progress, look back one length from now and take the oldest attempt in
+that span — that one opened it, and the budget resets one length after *it*.
 
-A 429 answers too. A refused call carries the same headers, and an account that
-has hit its wall is exactly when the reading is worth having.
+That is also why `used` and `resets in` are read off the same span: every attempt
+in the last minute belongs to one minute-window, because the oldest of them
+opened it no earlier than a minute ago.
 
-**Which window a header describes is not in the header.** Groq's
-`x-ratelimit-limit-requests` is the *daily* budget while `-limit-tokens` is the
-*per-minute* one. Rather than hard-code that per platform — the special-casing
-[the router refuses](../CLAUDE.md) — the reading is matched against the ceilings
-the config declares, and a ceiling matching none of them is still shown under
-the header's own name.
+The assumption is not free, and it is wrong in one direction on purpose:
 
-Two things fall out of probing that are worth knowing:
+- A vendor running a **leaky bucket** (Groq's request budget refills
+  continuously) clears earlier than this predicts.
+- A vendor running a **calendar day** (Gemini resets at midnight Pacific) clears
+  at a moment this cannot know.
 
-- **Groq's request budget is a leaky bucket, not a day.** Its reset header reads
-  `1m26.4s` against a 1,000-request limit. A rolling 24-hour RPD window is the
-  wrong shape for that, which is another reason the local count is a fallback.
-- **A probe finds retired models for free.** Four of the seven Groq entries in
-  the shipping config answered `404 model_not_found` — the same retirements that
-  have killed runs three times ([4.3](04-failover.md#43-classifying-a-failure)).
-  Reading the panel is a cheaper way to discover that than losing a session.
+Both make the panel say a budget is still spent when it may not be. It will not
+promise headroom that isn't there, which is the only safe way to be wrong when
+something unattended is about to start.
 
-Google's free tier has no equivalent. Its quota is visible in the AI Studio
-console and, programmatically, only through a GCP project's monitoring — a
-service account and a different auth story, not something an AI Studio key can
-do. Gemini members are recorded as *unable to report*, which reads differently on
-the panel from *not asked yet*.
+Where the provider told us better, that wins: a refusal carrying `Retry-After`
+puts a **blocked for 33s** on the row, and no arithmetic of ours overrides it.
 
-## 14.6 What the report says
-
-Per account × model, per window: requests, tokens, and how much of each declared
-limit that is, marked `vendor` where the vendor answered. A limit the vendor
-doesn't publish (Gemma's TPM) is *no ceiling*, not a zero one — consumption is
-still shown, just without a bar. The **tightest** gauge is the one that will stop
-that member first, which is rarely the one you would guess: on Groq a step-heavy
-run hits TPM long before RPD.
-
-Totals are also rolled up per account, because that is where a free tier's real
-budget lives — Groq meters one org-wide request pool across every model on the
-account, so the per-model rows flatter it
+**Accounts do not share windows.** A model is fanned across every account on its
+platform ([3.3](03-pool-model.md#33-the-fan-out)), so `gemini-3.5-flash` may be
+three rows; each is a separate budget with its own clock. Nothing is ever summed
+across accounts — a row is one account × one model, and the account rollup
+aggregates rows *within* one account. Two Groq keys are two pools, even though
+Groq meters each of them org-wide across its own models
 ([3.4](03-pool-model.md#34-priority-tiers)).
 
-The local windows are rolling: RPM/TPM are the last 60 seconds, RPD/TPD the last
-24 hours, always. Encoding each vendor's reset policy is a thing to get silently
-wrong, and the error this choice makes has a safe direction — just after a
-vendor's reset it still counts calls the vendor has forgiven, so it over-reports
-and never claims headroom that isn't there.
+## 14.6 How a refused attempt is counted
+
+A `rate_limited` line is an attempt the provider turned away for want of quota
+([`is_rate_limited`](../llm_router/base_provider.py)). It is recorded, not
+dropped, and then counted asymmetrically:
+
+| | Counted? | Why |
+| --- | --- | --- |
+| Request gauges (RPM, RPD) | **yes**, and shown as *n refused* | It spent a request to be told no |
+| Token gauges (TPM, TPD) | **no** | No tokens were spent being refused, and none are recorded |
+| The window's start | requests only | A refusal opens the request window; the token window is opened by the oldest attempt that actually spent tokens |
+| `Retry-After` | kept verbatim | The one statement about the future that isn't ours |
+
+The asymmetry matters because the two numbers answer different questions. Thirty
+requests where ten were refused is the same RPD as thirty that all worked, and a
+completely different situation: the first is an account fighting its ceiling, the
+second is an account using it. So the count is there in the gauge, and the
+refusals are called out inside it.
+
+It is also the reason a token figure can look low while an account is stuck: the
+requests are being spent and the tokens are not.
+
+## 14.7 What the report says
+
+Per account × model, per window: requests, tokens, how much of each declared
+limit that is, when the window resets, and how many of those requests were
+refused. A limit the vendor doesn't publish (Gemma's TPM) is *no ceiling*, not a
+zero one — consumption is still shown, just without a bar. The **tightest** gauge
+is the one that will stop that member first, which is rarely the one you would
+guess: on Groq a step-heavy run hits TPM long before RPD.
 
 Declared limits come from `limits:` in [config.yaml](../llm_router/config.yaml),
 which is [5.4](05-providers.md#54-current-free-tier-limits) in a form a program
 can read. **Update both when a vendor moves a limit**; the table is what a person
 reads, the config is what the panel measures against.
 
-## 14.7 Reading it
+## 14.8 Reading it
 
 [`llm_router/quota/`](../llm_router/quota/) — Python, standard library only.
 
 ```bash
-python -m llm_router.quota status            # the table
-python -m llm_router.quota status --json     # the same report, as data
-python -m llm_router.quota panel             # writes the HTML, prints its path
-python -m llm_router.quota status --probe    # ask the vendors first
+python -m llm_router.quota status                     # the table
+python -m llm_router.quota status --json              # the same report, as data
+python -m llm_router.quota status --account groq_1    # one account
+python -m llm_router.quota panel                      # writes the HTML, prints its path
 ```
 
 `--json` exists for the coding agent driving this repo: one command, the whole
-report, no scraping of a table meant for a person.
+report, no scraping of a table meant for a person. `--account` narrows the report
+itself rather than the rendering, so what a reader sees and what the data says
+stay the same thing.
+
+The panel is a **snapshot file, not a served page** — the question is asked once,
+before a run, and a file has no port to collide with and no process left running
+on a machine meant to be running agents. It is still interactive: account filters
+and a "used in the last 24h" toggle, as a few lines of inline script over markup
+that is already complete. They earn their place because a second key on a
+platform doubles the rows.
 
 This began as a TypeScript submodule and was ported. Nothing in it justified a
 second toolchain in a Python repo: it is dict-reshaping and string templating,
-the panel is a static file rather than an interactive front end, and keeping the
-ledger's writer and its reader in one language matters more now that vendor
-readings share the schema. The port is in `git log`.
+and keeping the ledger's writer and its reader in one language matters more.
 
-The panel is a **snapshot file, not a served page**. Nothing here needs to be
-live — the question is asked once, before a run — and a file has no port to
-collide with, no process left running on a machine meant to be running agents,
-and can be kept next to a run's results when a session is worth explaining later.
-
-## 14.8 What it deliberately doesn't do
+## 14.9 What it deliberately doesn't do
 
 **It never gates a call.** The router routes on availability, not on arithmetic
 against a budget: it learns an account is exhausted by being told so, and that
 stays the mechanism ([4.4](04-failover.md#44-cooldown-and-backoff)). Routing off
-a stored count instead would mean trusting our own arithmetic, or a reading from
-ten minutes ago, over the provider's live answer — and being wrong in the
-direction that stalls a run. The panel informs a human or an agent deciding what
-to start; the failover loop is unchanged.
+a stored count would mean trusting our own arithmetic, over a window model we
+know is approximate, against the provider's live answer — and being wrong in the
+direction that stalls a run.
 
-Spending the vendor readings on better routing — skipping a member whose last
-reading says it is spent, rather than burning an attempt to find out — is a real
-option, and belongs in [13.2](13-roadmap.md#132-what-to-do-next) if it is ever
-wanted. It is not this page.
+Spending the ledger on better routing — skipping a member the count says is
+spent, rather than burning an attempt to find out — is a real option, and belongs
+in [13.2](13-roadmap.md#132-what-to-do-next) if it is ever wanted. It is not this
+page.
 
 ---
 

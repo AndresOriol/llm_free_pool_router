@@ -144,12 +144,13 @@ New here? Start with [1. Overview](01-overview.md), then
 **[14. Quota panel](14-quota-panel.md)** — what the pool has spent, and how close each account is to its wall
 &nbsp;&nbsp;&nbsp;&nbsp;[14.1](14-quota-panel.md#141-the-question) The question ·
 [14.2](14-quota-panel.md#142-the-path-of-one-number) The path of one number ·
-[14.3](14-quota-panel.md#143-three-files-under-llm_routerusage) The three files ·
-[14.4](14-quota-panel.md#144-two-sources-and-they-are-not-equal) Two sources ·
-[14.5](14-quota-panel.md#145-the-probe) The probe ·
-[14.6](14-quota-panel.md#146-what-the-report-says) What the report says ·
-[14.7](14-quota-panel.md#147-reading-it) Reading it ·
-[14.8](14-quota-panel.md#148-what-it-deliberately-doesnt-do) What it doesn't do
+[14.3](14-quota-panel.md#143-two-files-under-llm_routerusage) The two files ·
+[14.4](14-quota-panel.md#144-one-source-and-what-it-misses) One source, and what it misses ·
+[14.5](14-quota-panel.md#145-windows-and-when-they-reset) Windows and resets ·
+[14.6](14-quota-panel.md#146-how-a-refused-attempt-is-counted) Refused attempts ·
+[14.7](14-quota-panel.md#147-what-the-report-says) What the report says ·
+[14.8](14-quota-panel.md#148-reading-it) Reading it ·
+[14.9](14-quota-panel.md#149-what-it-deliberately-doesnt-do) What it doesn't do
 
 ---
 
