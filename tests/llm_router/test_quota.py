@@ -134,6 +134,59 @@ def _check_refusals():
     assert row_of(report, "GptOss120b_groq_1").blocked_for is None
 
 
+def _check_unanswered():
+    # An attempt that never got an answer cost the account nothing, so it is not
+    # a request. It is still an error, because something did go wrong.
+    report = build_report([call(), call(outcome="error", tokens_in=None,
+                                       tokens_out=None, reached=False)], POOL, NOW)
+    row = row_of(report, "GptOss120b_groq_1")
+
+    assert row.day.requests == 1, "only the answered attempt spent one"
+    assert (row.day.unanswered, row.day.errors) == (1, 1), row.day
+    assert gauge_of(row, "rpd").used == 1, gauge_of(row, "rpd")
+
+    # And it opens no window: a budget cannot start on a request the vendor
+    # never saw.
+    report = build_report([call(ts=NOW - 50, outcome="error", tokens_in=None,
+                                tokens_out=None, reached=False)], POOL, NOW)
+    row = row_of(report, "GptOss120b_groq_1")
+    assert row.day.requests == 0
+    assert all(gauge.resets_in is None for gauge in row.gauges), row.gauges
+
+
+def _check_model_fold():
+    """The default view: one model, every account that serves it."""
+    report = build_report([
+        call(ts=NOW - 30),
+        call(ts=NOW - 20),
+        call(ts=NOW - 50, provider="GptOss120b_groq_2", account="groq_2"),
+    ], POOL, NOW)
+    model = next(m for m in report.models if m.model == "openai/gpt-oss-120b")
+
+    assert model.accounts == ["groq_1", "groq_2"], model.accounts
+    assert model.day.requests == 3, "three attempts over two keys"
+    # Two accounts at 1000 a day really are 2000 a day: separate budgets add.
+    assert gauge_of(model, "rpd").limit == 2000, gauge_of(model, "rpd")
+    assert gauge_of(model, "rpd").used == 3
+    # The soonest window to clear is the one that frees capacity first, whichever
+    # key it sits on: groq_2 opened its minute at -50s.
+    assert gauge_of(model, "rpm").resets_in == 10, gauge_of(model, "rpm")
+
+    # Gemma declares no TPM on either account, so the total has no ceiling --
+    # summing what is known with what is not would invent a number.
+    gemma = next(m for m in report.models if m.model == "gemma-4-31b-it")
+    assert gemma.gauges and gauge_of(gemma, "tpm").limit is None
+    assert gauge_of(gemma, "rpd").limit == 1500, "one account serves it, so one limit"
+
+    # A platform is summed for what it spent and never given a ceiling: Groq
+    # shares one request budget across models, so adding them would be fiction.
+    groq = next(p for p in report.platforms if p.platform == "groq")
+    assert groq.models == 1 and groq.accounts == ["groq_1", "groq_2"], groq
+    assert groq.day.requests == 3
+    assert not hasattr(groq, "gauges"), "a platform has no ceiling of its own"
+    assert [p.platform for p in report.platforms] == ["gemini", "groq"]
+
+
 def _check_accounts_are_separate():
     report = build_report([
         call(ts=NOW - 30),
@@ -188,6 +241,8 @@ def _run():
     _check_windows()
     _check_resets()
     _check_refusals()
+    _check_unanswered()
+    _check_model_fold()
     _check_accounts_are_separate()
     _check_limits_and_notes()
     print("quota: all checks passed")

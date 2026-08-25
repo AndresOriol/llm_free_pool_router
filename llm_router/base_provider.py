@@ -96,6 +96,37 @@ def is_rate_limited(exc: Exception) -> bool:
     return any(signal in message for signal in _RATE_LIMIT_SIGNALS)
 
 
+def _status_of(exc: Exception) -> Optional[int]:
+    """HTTP status, wherever the SDK put it.
+
+    openai exceptions expose `.status_code`; google-genai's APIError exposes
+    `.code`.
+    """
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status
+    code = getattr(exc, "code", None)
+    return code if isinstance(code, int) else None
+
+
+def reached_provider(exc: Exception) -> bool:
+    """Did this failed attempt actually get an answer from the provider?
+
+    The usage ledger needs to know, because only an attempt the vendor answered
+    spent anything against the account. A 429 or a 413 did: the request was
+    sent, the vendor read it and said no. A connection error or a timeout may
+    never have left this machine, and counting those as requests would inflate
+    the panel with traffic the vendor never saw.
+
+    Positive evidence only. Anything without a status and without the wording of
+    a quota refusal is treated as never having arrived -- overstating remaining
+    budget is the wrong way to be wrong, but so is inventing requests, and this
+    branch is reached by bugs and local failures far more often than by silent
+    successes.
+    """
+    return is_rate_limited(exc) or _status_of(exc) is not None
+
+
 def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     """Classify an exception raised while calling a provider.
 
@@ -122,12 +153,7 @@ def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     if "tool_use_failed" in message or "tool call validation failed" in message:
         return True, None
 
-    # openai SDK exceptions expose .status_code; google-genai APIError exposes .code
-    status = getattr(exc, "status_code", None)
-    if not isinstance(status, int):
-        code = getattr(exc, "code", None)
-        status = code if isinstance(code, int) else None
-
+    status = _status_of(exc)
     if isinstance(status, int):
         if status in (408, 409, 429) or status >= 500:
             return True, _retry_after(exc)

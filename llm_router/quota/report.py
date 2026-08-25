@@ -25,12 +25,23 @@ know. It errs toward saying a budget is still spent, which is the safe
 direction: it will not promise headroom that isn't there. Where the provider
 told us better -- a `Retry-After` on a refusal -- that is used instead.
 
-## Accounts do not share windows
+## Two views of the same ledger
 
 A model is fanned across every account on its platform, so `gemini-3.5-flash`
-may be three rows. Each is its own budget with its own clock, and nothing here
-sums across accounts: a row is one account × one model, and the account rollups
-below aggregate rows *within* one account only.
+may be three pool members. Each is its own budget with its own clock, and the
+`Row` for it is one account × one model -- windows are never mixed.
+
+But the question that made this panel worth building is *how much Gemini do I
+have left*, not *how much is left on key two*. So the rows are also folded into
+a `ModelSummary` per platform × model: capacity adds up across accounts (three
+keys at 20 requests a day are 60 requests a day), and consumption adds up with
+it. That is the default view; the per-account rows are what you filter down to
+once you know which model is running out.
+
+Nothing is summed across *platforms*, and no platform is given a total ceiling:
+Groq meters one org-wide request budget across every model on an account, so
+adding its per-model limits together would invent capacity that does not exist
+([3.4](../../docs/03-pool-model.md#34-priority-tiers)).
 """
 
 import time
@@ -53,9 +64,13 @@ class Usage:
     requests: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
-    #: Attempts the provider refused for want of quota. Counted as requests.
+    #: Attempts the provider refused for want of quota. Counted as requests,
+    #: because the provider answered: it read the request and said no.
     rate_limited: int = 0
     errors: int = 0
+    #: Attempts that never got an answer -- a timeout, a connection that failed.
+    #: Counted nowhere else: the account was never asked, so it paid nothing.
+    unanswered: int = 0
     #: The attempt that opened this window, and the oldest that spent tokens.
     #: They differ because a refusal spends a request and no tokens.
     opened: Optional[float] = None
@@ -68,6 +83,15 @@ class Usage:
 
     def add(self, call: dict) -> None:
         timestamp = call.get("ts") or 0.0
+        # An attempt the provider never answered spent nothing and opens no
+        # window. The router also never records a member it skipped on size --
+        # the ledger holds attempts, not intentions -- so what is counted here
+        # is exactly what an account was asked to serve.
+        if call.get("reached", True) is False:
+            self.unanswered += 1
+            self.errors += 1
+            return
+
         self.requests += 1
         self.opened = timestamp if self.opened is None else min(self.opened, timestamp)
 
@@ -89,6 +113,7 @@ class Usage:
         self.tokens_out += other.tokens_out
         self.rate_limited += other.rate_limited
         self.errors += other.errors
+        self.unanswered += other.unanswered
         for name in ("opened", "opened_tokens"):
             mine, theirs = getattr(self, name), getattr(other, name)
             if theirs is not None:
@@ -145,6 +170,41 @@ class AccountSummary:
 
 
 @dataclass
+class ModelSummary:
+    """One model across every account that serves it."""
+
+    model: str
+    platform: str
+    #: The accounts backing it, in the order they appear in the pool.
+    accounts: List[str] = field(default_factory=list)
+    priority: Optional[int] = None
+    minute: Usage = field(default_factory=Usage)
+    day: Usage = field(default_factory=Usage)
+    total: Usage = field(default_factory=Usage)
+    #: Gauges whose limits are the accounts' limits added together.
+    gauges: List[Gauge] = field(default_factory=list)
+    tightest: Optional[Gauge] = None
+    last_call: Optional[float] = None
+    #: The soonest any of its accounts is due back from a refusal.
+    blocked_for: Optional[float] = None
+
+
+@dataclass
+class PlatformSummary:
+    """One platform: what it has served today, over all its accounts.
+
+    Deliberately without a ceiling of its own -- see the module docstring.
+    """
+
+    platform: str
+    accounts: List[str] = field(default_factory=list)
+    models: int = 0
+    minute: Usage = field(default_factory=Usage)
+    day: Usage = field(default_factory=Usage)
+    total: Usage = field(default_factory=Usage)
+
+
+@dataclass
 class Report:
     generated: float
     pool_generated: Optional[float] = None
@@ -152,8 +212,12 @@ class Report:
     #: Timestamp of the oldest call on record, or None on an empty ledger.
     since: Optional[float] = None
     calls: int = 0
+    #: One account x model each: the finest view, and the one windows live in.
     rows: List[Row] = field(default_factory=list)
+    #: The same rows folded across accounts. The default view.
+    models: List[ModelSummary] = field(default_factory=list)
     accounts: List[AccountSummary] = field(default_factory=list)
+    platforms: List[PlatformSummary] = field(default_factory=list)
     #: What a reader should know before believing the numbers.
     notes: List[str] = field(default_factory=list)
 
@@ -194,6 +258,83 @@ def _blocked_for(calls: List[dict], now: float) -> Optional[float]:
              if call.get("outcome") == "rate_limited" and call.get("retry_after")]
     soonest = max(until, default=None)
     return round(soonest - now, 1) if soonest and soonest > now else None
+
+
+def _fold_models(rows: List[Row]) -> List[ModelSummary]:
+    """Rows folded across the accounts that serve the same model.
+
+    Capacity adds because each account is a separate budget: two keys at 20
+    requests a day really are 40 requests a day. A limit only one account
+    declares is not summed into a total -- an unknown ceiling anywhere makes the
+    total unknown, and a made-up number here would be worse than none.
+
+    The reset is the *soonest* of the accounts' windows, because that is when
+    capacity next appears, whichever key it appears on.
+    """
+    folded: Dict[tuple, ModelSummary] = {}
+    for row in sorted(rows, key=lambda row: row.account):
+        key = (row.platform, row.model)
+        summary = folded.setdefault(key, ModelSummary(model=row.model,
+                                                      platform=row.platform,
+                                                      priority=row.priority))
+        summary.accounts.append(row.account)
+        summary.minute.merge(row.minute)
+        summary.day.merge(row.day)
+        summary.total.merge(row.total)
+        if row.last_call is not None:
+            summary.last_call = (row.last_call if summary.last_call is None
+                                 else max(summary.last_call, row.last_call))
+        if row.blocked_for is not None:
+            summary.blocked_for = (row.blocked_for if summary.blocked_for is None
+                                   else min(summary.blocked_for, row.blocked_for))
+
+        for gauge in row.gauges:
+            existing = next((candidate for candidate in summary.gauges
+                             if candidate.name == gauge.name), None)
+            if existing is None:
+                summary.gauges.append(Gauge(name=gauge.name, used=gauge.used,
+                                            limit=gauge.limit,
+                                            resets_in=gauge.resets_in,
+                                            refused=gauge.refused))
+                continue
+            existing.used += gauge.used
+            existing.refused += gauge.refused
+            existing.limit = (None if existing.limit is None or gauge.limit is None
+                              else existing.limit + gauge.limit)
+            if gauge.resets_in is not None and gauge.used:
+                existing.resets_in = (gauge.resets_in if existing.resets_in is None
+                                      else min(existing.resets_in, gauge.resets_in))
+
+    for summary in folded.values():
+        for gauge in summary.gauges:
+            gauge.ratio = None if not gauge.limit else gauge.used / gauge.limit
+            if not gauge.used:
+                gauge.resets_in = None
+        with_limits = [gauge for gauge in summary.gauges if gauge.ratio is not None]
+        summary.tightest = max(with_limits, key=lambda gauge: gauge.ratio, default=None)
+
+    return sorted(folded.values(), key=lambda summary: (
+        summary.platform,
+        summary.priority if summary.priority is not None else 999,
+        summary.model))
+
+
+def _fold_platforms(models: List[ModelSummary],
+                    accounts: List[AccountSummary]) -> List[PlatformSummary]:
+    """What each platform served today. No ceiling: see the module docstring."""
+    platforms: Dict[str, PlatformSummary] = {}
+    for summary in models:
+        platform = platforms.setdefault(summary.platform,
+                                        PlatformSummary(platform=summary.platform))
+        platform.models += 1
+        platform.minute.merge(summary.minute)
+        platform.day.merge(summary.day)
+        platform.total.merge(summary.total)
+    for account in accounts:
+        platform = platforms.get(account.platform)
+        if platform is not None and account.account not in platform.accounts:
+            platform.accounts.append(account.account)
+    return sorted(platforms.values(), key=lambda platform: platform.platform)
 
 
 def build_report(calls: List[dict], pool: Optional[dict],
@@ -282,6 +423,8 @@ def build_report(calls: List[dict], pool: Optional[dict],
             row.priority if row.priority is not None else 999, row.model)),
         accounts=sorted(accounts.values(), key=lambda a: (a.platform, a.account)),
     )
+    report.models = _fold_models(report.rows)
+    report.platforms = _fold_platforms(report.models, report.accounts)
     report.notes = _notes(report, pool)
     return report
 

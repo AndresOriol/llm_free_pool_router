@@ -6,12 +6,14 @@ live -- the question is "can I start a six-hour run on what's left", asked once
 machine that is meant to be running agents unattended, and can be kept next to a
 run's results when a session is worth explaining later.
 
-Interactive is not the same as live: the filters are a few lines of inline
-script over markup that is already complete, so the file still works from
-`file://` with no server and no network. They earn their place because the pool
-fans every model across every account on its platform -- a second Gemini key
-doubles the rows -- and picking one account is the difference between reading
-the page and scanning it.
+Two views, and the default one is the reason the panel exists: a model on one
+line, summed over every account that serves it, so "how much Gemini is left" is
+a number on the page rather than a tour of three provider consoles. The filters
+drill into a single account once you know which model is running out.
+
+Interactive is not the same as live: both views are rendered into the file and
+the filters only hide one of them, so it still works from `file://` with no
+server, no network, and -- bar the drill-down -- no scripting.
 """
 
 from html import escape
@@ -85,14 +87,17 @@ footer { font-size: .78rem; margin-top: 1.5rem; }
 # `sections` and `buttons` lying around in the global scope.
 _SCRIPT = """
 (() => {
-const sections = [...document.querySelectorAll('section[data-account]')];
+const sections = [...document.querySelectorAll('section[data-view]')];
 const buttons = [...document.querySelectorAll('.filters button')];
 const idleOnly = document.getElementById('hide-idle');
 let account = 'all';
 
 function apply() {
   for (const section of sections) {
-    section.hidden = account !== 'all' && section.dataset.account !== account;
+    // 'all' shows the per-model view; anything else shows that one account.
+    section.hidden = account === 'all'
+      ? section.dataset.view !== 'models'
+      : section.dataset.account !== account;
     for (const row of section.querySelectorAll('tr[data-used]')) {
       row.hidden = idleOnly.checked && row.dataset.used === '0';
     }
@@ -146,39 +151,40 @@ def _gauge_cell(gauge: Optional[Gauge]) -> str:
             f'<em>{percent(gauge.ratio)}</em>{refused}{resets}</div></td>')
 
 
-def _row_html(row: Row, now: float) -> str:
-    by_name = {gauge.name: gauge for gauge in row.gauges}
-    tags = "" if row.configured else '<span class="tag">retired from config</span>'
-    if row.blocked_for is not None:
+def _entry_row(entry, subtitle: str, now: float, retired: bool = False) -> str:
+    """One table row, over a model summary or a single pool member alike."""
+    by_name = {gauge.name: gauge for gauge in entry.gauges}
+    tags = '<span class="tag">retired from config</span>' if retired else ""
+    if entry.blocked_for is not None:
         # The provider's own Retry-After, which outranks any arithmetic of ours.
-        tags += f'<span class="tag">blocked {duration(row.blocked_for)}</span>'
-    priority = "" if row.priority is None else f" &middot; priority {row.priority}"
+        tags += f'<span class="tag">blocked {duration(entry.blocked_for)}</span>'
     cells = "".join(_gauge_cell(by_name.get(name))
                     for name in ("rpm", "tpm", "rpd", "tpd"))
-    return f"""<tr data-used="{1 if row.day.requests else 0}">
-    <td class="model"><code>{escape(row.model)}</code>{tags}
-      <div class="sub">{escape(row.account)}{priority}</div></td>
+    return f"""<tr data-used="{1 if entry.day.requests else 0}">
+    <td class="model"><code>{escape(entry.model)}</code>{tags}
+      <div class="sub">{subtitle}</div></td>
     {cells}
-    <td class="num {'warn' if row.day.rate_limited else ''}">{row.day.rate_limited}</td>
-    <td class="num {'warn' if row.day.errors else ''}">{row.day.errors}</td>
-    <td class="when">{'never' if row.last_call is None else escape(ago(row.last_call, now))}</td>
+    <td class="num {'warn' if entry.day.rate_limited else ''}">{entry.day.rate_limited}</td>
+    <td class="num {'warn' if entry.day.errors else ''}">{entry.day.errors}</td>
+    <td class="when">{'never' if entry.last_call is None else escape(ago(entry.last_call, now))}</td>
   </tr>"""
 
 
-def _section(account: AccountSummary, rows: List[Row], now: float) -> str:
-    body = "\n".join(_row_html(row, now) for row in rows)
-    blocked = ("" if account.blocked_for is None else
-               f" A member here is blocked for another {duration(account.blocked_for)}.")
-    return f"""<section data-account="{escape(account.account)}">
-      <h2>{escape(account.account)} <span class="platform">{escape(account.platform)}</span></h2>
-      <p class="summary">Last 24h across {account.members} pool member(s) on this
-        account: <strong>{account.day.requests}</strong> requests &middot;
-        <strong>{compact(account.day.tokens)}</strong> tokens &middot;
-        <strong>{account.day.rate_limited}</strong> refused &middot;
-        <strong>{account.day.errors}</strong> errored.</p>
-      <p class="source">Every budget below belongs to this account alone &mdash; another
-        account on the same platform shares none of it, not even for the same
-        model.{blocked}</p>
+def _model_row(model, now: float) -> str:
+    keys = ", ".join(escape(account) for account in model.accounts)
+    spread = f"{len(model.accounts)} account(s): {keys}"
+    priority = "" if model.priority is None else f" &middot; priority {model.priority}"
+    return _entry_row(model, spread + priority, now)
+
+
+def _row_html(row: Row, now: float) -> str:
+    priority = "" if row.priority is None else f" &middot; priority {row.priority}"
+    return _entry_row(row, escape(row.account) + priority, now,
+                      retired=not row.configured)
+
+
+def _table_html(head_note: str, body: str) -> str:
+    return f"""<p class="source">{head_note}</p>
       <table>
         <thead><tr>
           <th>Model</th>
@@ -187,13 +193,53 @@ def _section(account: AccountSummary, rows: List[Row], now: float) -> str:
           <th class="num">Refused</th><th class="num">Err</th><th>Last call</th>
         </tr></thead>
         <tbody>{body}</tbody>
-      </table>
+      </table>"""
+
+
+def _platform_section(platform, models, now: float) -> str:
+    """A platform's models, each summed over the accounts serving it.
+
+    No ceiling is quoted for the platform itself. Groq meters one org-wide
+    request budget across every model on an account, so adding the per-model
+    limits together would invent capacity that does not exist.
+    """
+    body = "\n".join(_model_row(model, now) for model in models)
+    keys = ", ".join(escape(account) for account in platform.accounts) or "no accounts"
+    note = (f"Each ceiling below is every account's ceiling added together, because "
+            f"each account is a separate budget: {escape(keys)}. Filter to one "
+            f"account to see them apart.")
+    return f"""<section data-view="models" data-platform="{escape(platform.platform)}">
+      <h2>{escape(platform.platform)} <span class="platform">{platform.models} models</span></h2>
+      <p class="summary">Last 24h over {len(platform.accounts)} account(s):
+        <strong>{platform.day.requests}</strong> requests &middot;
+        <strong>{compact(platform.day.tokens)}</strong> tokens &middot;
+        <strong>{platform.day.rate_limited}</strong> refused &middot;
+        <strong>{platform.day.errors}</strong> errored.</p>
+      {_table_html(note, body)}
+    </section>"""
+
+
+def _section(account: AccountSummary, rows: List[Row], now: float) -> str:
+    body = "\n".join(_row_html(row, now) for row in rows)
+    blocked = ("" if account.blocked_for is None else
+               f" A member here is blocked for another {duration(account.blocked_for)}.")
+    note = ("Every budget below belongs to this account alone &mdash; another account "
+            "on the same platform shares none of it, not even for the same "
+            f"model.{blocked}")
+    return f"""<section data-view="account" data-account="{escape(account.account)}" hidden>
+      <h2>{escape(account.account)} <span class="platform">{escape(account.platform)}</span></h2>
+      <p class="summary">Last 24h across {account.members} pool member(s) on this
+        account: <strong>{account.day.requests}</strong> requests &middot;
+        <strong>{compact(account.day.tokens)}</strong> tokens &middot;
+        <strong>{account.day.rate_limited}</strong> refused &middot;
+        <strong>{account.day.errors}</strong> errored.</p>
+      {_table_html(note, body)}
     </section>"""
 
 
 def _filters(report: Report) -> str:
     buttons = ['<button type="button" data-account="all" aria-pressed="true">'
-               f'All accounts <span class="unit">{len(report.accounts)}</span></button>']
+               'Every account <span class="unit">by model</span></button>']
     for summary in report.accounts:
         buttons.append(f'<button type="button" data-account="{escape(summary.account)}" '
                        f'aria-pressed="false">{escape(summary.account)} '
@@ -205,12 +251,21 @@ def _filters(report: Report) -> str:
 
 def render_panel(report: Report) -> str:
     now = report.generated
-    sections = "\n".join(
-        _section(account,
-                 [row for row in report.rows
-                  if row.account == account.account and row.platform == account.platform],
-                 now)
-        for account in report.accounts)
+    # Both views are written out; the filter hides one. That keeps the file a
+    # single artefact -- readable, mailable, and diffable next to a run's
+    # results -- instead of one page per account.
+    sections = [_platform_section(platform,
+                                  [model for model in report.models
+                                   if model.platform == platform.platform],
+                                  now)
+                for platform in report.platforms]
+    sections += [_section(account,
+                          [row for row in report.rows
+                           if row.account == account.account
+                           and row.platform == account.platform],
+                          now)
+                 for account in report.accounts]
+    sections = "\n".join(sections)
 
     notes = ""
     if report.notes:

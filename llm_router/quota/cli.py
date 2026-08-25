@@ -1,9 +1,12 @@
 """The command line over the ledger.
 
-Two readers, one report. `status` prints a table for a human glancing at a
-terminal and, with `--json`, the same report as data -- which is how a coding
-agent asks how much of the free tier is left before deciding to start something
-long. `panel` writes the HTML snapshot.
+Two views of one report. By default a model is one line, summed over every
+account that serves it -- the question is "how much Gemini is left", not "how
+much is left on key two". `--account` is the drill-down: one account, member by
+member. `status` prints a table for a human glancing at a terminal and, with `--json`,
+the whole report as data -- both views at once, which is how a coding agent asks
+how much of the free tier is left before starting something long. `panel` writes
+the HTML snapshot, where the same drill-down is a button.
 
 Nothing here touches the network or spends a request: every figure comes off
 `ledger.jsonl`, so an agent may ask as often as it likes.
@@ -18,11 +21,11 @@ from typing import List, Optional
 from .format import ago, compact, duration, iso, percent, scaled
 from .html import render_panel
 from .ledger import read_ledger, read_pool, usage_dir
-from .report import Report, Row, build_report
+from .report import Report, _fold_models, _fold_platforms, build_report
 
 
-def _gauge_text(row: Row, name: str) -> str:
-    gauge = next((candidate for candidate in row.gauges if candidate.name == name), None)
+def _gauge_text(entry, name: str) -> str:
+    gauge = next((candidate for candidate in entry.gauges if candidate.name == name), None)
     if gauge is None:
         return "-"
     if gauge.limit is None or gauge.ratio is None:
@@ -30,17 +33,36 @@ def _gauge_text(row: Row, name: str) -> str:
     return f"{scaled(name, gauge.used)}/{scaled(name, gauge.limit)} {percent(gauge.ratio)}"
 
 
-def _resets_text(row: Row) -> str:
-    """When this member's soonest live window clears.
+def _resets_text(entry) -> str:
+    """When this entry's soonest live window clears.
 
-    Only windows with something in them have a reset, and the provider's own
+    Only a window with something in it has a reset, and the provider's own
     Retry-After outranks the window model when we were given one.
     """
-    if row.blocked_for is not None:
-        return f"blocked {duration(row.blocked_for)}"
-    live = [gauge.resets_in for gauge in row.gauges
+    if entry.blocked_for is not None:
+        return f"blocked {duration(entry.blocked_for)}"
+    live = [gauge.resets_in for gauge in entry.gauges
             if gauge.used and gauge.resets_in is not None]
     return duration(min(live)) if live else "-"
+
+
+def _table_for(entries, label, now: float) -> str:
+    """One table over anything carrying gauges: model summaries or pool rows."""
+    return _table([
+        ["  MODEL", "RPM 60s", "TPM 60s", "RPD 24h", "TPD 24h",
+         "REFUSED", "ERR", "RESETS", "LAST"],
+        *[[
+            f"  {label(entry)}",
+            _gauge_text(entry, "rpm"),
+            _gauge_text(entry, "tpm"),
+            _gauge_text(entry, "rpd"),
+            _gauge_text(entry, "tpd"),
+            str(entry.day.rate_limited),
+            str(entry.day.errors),
+            _resets_text(entry),
+            "never" if entry.last_call is None else ago(entry.last_call, now),
+        ] for entry in entries],
+    ])
 
 
 def _table(rows: List[List[str]]) -> str:
@@ -54,40 +76,50 @@ def _table(rows: List[List[str]]) -> str:
     return "\n".join(lines)
 
 
-def print_status(report: Report) -> None:
+def _header(report: Report) -> None:
     header = ("no calls recorded yet" if report.since is None
               else f"{report.calls} calls recorded since {iso(report.since)}")
     print(f"Pool quota @ {iso(report.generated)} -- {header}")
     print("Counted from this router's ledger. A window opens with its first "
           "attempt and RESETS one length later (60s / 24h).")
     print()
-
     for note in report.notes:
         print(f"! {note}")
     if report.notes:
         print()
 
+
+def print_models(report: Report) -> None:
+    """The default view: each model over every account that serves it."""
+    _header(report)
+    for platform in report.platforms:
+        models = [model for model in report.models if model.platform == platform.platform]
+        keys = ", ".join(platform.accounts) or "no accounts"
+        print(f"{platform.platform} -- {platform.models} model(s) over {keys}; "
+              f"last 24h: {platform.day.requests} req, "
+              f"{compact(platform.day.tokens)} tok, "
+              f"{platform.day.rate_limited} refused, {platform.day.errors} errored")
+
+        def label(model):
+            spread = "" if len(model.accounts) < 2 else f" ({len(model.accounts)} accounts)"
+            return f"{model.model}{spread}"
+
+        print(_table_for(models, label, report.generated))
+        print()
+
+
+def print_account(report: Report) -> None:
+    """One account, member by member: what the filter narrows down to."""
+    _header(report)
     for account in report.accounts:
         rows = [row for row in report.rows
                 if row.account == account.account and row.platform == account.platform]
-        print(f"{account.account} ({account.platform}) -- seen here in the last 24h: "
+        print(f"{account.account} ({account.platform}) -- last 24h: "
               f"{account.day.requests} req, {compact(account.day.tokens)} tok, "
-              f"{account.day.rate_limited} rate-limited, {account.day.errors} errored")
-        print(_table([
-            ["  MODEL", "RPM 60s", "TPM 60s", "RPD 24h", "TPD 24h",
-             "429", "ERR", "RESETS", "LAST"],
-            *[[
-                f"  {row.model}" + ("" if row.configured else " (retired)"),
-                _gauge_text(row, "rpm"),
-                _gauge_text(row, "tpm"),
-                _gauge_text(row, "rpd"),
-                _gauge_text(row, "tpd"),
-                str(row.day.rate_limited),
-                str(row.day.errors),
-                _resets_text(row),
-                "never" if row.last_call is None else ago(row.last_call, report.generated),
-            ] for row in rows],
-        ]))
+              f"{account.day.rate_limited} refused, {account.day.errors} errored")
+        print(_table_for(rows, lambda row: row.model + ("" if row.configured
+                                                        else " (retired)"),
+                         report.generated))
         print()
 
 
@@ -104,6 +136,10 @@ def _only(report: Report, account: str) -> Report:
     report.rows = [row for row in report.rows if row.account == account]
     report.accounts = [summary for summary in report.accounts
                        if summary.account == account]
+    # The folds are rebuilt from what survived, so a narrowed report never
+    # carries a model total that includes an account it no longer shows.
+    report.models = _fold_models(report.rows)
+    report.platforms = _fold_platforms(report.models, report.accounts)
     return report
 
 
@@ -116,7 +152,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                              "panel: write the HTML snapshot and print its path.")
     parser.add_argument("--json", action="store_true",
                         help="status only: print the report as JSON")
-    parser.add_argument("--account", help="report only this account")
+    parser.add_argument("--account", help="report only this account, member by "
+                                          "member, instead of every model summed "
+                                          "over the accounts serving it")
     parser.add_argument("--dir", help="read from this usage directory "
                                       "(default: llm_router/.usage/)")
     parser.add_argument("--out", help="panel only: where to write the HTML")
@@ -130,8 +168,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.command == "status":
         if args.json:
             print(json.dumps(asdict(report), indent=2, default=str))
+        elif args.account:
+            print_account(report)
         else:
-            print_status(report)
+            print_models(report)
         return 0
 
     out = Path(args.out) if args.out else directory / "panel.html"

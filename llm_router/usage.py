@@ -24,7 +24,13 @@ A ledger line:
 
 `tokens_in`/`tokens_out` are absent when the attempt was refused -- no tokens
 were spent -- and a refusal carries `retry_after` instead when the provider
-sent one.
+sent one. `reached: false` marks an attempt that never got an answer at all,
+which spent nothing and is left out of the panel's request counts.
+
+**A provider the router skipped is not here.** Size-based selection filters a
+member out before any call is made (`get_best_provider`), and nothing is
+recorded for a member that was never asked -- the ledger holds attempts, not
+intentions.
 
 `outcome` is `ok`, `rate_limited` or `error`. A refused attempt is recorded
 rather than dropped: it still spent a request against the account's budget, and
@@ -84,12 +90,17 @@ def _message_tokens(message: Any) -> Tuple[Optional[int], Optional[int]]:
 
 def record(provider: Any, tokens_in: Optional[int] = None,
            tokens_out: Optional[int] = None, outcome: str = "ok",
-           retry_after: Optional[int] = None) -> None:
+           retry_after: Optional[int] = None, reached: bool = True) -> None:
     """Append one attempt against `provider` to the ledger.
 
     `retry_after` is the provider's own Retry-After, when it sent one with a
     refusal. It is the only statement about when a window clears that does not
     come from our own arithmetic, so it is kept verbatim.
+
+    `reached` is False when the attempt never got an answer -- a timeout, a
+    connection that failed. It is recorded because it happened, and marked
+    because it cost the account nothing, so the panel can leave it out of the
+    request count.
     """
     entry = {
         "ts": round(time.time(), 3),
@@ -105,6 +116,8 @@ def record(provider: Any, tokens_in: Optional[int] = None,
         entry["tokens_out"] = int(tokens_out)
     if retry_after is not None:
         entry["retry_after"] = int(retry_after)
+    if not reached:
+        entry["reached"] = False
     _append(entry)
 
 

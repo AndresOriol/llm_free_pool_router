@@ -4,16 +4,20 @@ A reader over the router's usage ledger: a terminal table, JSON for an agent,
 and a self-contained, filterable HTML panel. Standard library only, and it never
 calls a provider or spends a request.
 
+By default a model is one line, summed over every account that serves it — *how
+much Gemini is left*, rather than a tour of one console per key. Filter to an
+account to see its members apart.
+
 The concepts are in [14. Quota panel](../../docs/14-quota-panel.md); this file is
 how to run it.
 
 ## Use
 
 ```bash
-python -m llm_router.quota status            # the table
-python -m llm_router.quota status --json     # the same report, as data
-python -m llm_router.quota panel             # writes the HTML, prints its path
-python -m llm_router.quota status --account groq_1   # one account
+python -m llm_router.quota status                     # every model, over all its accounts
+python -m llm_router.quota status --account groq_1    # one account, member by member
+python -m llm_router.quota status --json              # the whole report, as data
+python -m llm_router.quota panel                      # writes the HTML, prints its path
 ```
 
 `--dir PATH` reads a ledger from somewhere else (default `llm_router/.usage/`,
