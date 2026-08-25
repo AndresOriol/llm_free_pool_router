@@ -1,0 +1,23 @@
+# The deepagents harness: one conversation, wide members only.
+#
+# The arm that tests whether the SDK's own context management (summarization,
+# message eviction, tool-output offloading) now does what the narrow-role graph
+# was built to do by hand -- on a pool whose wide members hold 128k-250k tokens.
+#
+# This is the comparison the architecture rests on being re-run: the
+# conversational loop this replaces spent 226,854 input tokens against the
+# narrow-role harness's 5,756 (docs/06-agent.md#681). That baseline predates
+# SummarizationMiddleware and ran on a pool whose floor was 6,000 tokens, so the
+# result is a hypothesis again rather than a settled fact -- which is the whole
+# reason this is a configuration and not a merge.
+#
+# Run it interleaved against `session`, never alone:
+#   python -m evals run --config session --config deepagents --reps 3
+name: deepagents
+repo: ../..
+ref: harness/deepagents
+env_file: ../../llm_router/.env
+agent_cmd: ["python", "-m", "agent.deep", "{workdir}"]
+overrides:
+  router_config: llm_router/config.eval.yaml
+  env: {}
