@@ -1,0 +1,18 @@
+{
+  "//": "Typechecking only. Node runs the .ts sources directly by stripping the types, so nothing here emits: erasableSyntaxOnly keeps the code inside the subset Node can strip (no enums, no namespaces, no parameter properties).",
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
