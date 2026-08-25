@@ -17,10 +17,18 @@
 # `max_input_tokens` is the per-request token ceiling the router uses to route a
 # large request to a model that can hold it (see get_best_provider). It's
 # min(TPM, context window): on Groq the TPM is the bottleneck (see
-# docs/PROVIDERS.md), while Gemma has unlimited TPM so its context window is the
-# ceiling. Omit it only for a model whose limit is genuinely unknown.
+# docs/05-providers.md), while Gemma has unlimited TPM so its context window is
+# the ceiling. Omit it only for a model whose limit is genuinely unknown.
 #
-# Priority is grouped into four capability tiers (see docs/DESIGN.md#model-tiers):
+# `limits` is the account's published free-tier quota for that model: `rpm`/`rpd`
+# requests and `tpm`/`tpd` tokens, from the tables in docs/05-providers.md. The
+# router never reads it -- routing is driven by what is available, not by
+# arithmetic against a budget -- but the quota panel measures recorded usage
+# against it (llm_router/quota/). A key left out is a limit the vendor does not
+# publish or does not enforce (Gemma's TPM), and the panel reads that as no
+# ceiling. These numbers change: treat them as a snapshot to re-check.
+#
+# Priority is grouped into four capability tiers (see docs/03-pool-model.md):
 # reasoning (1-9) -> mid (10-19) -> workhorse fallback (20-29) -> last resort
 # (30+). Within a tier, order doesn't matter much -- Groq's free tier shares one
 # org-wide request budget across every model on the account, so a burst of
@@ -42,94 +50,116 @@ accounts:
     api_key_env: GEMINI_API_KEY_1
 
 models:
-  # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
-  - name: Llama3_70b
-    platform: groq
-    model: llama-3.3-70b-versatile
-    priority: 1
-    max_input_tokens: 12000
+  # Groq retired its whole Llama line (3.3-70b, 3.1-8b, 4-scout) and qwen3-32b;
+  # all four answered 404 model_not_found when probed and are removed. A dead
+  # entry is not free: the router walks it, and a 404 is not transient, so it
+  # propagates and kills the run. The next retirement shows up in the quota
+  # panel as a member that only ever errors (llm_router/quota/).
 
-  - name: GptOss120b
-    platform: groq
-    model: openai/gpt-oss-120b
+  # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
+  # Gemini first: this tier exists for judgement over a wide view, and
+  # gpt-oss-120b cannot hold one -- its 8k ceiling is a tenth of what the
+  # Geminis take. It stays in the tier as the fallback for when the flash
+  # models' 20-a-day runs out, which on a working afternoon it will.
+  #
+  # 3.7 sits behind 3.6 despite being newer. Measured 2026-08-25: 3.7 answered
+  # in 33-54s and 503'd once in four calls ("experiencing high demand"), against
+  # 0.9s for 3.6. It thinks before it writes -- asked for 5 output tokens it
+  # returned MAX_TOKENS and no text -- so it is the better model and the worse
+  # first choice for a loop that makes a call per step.
+  - name: Gemini_3_6_Flash
+    platform: gemini
+    model: gemini-3.6-flash
+    priority: 1
+    max_input_tokens: 250000
+    limits: {rpm: 5, tpm: 250000, rpd: 20}
+
+  - name: Gemini_3_7_Flash
+    platform: gemini
+    model: gemini-3.7-flash
     priority: 2
-    max_input_tokens: 8000
+    max_input_tokens: 250000
+    limits: {rpm: 5, tpm: 250000, rpd: 20}
 
   - name: Gemini_3_5_Flash
     platform: gemini
     model: gemini-3.5-flash
     priority: 3
     max_input_tokens: 250000
+    limits: {rpm: 5, tpm: 250000, rpd: 20}
+
+  - name: GptOss120b
+    platform: groq
+    model: openai/gpt-oss-120b
+    priority: 4
+    max_input_tokens: 8000
+    limits: {rpm: 30, tpm: 8000, rpd: 1000, tpd: 100000}
 
   # -- Mid tier: solid for well-scoped implementation steps.
-  - name: Qwen3_32b
-    platform: groq
-    model: qwen/qwen3-32b
-    priority: 10
-    max_input_tokens: 6000
-
   - name: Qwen3_6_27b
     platform: groq
     model: qwen/qwen3.6-27b
     priority: 11
     max_input_tokens: 8000
+    limits: {rpm: 30, tpm: 8000, rpd: 1000, tpd: 100000}
 
   - name: Gemini_3_Flash
     platform: gemini
     model: gemini-3-flash-preview
     priority: 12
     max_input_tokens: 250000
+    limits: {rpm: 5, tpm: 250000, rpd: 20}
 
   - name: Gemini_2_5_Flash
     platform: gemini
     model: gemini-2.5-flash
     priority: 13
     max_input_tokens: 250000
+    limits: {rpm: 5, tpm: 250000, rpd: 20}
 
   # -- Workhorse fallback: weaker, but the free tier's real bottleneck (Groq's
   # shared org-wide request budget) routinely dumps whole tasks here once the
   # reasoning/mid tiers exhaust, so quality here matters more than the tier
-  # name implies. See docs/DESIGN.md#model-tiers.
-  - name: Llama4Scout
-    platform: groq
-    model: meta-llama/llama-4-scout-17b-16e-instruct
-    priority: 20
-    max_input_tokens: 30000
-
+  # name implies. See docs/03-pool-model.md#34-priority-tiers.
   - name: GptOss20b
     platform: groq
     model: openai/gpt-oss-20b
     priority: 21
     max_input_tokens: 8000
+    limits: {rpm: 30, tpm: 8000, rpd: 1000, tpd: 100000}
+
+  - name: Gemini_3_5_FlashLite
+    platform: gemini
+    model: gemini-3.5-flash-lite
+    priority: 22
+    max_input_tokens: 250000
+    limits: {rpm: 15, tpm: 250000, rpd: 500}
 
   - name: Gemini_3_1_FlashLite
     platform: gemini
     model: gemini-3.1-flash-lite
-    priority: 22
+    priority: 23
     max_input_tokens: 250000
+    limits: {rpm: 15, tpm: 250000, rpd: 500}
 
   - name: Gemini_2_5_FlashLite
     platform: gemini
     model: gemini-2.5-flash-lite
-    priority: 23
+    priority: 24
     max_input_tokens: 250000
+    limits: {rpm: 10, tpm: 250000, rpd: 20}
 
   # -- Last resort: only when everything above is in cooldown.
-  - name: Llama3_8b
-    platform: groq
-    model: llama-3.1-8b-instant
-    priority: 30
-    max_input_tokens: 6000
-
-  # Gemma has unlimited TPM, so its ceiling is the model's context window.
   - name: Gemma4_31b
     platform: gemini
     model: gemma-4-31b-it
     priority: 31
     max_input_tokens: 128000
+    limits: {rpm: 15, rpd: 1500}
 
   - name: Gemma4_26b
     platform: gemini
     model: gemma-4-26b-a4b-it
     priority: 32
     max_input_tokens: 128000
+    limits: {rpm: 15, rpd: 1500}

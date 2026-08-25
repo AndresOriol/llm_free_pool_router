@@ -17,7 +17,10 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import ConfigDict
 
-from llm_router.base_provider import estimate_tokens, is_transient, provider_error_detail
+from llm_router import usage
+from llm_router.base_provider import (estimate_tokens, is_rate_limited,
+                                      is_transient, provider_error_detail,
+                                      reached_provider)
 
 logger = logging.getLogger("LLMRouter")
 
@@ -87,6 +90,7 @@ class RouterChatModel(BaseChatModel):
                 # nesting and trips the tracer's run_map ("No indexed run ID").
                 message = self._underlying(provider).invoke(
                     messages, stop=stop, **kwargs)
+                usage.record_call(provider, message)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
                 if not self._handle_failure(provider, exc, run_manager):
@@ -106,6 +110,19 @@ class RouterChatModel(BaseChatModel):
         """
         transient, retry_after = is_transient(exc)
         detail = provider_error_detail(exc)
+
+        # Recorded whatever the verdict: an attempt the provider *answered*
+        # spent a request against the account's free-tier budget, so a run that
+        # spent its afternoon being turned away should look expensive in the
+        # panel rather than free. One that never got an answer is marked, and
+        # the panel leaves it out of the count. A rate limit also carries the
+        # provider's own Retry-After when it sent one -- the panel would
+        # otherwise have to guess when the window clears (llm_router/usage.py).
+        rate_limited = is_rate_limited(exc)
+        usage.record(provider,
+                     outcome="rate_limited" if rate_limited else "error",
+                     retry_after=retry_after if rate_limited else None,
+                     reached=reached_provider(exc))
         if not transient:
             logger.error(f"{provider.name} failed with a non-transient error: {exc!r}")
             return False

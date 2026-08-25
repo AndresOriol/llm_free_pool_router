@@ -1,5 +1,7 @@
-import time
 import logging
+import math
+import re
+import time
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
@@ -8,15 +10,59 @@ from langchain_core.language_models.chat_models import BaseChatModel
 logger = logging.getLogger("LLMRouter")
 
 
+_UNITS = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
+_DURATION = re.compile(r"(\d+(?:\.\d+)?)\s*(ms|s|m|h)(?![a-z])", re.I)
+# Google returns a RetryInfo block: "'retryDelay': '37s'".
+_RETRY_FIELD = re.compile(r"""retry[_ ]?delay["']?\s*[:=]\s*["']?([\d.]+\s*[a-z]+)""", re.I)
+# Both vendors also say it in prose: "Please try again in 33.2025s" (Groq),
+# "Please retry in 37.677718404s" (Google).
+_RETRY_PROSE = re.compile(
+    r"(?:try again|retry)(?:\s+in)?\s+((?:\d+(?:\.\d+)?\s*(?:ms|s|m|h)\s*)+)", re.I)
+
+
+def _duration_seconds(text: str) -> Optional[float]:
+    """"1m26.4s" -> 86.4. Vendors quote waits in compound units, not seconds."""
+    parts = _DURATION.findall(text or "")
+    if not parts:
+        return None
+    return sum(float(value) * _UNITS[unit.lower()] for value, unit in parts)
+
+
 def _retry_after(exc: Exception) -> Optional[int]:
-    """Best-effort read of a Retry-After hint from a provider exception."""
+    """How long the provider asked us to wait, from wherever it said so.
+
+    The header is the polite place to put it and the one place our providers
+    reliably don't. Google's quota refusal carries the wait twice -- once as a
+    `retryDelay` field, once in prose -- and `langchain_google_genai` re-raises
+    the whole thing as a plain exception with no response object, so headers are
+    unreachable and the only copy left is the message text. That is not an edge
+    case: it is every Gemini rate limit, which is most of the refusals this pool
+    sees.
+
+    Every hint found is collected and the longest wins, then rounded up. The
+    structured field truncates (`37s` for a 37.68s wait) and retrying a fraction
+    of a second early buys another refusal, so erring long costs nothing and
+    erring short costs a request.
+    """
+    hints = []
+
     response = getattr(exc, "response", None)
     headers = getattr(response, "headers", None)
     if headers:
         value = headers.get("retry-after") or headers.get("Retry-After")
-        if value and str(value).isdigit():
-            return int(value)
-    return None
+        try:
+            hints.append(float(value))
+        except (TypeError, ValueError):
+            pass  # an HTTP-date, or nothing at all
+
+    message = str(getattr(exc, "message", "") or exc)
+    for pattern in (_RETRY_FIELD, _RETRY_PROSE):
+        found = pattern.search(message)
+        seconds = _duration_seconds(found.group(1)) if found else None
+        if seconds is not None:
+            hints.append(seconds)
+
+    return math.ceil(max(hints)) if hints else None
 
 
 def estimate_tokens(messages, tools=None) -> int:
@@ -68,6 +114,65 @@ def provider_error_detail(exc: Exception) -> Optional[str]:
     return "; ".join(parts) or None
 
 
+_RATE_LIMIT_SIGNALS = (
+    "rate_limit",
+    "rate limit",
+    "too many requests",
+    # Gemini signals quota/rate exhaustion as RESOURCE_EXHAUSTED and its
+    # LangChain wrapper (ChatGoogleGenerativeAIError) exposes no numeric
+    # status, so match the wording -- a free-tier quota hit is transient.
+    "resource_exhausted",
+    "exceeded your current quota",
+)
+
+
+def is_rate_limited(exc: Exception) -> bool:
+    """Did the provider refuse this call for want of quota?
+
+    Its own predicate because two callers need the same judgement for different
+    reasons: `is_transient` reroutes on it, and the usage ledger records it as a
+    distinct outcome so the panel can show an account being turned away rather
+    than merely failing (see usage.py).
+
+    Free tiers signal it inconsistently -- Groq returns HTTP 413 ("Request too
+    large", for tokens-per-minute) with a `rate_limit_exceeded` body rather than
+    a 429 -- so this matches on the wording, and is asked before any status.
+    """
+    message = str(getattr(exc, "message", "") or exc).lower()
+    return any(signal in message for signal in _RATE_LIMIT_SIGNALS)
+
+
+def _status_of(exc: Exception) -> Optional[int]:
+    """HTTP status, wherever the SDK put it.
+
+    openai exceptions expose `.status_code`; google-genai's APIError exposes
+    `.code`.
+    """
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status
+    code = getattr(exc, "code", None)
+    return code if isinstance(code, int) else None
+
+
+def reached_provider(exc: Exception) -> bool:
+    """Did this failed attempt actually get an answer from the provider?
+
+    The usage ledger needs to know, because only an attempt the vendor answered
+    spent anything against the account. A 429 or a 413 did: the request was
+    sent, the vendor read it and said no. A connection error or a timeout may
+    never have left this machine, and counting those as requests would inflate
+    the panel with traffic the vendor never saw.
+
+    Positive evidence only. Anything without a status and without the wording of
+    a quota refusal is treated as never having arrived -- overstating remaining
+    budget is the wrong way to be wrong, but so is inventing requests, and this
+    branch is reached by bugs and local failures far more often than by silent
+    successes.
+    """
+    return is_rate_limited(exc) or _status_of(exc) is not None
+
+
 def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     """Classify an exception raised while calling a provider.
 
@@ -81,13 +186,10 @@ def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     ("Request too large" for tokens-per-minute) with a `rate_limit_exceeded`
     body, not 429 -- so we match on the rate-limit signal first, before status.
     """
-    message = str(getattr(exc, "message", "") or exc).lower()
-    if ("rate_limit" in message or "rate limit" in message or "too many requests" in message
-            # Gemini signals quota/rate exhaustion as RESOURCE_EXHAUSTED and its
-            # LangChain wrapper (ChatGoogleGenerativeAIError) exposes no numeric
-            # status, so match the wording -- a free-tier quota hit is transient.
-            or "resource_exhausted" in message or "exceeded your current quota" in message):
+    if is_rate_limited(exc):
         return True, _retry_after(exc)
+
+    message = str(getattr(exc, "message", "") or exc).lower()
 
     # A malformed tool call is a per-model output glitch (small models sometimes
     # emit the args inside the tool name); Groq rejects it as HTTP 400
@@ -97,12 +199,7 @@ def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     if "tool_use_failed" in message or "tool call validation failed" in message:
         return True, None
 
-    # openai SDK exceptions expose .status_code; google-genai APIError exposes .code
-    status = getattr(exc, "status_code", None)
-    if not isinstance(status, int):
-        code = getattr(exc, "code", None)
-        status = code if isinstance(code, int) else None
-
+    status = _status_of(exc)
     if isinstance(status, int):
         if status in (408, 409, 429) or status >= 500:
             return True, _retry_after(exc)
@@ -125,10 +222,18 @@ class LLMProvider(ABC):
 
     def __init__(self, name: str, url: str, model: str, api_key: str,
                  priority: int, temperature: float = 0.2,
-                 max_input_tokens: Optional[int] = None):
+                 max_input_tokens: Optional[int] = None,
+                 platform: str = "", account: str = ""):
         self.name = name
         self.url = url
         self.model = model
+        # Which signup and which vendor this member draws on. The composed
+        # `name` already encodes both, but only as a string to be re-split;
+        # the usage ledger needs them apart, because a free tier's real budget
+        # is per account (Groq shares one across every model on it) and per
+        # platform, not per pool member.
+        self.platform = platform
+        self.account = account
         self.api_key = api_key
         self.priority = priority
         self.temperature = temperature

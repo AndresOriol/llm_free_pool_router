@@ -63,7 +63,7 @@ def load_agent_instructions(workdir: Path):
 
 def build_agent(workdir: Path):
     # ROUTER_CONFIG lets an eval configuration swap the model pool without
-    # editing the checked-in config (see docs/EVAL.md); unset, the default is
+    # editing the checked-in config (see docs/08-evaluation-method.md); unset, the default is
     # used exactly as before.
     providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG") or None)
     if not providers:

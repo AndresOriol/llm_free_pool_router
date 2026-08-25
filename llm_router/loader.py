@@ -6,6 +6,7 @@ from typing import List
 import yaml
 from dotenv import load_dotenv
 
+from . import usage
 from .base_provider import LLMProvider
 from .providers import OpenAICompatibleProvider, GeminiProvider
 
@@ -40,6 +41,11 @@ def load_providers_from_config(config_path=None) -> List[LLMProvider]:
         accounts_by_platform.setdefault(account["platform"], []).append(account)
 
     providers: List[LLMProvider] = []
+    # What the panel measures consumption against. Collected here rather than
+    # read from the YAML by the panel itself: this is the pool that actually
+    # got built, so a model skipped for a missing key doesn't show up as an
+    # idle account with quota to spare (see usage.write_pool_snapshot).
+    pool: List[dict] = []
     for conf in config.get("models", []):
         name = conf["name"]
         platform = conf["platform"]
@@ -69,6 +75,18 @@ def load_providers_from_config(config_path=None) -> List[LLMProvider]:
                 priority=conf["priority"],
                 temperature=conf.get("temperature", 0.2),
                 max_input_tokens=conf.get("max_input_tokens"),
+                platform=platform,
+                account=account["name"],
             ))
+            pool.append({
+                "provider": provider_name,
+                "account": account["name"],
+                "platform": platform,
+                "model": conf["model"],
+                "priority": conf["priority"],
+                "max_input_tokens": conf.get("max_input_tokens"),
+                "limits": conf.get("limits") or {},
+            })
 
+    usage.write_pool_snapshot(pool, config_path)
     return providers

@@ -1,5 +1,5 @@
 """Checks for the JSONL eval trace -- the file every automatic metric in
-docs/EVAL.md is derived from, so its shape is a contract.
+docs/10-metrics.md is derived from, so its shape is a contract.
 
 No framework: `python -m tests.agent.test_trace` (or run the file).
 """
