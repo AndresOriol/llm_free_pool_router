@@ -1,6 +1,6 @@
 """Number and time formatting shared by the terminal table and the HTML page."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 
@@ -26,8 +26,18 @@ def percent(ratio: Optional[float]) -> str:
     return f"{round(ratio * 100)}%"
 
 
-def iso(seconds: float) -> str:
-    return datetime.fromtimestamp(seconds, timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+def stamp(seconds: float) -> str:
+    """Local time, with the offset spelled out.
+
+    The person reading a panel lives in one timezone and it is not UTC. The
+    offset is kept because a panel can outlive the moment -- saved next to a
+    run's results, or mailed on -- and should still say which clock wrote it.
+    """
+    when = datetime.fromtimestamp(seconds).astimezone()
+    minutes = int(when.utcoffset().total_seconds()) // 60
+    sign = "+" if minutes >= 0 else "-"
+    return (when.strftime("%Y-%m-%d %H:%M")
+            + f" UTC{sign}{abs(minutes) // 60:02d}:{abs(minutes) % 60:02d}")
 
 
 def ago(seconds: float, now: float) -> str:

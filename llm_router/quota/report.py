@@ -126,8 +126,12 @@ class Gauge:
 
     name: str
     used: int
-    #: None when nothing declares a ceiling (Gemma's TPM is unlimited).
+    #: None when nothing declares a ceiling (Gemma's TPM is unlimited). Folded
+    #: across accounts this is their ceilings added together.
     limit: Optional[int] = None
+    #: How many accounts' ceilings went into `limit`. Above one, the panel shows
+    #: the sum as what it is -- 2 x 5, not a mystery 10.
+    sources: int = 0
     ratio: Optional[float] = None
     #: Seconds until this window's budget resets, or None if nothing is in it.
     resets_in: Optional[float] = None
@@ -143,6 +147,9 @@ class Row:
     model: str
     priority: Optional[int]
     limits: dict
+    #: The per-request token ceiling the router routes by, for the same reason
+    #: it matters there: a member that cannot hold the job is not capacity.
+    max_input_tokens: Optional[int] = None
     minute: Usage = field(default_factory=Usage)
     day: Usage = field(default_factory=Usage)
     total: Usage = field(default_factory=Usage)
@@ -178,6 +185,7 @@ class ModelSummary:
     #: The accounts backing it, in the order they appear in the pool.
     accounts: List[str] = field(default_factory=list)
     priority: Optional[int] = None
+    max_input_tokens: Optional[int] = None
     minute: Usage = field(default_factory=Usage)
     day: Usage = field(default_factory=Usage)
     total: Usage = field(default_factory=Usage)
@@ -245,6 +253,7 @@ def _gauges_for(limits: dict, minute: Usage, day: Usage, now: float) -> List[Gau
             name=name,
             used=used,
             limit=limit,
+            sources=1 if limit is not None else 0,
             ratio=None if limit is None else used / limit,
             resets_in=None if opened is None else max(0.0, opened + window - now),
             refused=usage.rate_limited if counts_requests else 0,
@@ -274,9 +283,9 @@ def _fold_models(rows: List[Row]) -> List[ModelSummary]:
     folded: Dict[tuple, ModelSummary] = {}
     for row in sorted(rows, key=lambda row: row.account):
         key = (row.platform, row.model)
-        summary = folded.setdefault(key, ModelSummary(model=row.model,
-                                                      platform=row.platform,
-                                                      priority=row.priority))
+        summary = folded.setdefault(key, ModelSummary(
+            model=row.model, platform=row.platform, priority=row.priority,
+            max_input_tokens=row.max_input_tokens))
         summary.accounts.append(row.account)
         summary.minute.merge(row.minute)
         summary.day.merge(row.day)
@@ -294,11 +303,13 @@ def _fold_models(rows: List[Row]) -> List[ModelSummary]:
             if existing is None:
                 summary.gauges.append(Gauge(name=gauge.name, used=gauge.used,
                                             limit=gauge.limit,
+                                            sources=gauge.sources,
                                             resets_in=gauge.resets_in,
                                             refused=gauge.refused))
                 continue
             existing.used += gauge.used
             existing.refused += gauge.refused
+            existing.sources += gauge.sources
             existing.limit = (None if existing.limit is None or gauge.limit is None
                               else existing.limit + gauge.limit)
             if gauge.resets_in is not None and gauge.used:
@@ -362,6 +373,7 @@ def build_report(calls: List[dict], pool: Optional[dict],
             model=source.get("model", "unknown"),
             priority=(member or {}).get("priority"),
             limits=(member or {}).get("limits") or {},
+            max_input_tokens=(member or {}).get("max_input_tokens"),
             configured=member is not None,
         )
         return rows[provider]
@@ -432,24 +444,22 @@ def build_report(calls: List[dict], pool: Optional[dict],
 def _notes(report: Report, pool: Optional[dict]) -> List[str]:
     notes = []
     if pool is None:
-        notes.append("No pool snapshot found, so there are no limits to measure "
-                     "against. Run `python -m llm_router` to write one.")
+        notes.append("No pool snapshot, so no limits to measure against. Run "
+                     "`python -m llm_router` to write one.")
     if report.calls == 0:
         notes.append("The ledger is empty: nothing recorded since it was last cleared.")
 
     refused = sum(row.day.rate_limited for row in report.rows)
     if refused:
-        notes.append(f"{refused} attempt(s) in the last 24h were refused for quota. "
-                     "They count as requests here -- they spent one -- but as no "
-                     "tokens, because none were.")
+        notes.append(f"{refused} attempt(s) were refused for quota in the last 24h.")
 
     orphans = [row.provider for row in report.rows if not row.configured]
     if orphans:
-        notes.append(f"{len(orphans)} member(s) in the ledger are no longer in the pool "
-                     f"({', '.join(orphans)}); their limits are unknown.")
+        notes.append(f"Not in the pool any more, so shown without limits: "
+                     f"{', '.join(orphans)}.")
 
     unbounded = [row for row in report.rows if row.configured and row.tightest is None]
     if unbounded:
-        notes.append(f"{len(unbounded)} configured member(s) declare no limits in "
-                     "config.yaml, so their consumption is reported without a ceiling.")
+        notes.append(f"{len(unbounded)} member(s) declare no limits in config.yaml, "
+                     "so they are shown without a ceiling.")
     return notes

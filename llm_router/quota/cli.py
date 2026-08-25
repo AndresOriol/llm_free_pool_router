@@ -18,7 +18,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import List, Optional
 
-from .format import ago, compact, duration, iso, percent, scaled
+from .format import ago, compact, duration, percent, scaled, stamp
 from .html import render_panel
 from .ledger import read_ledger, read_pool, usage_dir
 from .report import Report, _fold_models, _fold_platforms, build_report
@@ -49,10 +49,11 @@ def _resets_text(entry) -> str:
 def _table_for(entries, label, now: float) -> str:
     """One table over anything carrying gauges: model summaries or pool rows."""
     return _table([
-        ["  MODEL", "RPM 60s", "TPM 60s", "RPD 24h", "TPD 24h",
+        ["  MODEL", "CTX", "RPM 60s", "TPM 60s", "RPD 24h", "TPD 24h",
          "REFUSED", "ERR", "RESETS", "LAST"],
         *[[
             f"  {label(entry)}",
+            compact(entry.max_input_tokens) if entry.max_input_tokens else "-",
             _gauge_text(entry, "rpm"),
             _gauge_text(entry, "tpm"),
             _gauge_text(entry, "rpd"),
@@ -78,8 +79,8 @@ def _table(rows: List[List[str]]) -> str:
 
 def _header(report: Report) -> None:
     header = ("no calls recorded yet" if report.since is None
-              else f"{report.calls} calls recorded since {iso(report.since)}")
-    print(f"Pool quota @ {iso(report.generated)} -- {header}")
+              else f"{report.calls} calls recorded since {stamp(report.since)}")
+    print(f"Pool quota @ {stamp(report.generated)} -- {header}")
     print("Counted from this router's ledger. A window opens with its first "
           "attempt and RESETS one length later (60s / 24h).")
     print()

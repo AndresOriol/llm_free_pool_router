@@ -1,25 +1,26 @@
 """The panel: one self-contained HTML file, written on demand.
 
-A snapshot rather than a served page, deliberately. Nothing here needs to be
-live -- the question is "can I start a six-hour run on what's left", asked once
--- and a file has no port to collide with, no process to leave running on a
-machine that is meant to be running agents unattended, and can be kept next to a
-run's results when a session is worth explaining later.
+A snapshot rather than a served page. The question -- can I start a six-hour run
+on what is left -- is asked once, and a file has no port to collide with and no
+process to leave running on a machine meant to be running agents.
 
-Two views, and the default one is the reason the panel exists: a model on one
-line, summed over every account that serves it, so "how much Gemini is left" is
-a number on the page rather than a tour of three provider consoles. The filters
-drill into a single account once you know which model is running out.
+One section per platform, and inside it one table that holds both views: a model
+summed over every account serving it (the default, and the reason this exists),
+and the same models per account (the drill-down). The controls sit in the
+section they act on, because a filter three headings away from its table is a
+filter people forget is on.
 
-Interactive is not the same as live: both views are rendered into the file and
-the filters only hide one of them, so it still works from `file://` with no
-server, no network, and -- bar the drill-down -- no scripting.
+Interactive is not live: both views are written into the file, and the script
+only hides rows and reorders them. With scripting off the page still reads.
+
+Prose is kept out of the tables deliberately -- the caveats are real but they
+are footnotes, not a preamble. They live at the bottom, in one voice.
 """
 
 from html import escape
 from typing import List, Optional
 
-from .format import ago, compact, duration, iso, percent, scaled
+from .format import ago, compact, duration, percent, scaled, stamp
 from .report import AccountSummary, Gauge, Report, Row
 
 _STYLE = """
@@ -30,90 +31,125 @@ _STYLE = """
   :root { --bg: #16161a; --fg: #e8e8e4; --dim: #96968f; --line: #2c2c33; --card: #1d1d22;
     --cool: #5cb37a; --warm: #d7a83c; --hot: #dd6a56; } }
 * { box-sizing: border-box; }
-body { margin: 0; padding: 2rem 1.25rem 4rem; background: var(--bg); color: var(--fg);
+body { margin: 0; padding: 2rem 1.25rem 3rem; background: var(--bg); color: var(--fg);
   font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 1080px; margin: 0 auto; }
-h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
-h2 { font-size: 1.05rem; margin: 0 0 .35rem; }
-.meta, .summary, .sub, .when, .source, footer { color: var(--dim); }
-.meta { margin: 0 0 1rem; font-size: .85rem; }
-.filters { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
-  margin: 0 0 1.25rem; font-size: .8rem; }
-.filters button { font: inherit; color: var(--dim); background: var(--card); cursor: pointer;
-  border: 1px solid var(--line); border-radius: 999px; padding: .2rem .7rem; }
-.filters button:hover { color: var(--fg); }
-.filters button[aria-pressed="true"] { color: var(--bg); background: var(--fg);
-  border-color: var(--fg); }
-.filters label { margin-left: auto; color: var(--dim); display: flex; gap: .35rem;
-  align-items: center; cursor: pointer; }
-.platform { font-weight: 400; color: var(--dim); font-size: .8rem;
-  border: 1px solid var(--line); border-radius: 999px; padding: .05rem .5rem; margin-left: .35rem; }
-.summary { font-size: .85rem; margin: 0 0 .2rem; }
-.summary strong { color: var(--fg); }
-.source { font-size: .78rem; margin: 0 0 .75rem; }
+main { max-width: 1120px; margin: 0 auto; }
+h1 { font-size: 1.3rem; margin: 0 0 .2rem; }
+h2 { font-size: 1rem; margin: 0; }
+.meta, .sub, .when, .badge, footer { color: var(--dim); }
+.meta { margin: 0 0 1.5rem; font-size: .8rem; }
 section { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-  padding: 1.1rem 1.15rem; margin-bottom: 1.25rem; overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: .82rem; }
-th { text-align: left; font-weight: 600; color: var(--dim); padding: .3rem .5rem;
-  border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { padding: .45rem .5rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  padding: .9rem 1rem 1rem; margin-bottom: 1rem; overflow-x: auto; }
+.head { display: flex; flex-wrap: wrap; gap: .5rem; align-items: baseline;
+  margin-bottom: .6rem; }
+.badge { font-size: .78rem; }
+.badge b { color: var(--fg); font-weight: 600; }
+.controls { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center;
+  margin-bottom: .6rem; font-size: .78rem; }
+.controls button { font: inherit; color: var(--dim); background: transparent; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 999px; padding: .15rem .6rem; }
+.controls button:hover { color: var(--fg); }
+.controls button[aria-pressed="true"] { color: var(--bg); background: var(--fg);
+  border-color: var(--fg); }
+.controls label { display: flex; gap: .3rem; align-items: center; cursor: pointer;
+  color: var(--dim); margin-left: .3rem; }
+.controls input[type="search"] { font: inherit; color: var(--fg); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px; padding: .15rem .6rem;
+  margin-left: auto; min-width: 9rem; }
+table { border-collapse: collapse; width: 100%; font-size: .8rem; }
+th { text-align: right; font-weight: 600; color: var(--dim); padding: .25rem .45rem;
+  border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer;
+  user-select: none; }
+th:first-child { text-align: left; }
+th[aria-sort]::after { content: " \\2191"; opacity: .9; }
+th[aria-sort="descending"]::after { content: " \\2193"; }
+td { padding: .4rem .45rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
 tr:last-child td { border-bottom: none; }
 code { font: 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.model { min-width: 14rem; }
-.sub { font-size: .72rem; margin-top: .1rem; }
-.tag { font-size: .68rem; border: 1px solid var(--hot); color: var(--hot);
+.model { min-width: 13rem; }
+.sub { font-size: .7rem; margin-top: .05rem; }
+.tag { font-size: .66rem; border: 1px solid var(--line); color: var(--dim);
   border-radius: 4px; padding: 0 .3rem; margin-left: .3rem; white-space: nowrap; }
 .num, .gauge .figures { text-align: right; font-variant-numeric: tabular-nums; }
-.gauge { min-width: 6.8rem; }
-.gauge .figures { font-size: .72rem; color: var(--dim); margin-top: .15rem; white-space: nowrap; }
+.gauge { min-width: 6.5rem; }
+.gauge .figures { font-size: .7rem; color: var(--dim); margin-top: .12rem; white-space: nowrap; }
 .gauge em { font-style: normal; color: var(--fg); margin-left: .2rem; }
-.gauge.empty { text-align: center; color: var(--dim); }
-.gauge.open .figures { margin-top: 0; }
-.note { display: block; font-size: .66rem; color: var(--dim); }
-.note.refused { color: var(--hot); }
-.unit { font-weight: 400; opacity: .65; }
-.bar { background: var(--line); border-radius: 3px; height: 6px; overflow: hidden; }
+.gauge.empty, .num.zero { color: var(--dim); }
+.note { display: block; font-size: .64rem; color: var(--dim); }
+.parts { opacity: .7; }
+.bar { background: var(--line); border-radius: 3px; height: 5px; overflow: hidden; }
 .bar span { display: block; height: 100%; background: var(--cool); }
 .warm .bar span { background: var(--warm); } .hot .bar span { background: var(--hot); }
-.warn { color: var(--hot); }
-.notes { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--warm);
-  border-radius: 6px; padding: .75rem 1rem .75rem 2rem; font-size: .82rem; margin: 0 0 1.25rem; }
-footer { font-size: .78rem; margin-top: 1.5rem; }
+footer { font-size: .75rem; margin-top: 1.25rem; }
+footer p { margin: .35rem 0; }
 """
 
-# The markup is complete before this runs: filtering only sets `hidden`, so the
-# page stays readable with scripting off. Wrapped in a function because a page
-# someone may paste into a console or another document should not be leaving
-# `sections` and `buttons` lying around in the global scope.
+# One controller per section, so a platform's filters cannot reach across into
+# another's. Sorting reorders every row in the table, visible or not, which
+# keeps the order stable when the view is switched.
 _SCRIPT = """
-(() => {
-const sections = [...document.querySelectorAll('section[data-view]')];
-const buttons = [...document.querySelectorAll('.filters button')];
-const idleOnly = document.getElementById('hide-idle');
-let account = 'all';
+for (const section of document.querySelectorAll('section[data-platform]')) {
+  const rows = [...section.querySelectorAll('tbody tr')];
+  const buttons = [...section.querySelectorAll('.controls button')];
+  const usedOnly = section.querySelector('.used-only');
+  const search = section.querySelector('input[type="search"]');
+  const headers = [...section.querySelectorAll('th')];
+  const body = section.querySelector('tbody');
+  let scope = 'models';
+  let sort = null;
 
-function apply() {
-  for (const section of sections) {
-    // 'all' shows the per-model view; anything else shows that one account.
-    section.hidden = account === 'all'
-      ? section.dataset.view !== 'models'
-      : section.dataset.account !== account;
-    for (const row of section.querySelectorAll('tr[data-used]')) {
-      row.hidden = idleOnly.checked && row.dataset.used === '0';
+  const key = (row, column) => {
+    const cell = row.children[column];
+    const raw = cell.dataset.sort;
+    const number = parseFloat(raw);
+    return Number.isNaN(number) ? raw.toLowerCase() : number;
+  };
+
+  function apply() {
+    const query = search.value.trim().toLowerCase();
+    for (const row of rows) {
+      const inScope = scope === 'models'
+        ? row.dataset.scope === 'models'
+        : row.dataset.account === scope;
+      const used = !usedOnly.checked || row.dataset.used === '1';
+      const found = !query || row.dataset.name.includes(query);
+      row.hidden = !(inScope && used && found);
     }
+    for (const button of buttons) {
+      button.setAttribute('aria-pressed', String((button.dataset.account || 'models') === scope));
+    }
+    if (sort) {
+      const ordered = [...rows].sort((a, b) => {
+        const left = key(a, sort.column), right = key(b, sort.column);
+        if (left === right) return 0;
+        return (left < right ? -1 : 1) * (sort.direction === 'ascending' ? 1 : -1);
+      });
+      for (const row of ordered) body.appendChild(row);
+    }
+    headers.forEach((header, index) => {
+      if (sort && sort.column === index) header.setAttribute('aria-sort', sort.direction);
+      else header.removeAttribute('aria-sort');
+    });
   }
-  for (const button of buttons) {
-    button.setAttribute('aria-pressed', String(button.dataset.account === account));
-  }
-}
 
-for (const button of buttons) {
-  button.addEventListener('click', () => { account = button.dataset.account; apply(); });
+  buttons.forEach((button) => button.addEventListener('click', () => {
+    scope = button.dataset.account || 'models';
+    apply();
+  }));
+  headers.forEach((header, index) => header.addEventListener('click', () => {
+    const descending = sort && sort.column === index && sort.direction === 'ascending';
+    sort = { column: index, direction: descending ? 'descending' : 'ascending' };
+    apply();
+  }));
+  usedOnly.addEventListener('change', apply);
+  search.addEventListener('input', apply);
+  apply();
 }
-idleOnly.addEventListener('change', apply);
-apply();
-})();
 """
+
+_COLUMNS = (("Model", "left"), ("Context", "num"), ("RPM", "num"), ("TPM", "num"),
+            ("RPD", "num"), ("TPD", "num"), ("Refused", "num"), ("Err", "num"),
+            ("Last", "num"))
 
 
 def _band(ratio: float) -> str:
@@ -127,153 +163,98 @@ def _band(ratio: float) -> str:
 
 def _gauge_cell(gauge: Optional[Gauge]) -> str:
     if gauge is None:
-        return '<td class="gauge empty">&mdash;</td>'
+        return '<td class="gauge empty" data-sort="-1">&mdash;</td>'
 
     figure = scaled(gauge.name, gauge.used)
-    # A refusal is inside `used` -- it spent a request -- but saying so is the
-    # difference between "we sent 30" and "we sent 20 and were turned away ten
-    # times", which are the same number and completely different situations.
-    refused = ("" if not gauge.refused
-               else f'<span class="note refused">{gauge.refused} refused</span>')
-    # Only a window with something in it has a reset. An empty one has not
-    # started: it will, whenever the next attempt is made.
+    # Only a window with something in it has a reset: an empty one has not
+    # started, and will whenever the next attempt is made.
     resets = ("" if not gauge.used or gauge.resets_in is None
               else f'<span class="note">resets in {duration(gauge.resets_in)}</span>')
 
     if gauge.limit is None or gauge.ratio is None:
-        return ('<td class="gauge open"><div class="figures">'
-                f'{figure} &middot; <em>no cap</em>{refused}{resets}</div></td>')
+        return ('<td class="gauge empty" data-sort="-1"><div class="figures">'
+                f'{figure} &middot; no cap{resets}</div></td>')
 
+    # A summed ceiling is shown as the sum it is: 2 x 5, not a mystery 10.
+    parts = ("" if gauge.sources < 2
+             else f'<span class="parts"> ({gauge.sources}&times;'
+                  f'{scaled(gauge.name, gauge.limit // gauge.sources)})</span>')
     width = min(100, round(gauge.ratio * 100))
-    return (f'<td class="gauge {_band(gauge.ratio)}">'
+    return (f'<td class="gauge {_band(gauge.ratio)}" data-sort="{gauge.ratio:.6f}">'
             f'<div class="bar"><span style="width:{width}%"></span></div>'
-            f'<div class="figures">{figure} / {scaled(gauge.name, gauge.limit)}'
-            f'<em>{percent(gauge.ratio)}</em>{refused}{resets}</div></td>')
+            f'<div class="figures">{figure} / {scaled(gauge.name, gauge.limit)}{parts}'
+            f'<em>{percent(gauge.ratio)}</em>{resets}</div></td>')
 
 
-def _entry_row(entry, subtitle: str, now: float, retired: bool = False) -> str:
+def _count_cell(value: int) -> str:
+    return f'<td class="num{"" if value else " zero"}" data-sort="{value}">{value}</td>'
+
+
+def _entry_row(entry, scope: str, subtitle: str, now: float,
+               account: str = "", retired: bool = False) -> str:
     """One table row, over a model summary or a single pool member alike."""
     by_name = {gauge.name: gauge for gauge in entry.gauges}
-    tags = '<span class="tag">retired from config</span>' if retired else ""
+    tags = '<span class="tag">retired</span>' if retired else ""
     if entry.blocked_for is not None:
         # The provider's own Retry-After, which outranks any arithmetic of ours.
         tags += f'<span class="tag">blocked {duration(entry.blocked_for)}</span>'
-    cells = "".join(_gauge_cell(by_name.get(name))
-                    for name in ("rpm", "tpm", "rpd", "tpd"))
-    return f"""<tr data-used="{1 if entry.day.requests else 0}">
-    <td class="model"><code>{escape(entry.model)}</code>{tags}
+    window = entry.max_input_tokens
+    return f"""<tr data-scope="{scope}" data-account="{escape(account)}"
+      data-used="{1 if entry.day.requests else 0}" data-name="{escape(entry.model.lower())}">
+    <td class="model" data-sort="{escape(entry.model.lower())}">
+      <code>{escape(entry.model)}</code>{tags}
       <div class="sub">{subtitle}</div></td>
-    {cells}
-    <td class="num {'warn' if entry.day.rate_limited else ''}">{entry.day.rate_limited}</td>
-    <td class="num {'warn' if entry.day.errors else ''}">{entry.day.errors}</td>
-    <td class="when">{'never' if entry.last_call is None else escape(ago(entry.last_call, now))}</td>
+    <td class="num" data-sort="{window or 0}">{compact(window) if window else "&mdash;"}</td>
+    {"".join(_gauge_cell(by_name.get(name)) for name in ("rpm", "tpm", "rpd", "tpd"))}
+    {_count_cell(entry.day.rate_limited)}{_count_cell(entry.day.errors)}
+    <td class="when" data-sort="{entry.last_call or 0}">{
+      'never' if entry.last_call is None else escape(ago(entry.last_call, now))}</td>
   </tr>"""
 
 
-def _model_row(model, now: float) -> str:
-    keys = ", ".join(escape(account) for account in model.accounts)
-    spread = f"{len(model.accounts)} account(s): {keys}"
-    priority = "" if model.priority is None else f" &middot; priority {model.priority}"
-    return _entry_row(model, spread + priority, now)
+def _controls(accounts: List[str]) -> str:
+    buttons = ['<button type="button" aria-pressed="true">All accounts</button>']
+    buttons += [f'<button type="button" data-account="{escape(account)}" '
+                f'aria-pressed="false">{escape(account)}</button>' for account in accounts]
+    return (f'<div class="controls">{"".join(buttons)}'
+            '<label><input type="checkbox" class="used-only"> used today</label>'
+            '<input type="search" placeholder="filter models"></div>')
 
 
-def _row_html(row: Row, now: float) -> str:
-    priority = "" if row.priority is None else f" &middot; priority {row.priority}"
-    return _entry_row(row, escape(row.account) + priority, now,
-                      retired=not row.configured)
-
-
-def _table_html(head_note: str, body: str) -> str:
-    return f"""<p class="source">{head_note}</p>
-      <table>
-        <thead><tr>
-          <th>Model</th>
-          <th>RPM <span class="unit">60s</span></th><th>TPM <span class="unit">60s</span></th>
-          <th>RPD <span class="unit">24h</span></th><th>TPD <span class="unit">24h</span></th>
-          <th class="num">Refused</th><th class="num">Err</th><th>Last call</th>
-        </tr></thead>
-        <tbody>{body}</tbody>
-      </table>"""
-
-
-def _platform_section(platform, models, now: float) -> str:
-    """A platform's models, each summed over the accounts serving it.
-
-    No ceiling is quoted for the platform itself. Groq meters one org-wide
-    request budget across every model on an account, so adding the per-model
-    limits together would invent capacity that does not exist.
-    """
-    body = "\n".join(_model_row(model, now) for model in models)
-    keys = ", ".join(escape(account) for account in platform.accounts) or "no accounts"
-    note = (f"Each ceiling below is every account's ceiling added together, because "
-            f"each account is a separate budget: {escape(keys)}. Filter to one "
-            f"account to see them apart.")
-    return f"""<section data-view="models" data-platform="{escape(platform.platform)}">
-      <h2>{escape(platform.platform)} <span class="platform">{platform.models} models</span></h2>
-      <p class="summary">Last 24h over {len(platform.accounts)} account(s):
-        <strong>{platform.day.requests}</strong> requests &middot;
-        <strong>{compact(platform.day.tokens)}</strong> tokens &middot;
-        <strong>{platform.day.rate_limited}</strong> refused &middot;
-        <strong>{platform.day.errors}</strong> errored.</p>
-      {_table_html(note, body)}
+def _section(platform, models, rows: List[Row], now: float) -> str:
+    head = "".join(f'<th class="{align}">{label}</th>' for label, align in _COLUMNS)
+    body = [_entry_row(model, "models",
+                       f'{len(model.accounts)} account(s)'
+                       + ("" if model.priority is None else f' &middot; priority {model.priority}'),
+                       now)
+            for model in models]
+    body += [_entry_row(row, "account", escape(row.account), now,
+                        account=row.account, retired=not row.configured)
+             for row in rows]
+    return f"""<section data-platform="{escape(platform.platform)}">
+      <div class="head"><h2>{escape(platform.platform)}</h2>
+        <span class="badge">{platform.models} models over
+          {len(platform.accounts)} account(s) &middot; last 24h
+          <b>{platform.day.requests}</b> requests, <b>{compact(platform.day.tokens)}</b>
+          tokens, <b>{platform.day.rate_limited}</b> refused</span></div>
+      {_controls(platform.accounts)}
+      <table><thead><tr>{head}</tr></thead>
+      <tbody>{"".join(body)}</tbody></table>
     </section>"""
-
-
-def _section(account: AccountSummary, rows: List[Row], now: float) -> str:
-    body = "\n".join(_row_html(row, now) for row in rows)
-    blocked = ("" if account.blocked_for is None else
-               f" A member here is blocked for another {duration(account.blocked_for)}.")
-    note = ("Every budget below belongs to this account alone &mdash; another account "
-            "on the same platform shares none of it, not even for the same "
-            f"model.{blocked}")
-    return f"""<section data-view="account" data-account="{escape(account.account)}" hidden>
-      <h2>{escape(account.account)} <span class="platform">{escape(account.platform)}</span></h2>
-      <p class="summary">Last 24h across {account.members} pool member(s) on this
-        account: <strong>{account.day.requests}</strong> requests &middot;
-        <strong>{compact(account.day.tokens)}</strong> tokens &middot;
-        <strong>{account.day.rate_limited}</strong> refused &middot;
-        <strong>{account.day.errors}</strong> errored.</p>
-      {_table_html(note, body)}
-    </section>"""
-
-
-def _filters(report: Report) -> str:
-    buttons = ['<button type="button" data-account="all" aria-pressed="true">'
-               'Every account <span class="unit">by model</span></button>']
-    for summary in report.accounts:
-        buttons.append(f'<button type="button" data-account="{escape(summary.account)}" '
-                       f'aria-pressed="false">{escape(summary.account)} '
-                       f'<span class="unit">{escape(summary.platform)}</span></button>')
-    return (f'<div class="filters">{"".join(buttons)}'
-            '<label><input type="checkbox" id="hide-idle"> only members used in the '
-            'last 24h</label></div>')
 
 
 def render_panel(report: Report) -> str:
     now = report.generated
-    # Both views are written out; the filter hides one. That keeps the file a
-    # single artefact -- readable, mailable, and diffable next to a run's
-    # results -- instead of one page per account.
-    sections = [_platform_section(platform,
-                                  [model for model in report.models
-                                   if model.platform == platform.platform],
-                                  now)
-                for platform in report.platforms]
-    sections += [_section(account,
-                          [row for row in report.rows
-                           if row.account == account.account
-                           and row.platform == account.platform],
-                          now)
-                 for account in report.accounts]
-    sections = "\n".join(sections)
+    sections = "".join(
+        _section(platform,
+                 [model for model in report.models
+                  if model.platform == platform.platform],
+                 [row for row in report.rows if row.platform == platform.platform],
+                 now)
+        for platform in report.platforms)
 
-    notes = ""
-    if report.notes:
-        items = "".join(f"<li>{escape(note)}</li>" for note in report.notes)
-        notes = f'<ul class="notes">{items}</ul>'
-
-    oldest = "" if report.since is None else f", oldest {escape(iso(report.since))}"
-    config = "" if not report.config else f"&middot; pool from <code>{escape(report.config)}</code>"
+    footnotes = "".join(f"<p>{escape(note)}</p>" for note in report.notes)
+    since = "" if report.since is None else f" since {escape(stamp(report.since))}"
 
     return f"""<!doctype html>
 <html lang="en"><head>
@@ -283,18 +264,17 @@ def render_panel(report: Report) -> str:
 <style>{_STYLE}</style>
 </head><body><main>
 <h1>Pool quota</h1>
-<p class="meta">Snapshot taken {escape(iso(now))} &middot;
-  {report.calls} call(s) on record{oldest} {config}</p>
-{_filters(report)}
-{notes}
+<p class="meta">{escape(stamp(now))} &middot; {report.calls} call(s) recorded{since}</p>
 {sections}
-<footer>Counted from this router's own ledger, so anything else using the same
-keys is invisible here. A window opens with its first attempt and resets one
-length later, which reads pessimistically against a vendor that refills
-continuously &mdash; it will not show headroom that isn't there. A refused
-attempt counts as a request, because it spent one, and as no tokens, because it
-spent none. Regenerate with
-<code>python -m llm_router.quota panel</code>.</footer>
+<footer>
+{footnotes}
+<p>Counted from this router's ledger, so a key used elsewhere is under-counted
+here. A window opens with its first attempt and resets one length later, which
+reads pessimistically against a budget that refills continuously. A refused
+attempt counts as a request and as no tokens; one that never got an answer
+counts as neither. Ceilings shown for several accounts are their ceilings added
+together. Rebuild with <code>python -m llm_router.quota panel</code>.</p>
+</footer>
 </main>
 <script>{_SCRIPT}</script>
 </body></html>

@@ -179,7 +179,11 @@ account, so adding its per-model limits together would invent capacity that does
 not exist ([3.4](03-pool-model.md#34-priority-tiers)).
 
 Per entry, per window: requests, tokens, how much of each declared limit that is,
-when the window resets, and how many of those requests were refused. A limit the
+when the window resets, and how many of those requests were refused. A ceiling
+folded from several accounts is shown as the sum it is — `2×5`, not a mystery 10.
+The context window is a column of its own, for the same reason the router routes
+by it ([4.2](04-failover.md#42-size-aware-selection)): a member that cannot hold
+the job is not capacity, however much quota it has left. A limit the
 vendor doesn't publish (Gemma's TPM) is *no ceiling*, not a zero one. The
 **tightest** gauge is the one that will stop that entry first, which is rarely
 the one you would guess: on Groq a step-heavy run hits TPM long before RPD.
@@ -205,10 +209,17 @@ report, no scraping of a table meant for a person.
 
 The panel is a **snapshot file, not a served page** — the question is asked once,
 before a run, and a file has no port to collide with and no process left running
-on a machine meant to be running agents. It is still interactive: the account
-buttons switch between the two views and a checkbox hides members nothing has
-touched today. Both views are written into the file and the script only hides
-one, so the page still reads with scripting off.
+on a machine meant to be running agents.
+
+It is still interactive, and the controls sit **inside the table they act on**,
+one set per platform: the account buttons switch that platform between the model
+view and one key's members, a checkbox hides what nothing touched today, a search
+box filters by model name, and any column header sorts. A filter three headings
+away from its table is a filter people forget is on.
+
+Both views are written into the file and the script only hides rows, so the page
+still reads with scripting off. Timestamps are local, with the offset spelled
+out, because a panel can outlive the moment it was written.
 
 This began as a TypeScript submodule and was ported. Nothing in it justified a
 second toolchain in a Python repo: it is dict-reshaping and string templating,

@@ -168,6 +168,10 @@ def _check_model_fold():
     # Two accounts at 1000 a day really are 2000 a day: separate budgets add.
     assert gauge_of(model, "rpd").limit == 2000, gauge_of(model, "rpd")
     assert gauge_of(model, "rpd").used == 3
+    # The sum keeps its parts, so the panel can show 2 x 1000 rather than a
+    # ceiling nobody recognises from the config.
+    assert gauge_of(model, "rpd").sources == 2
+    assert model.max_input_tokens == 8000, "the window both accounts offer"
     # The soonest window to clear is the one that frees capacity first, whichever
     # key it sits on: groq_2 opened its minute at -50s.
     assert gauge_of(model, "rpm").resets_in == 10, gauge_of(model, "rpm")
@@ -176,6 +180,7 @@ def _check_model_fold():
     # summing what is known with what is not would invent a number.
     gemma = next(m for m in report.models if m.model == "gemma-4-31b-it")
     assert gemma.gauges and gauge_of(gemma, "tpm").limit is None
+    assert gauge_of(gemma, "tpm").sources == 0, "nothing was summed into it"
     assert gauge_of(gemma, "rpd").limit == 1500, "one account serves it, so one limit"
 
     # A platform is summed for what it spent and never given a ceiling: Groq
