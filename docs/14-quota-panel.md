@@ -132,6 +132,22 @@ dropped, and then counted asymmetrically:
 | The window's start | requests only | A refusal opens the request window; the token window is opened by the oldest attempt that actually spent tokens |
 | `Retry-After` | kept verbatim | The one statement about the future that isn't ours |
 
+**Only an attempt the provider answered counts at all.** Two things that look
+like requests are not:
+
+- **A member the router skipped.** Size-based selection filters a member out
+  before any call is made ([4.2](04-failover.md#42-size-aware-selection)); a
+  request too large for `gpt-oss-120b` never reaches Groq, and nothing is
+  written. The ledger holds attempts, not intentions.
+- **An attempt that got no answer.** A timeout or a failed connection may never
+  have left this machine. `reached_provider`
+  ([base_provider.py](../llm_router/base_provider.py)) asks for positive
+  evidence — an HTTP status, or the wording of a quota refusal — and without it
+  the line is marked `reached: false`: still an error, never a request.
+
+A 429 or Groq's 413 does count, because both are answers: the vendor read the
+request and said no.
+
 The asymmetry matters because the two numbers answer different questions. Thirty
 requests where ten were refused is the same RPD as thirty that all worked, and a
 completely different situation: the first is an account fighting its ceiling, the
@@ -143,12 +159,30 @@ requests are being spent and the tokens are not.
 
 ## 14.7 What the report says
 
-Per account × model, per window: requests, tokens, how much of each declared
-limit that is, when the window resets, and how many of those requests were
-refused. A limit the vendor doesn't publish (Gemma's TPM) is *no ceiling*, not a
-zero one — consumption is still shown, just without a bar. The **tightest** gauge
-is the one that will stop that member first, which is rarely the one you would
-guess: on Groq a step-heavy run hits TPM long before RPD.
+**The default view is per model, across every account that serves it.** That is
+the question the panel was built for — *how much Gemini have I got left* — and
+the reason it exists at all is to answer it without opening one provider console
+per key. Capacity adds up, because each account is a separate budget: three keys
+at 20 requests a day are 60 requests a day, and a ceiling that only some accounts
+declare makes the total unknown rather than approximate. The reset shown is the
+*soonest* of the accounts' windows, because that is when capacity next appears,
+whichever key it appears on.
+
+**The drill-down is per account**, member by member: once a model is running out,
+that is where you see which key is spent and which still has room. Filtering
+narrows the report itself rather than the rendering, so the JSON and the page
+never disagree.
+
+A platform is summed for what it spent and is deliberately given **no ceiling of
+its own**. Groq meters one org-wide request budget across every model on an
+account, so adding its per-model limits together would invent capacity that does
+not exist ([3.4](03-pool-model.md#34-priority-tiers)).
+
+Per entry, per window: requests, tokens, how much of each declared limit that is,
+when the window resets, and how many of those requests were refused. A limit the
+vendor doesn't publish (Gemma's TPM) is *no ceiling*, not a zero one. The
+**tightest** gauge is the one that will stop that entry first, which is rarely
+the one you would guess: on Groq a step-heavy run hits TPM long before RPD.
 
 Declared limits come from `limits:` in [config.yaml](../llm_router/config.yaml),
 which is [5.4](05-providers.md#54-current-free-tier-limits) in a form a program
@@ -160,23 +194,21 @@ reads, the config is what the panel measures against.
 [`llm_router/quota/`](../llm_router/quota/) — Python, standard library only.
 
 ```bash
-python -m llm_router.quota status                     # the table
-python -m llm_router.quota status --json              # the same report, as data
-python -m llm_router.quota status --account groq_1    # one account
+python -m llm_router.quota status                     # every model, over all its accounts
+python -m llm_router.quota status --account groq_1    # one account, member by member
+python -m llm_router.quota status --json              # the whole report, both views, as data
 python -m llm_router.quota panel                      # writes the HTML, prints its path
 ```
 
 `--json` exists for the coding agent driving this repo: one command, the whole
-report, no scraping of a table meant for a person. `--account` narrows the report
-itself rather than the rendering, so what a reader sees and what the data says
-stay the same thing.
+report, no scraping of a table meant for a person.
 
 The panel is a **snapshot file, not a served page** — the question is asked once,
 before a run, and a file has no port to collide with and no process left running
-on a machine meant to be running agents. It is still interactive: account filters
-and a "used in the last 24h" toggle, as a few lines of inline script over markup
-that is already complete. They earn their place because a second key on a
-platform doubles the rows.
+on a machine meant to be running agents. It is still interactive: the account
+buttons switch between the two views and a checkbox hides members nothing has
+touched today. Both views are written into the file and the script only hides
+one, so the page still reads with scripting off.
 
 This began as a TypeScript submodule and was ported. Nothing in it justified a
 second toolchain in a Python repo: it is dict-reshaping and string templating,
