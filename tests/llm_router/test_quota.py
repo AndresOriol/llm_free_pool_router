@@ -1,5 +1,5 @@
-"""Checks for the quota report: the windows, the gauges, and which of the two
-sources a figure came from.
+"""Checks for the quota report: the windows, when they reset, how a refused
+attempt is counted, and that two accounts never share either.
 
 No framework: `python -m tests.llm_router.test_quota` (or run the file).
 """
@@ -9,10 +9,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from llm_router.quota.probe import reset_seconds
-from llm_router.quota.report import build_report
+from llm_router.quota.report import DAY_SECONDS, MINUTE_SECONDS, build_report
 
 NOW = 1_800_000_000
+
+GROQ_LIMITS = {"rpm": 30, "tpm": 8000, "rpd": 1000, "tpd": 100000}
 
 POOL = {
     "generated": NOW,
@@ -20,7 +21,11 @@ POOL = {
     "pool": [
         {"provider": "GptOss120b_groq_1", "account": "groq_1", "platform": "groq",
          "model": "openai/gpt-oss-120b", "priority": 2, "max_input_tokens": 8000,
-         "limits": {"rpm": 30, "tpm": 8000, "rpd": 1000, "tpd": 100000}},
+         "limits": GROQ_LIMITS},
+        # The same model on a second account: one model, two budgets.
+        {"provider": "GptOss120b_groq_2", "account": "groq_2", "platform": "groq",
+         "model": "openai/gpt-oss-120b", "priority": 2, "max_input_tokens": 8000,
+         "limits": GROQ_LIMITS},
         {"provider": "Gemma4_31b_gemini_1", "account": "gemini_1", "platform": "gemini",
          "model": "gemma-4-31b-it", "priority": 31, "max_input_tokens": 128000,
          "limits": {"rpm": 15, "rpd": 1500}},
@@ -33,7 +38,13 @@ def call(**overrides):
             "platform": "groq", "model": "openai/gpt-oss-120b", "outcome": "ok",
             "tokens_in": 1000, "tokens_out": 200}
     base.update(overrides)
+    if base.get("tokens_in") is None:
+        base.pop("tokens_in"), base.pop("tokens_out")
     return base
+
+
+def refusal(**overrides):
+    return call(outcome="rate_limited", tokens_in=None, tokens_out=None, **overrides)
 
 
 def row_of(report, provider):
@@ -46,7 +57,7 @@ def gauge_of(row, name):
 
 def _check_windows():
     report = build_report(
-        [call(ts=NOW - 30), call(ts=NOW - 3600), call(ts=NOW - 90_000)], POOL, {}, NOW)
+        [call(ts=NOW - 30), call(ts=NOW - 3600), call(ts=NOW - 90_000)], POOL, NOW)
     row = row_of(report, "GptOss120b_groq_1")
 
     assert row.minute.requests == 1, row.minute
@@ -54,17 +65,100 @@ def _check_windows():
     assert row.total.requests == 3, "but it is still on record"
 
     # Three calls in a minute: 3 requests against 30 RPM (10%), 3600 tokens
-    # against 8000 TPM (45%). Tokens are the binding constraint, and the
-    # tightest gauge has to be the one that will actually stop the member.
+    # against 8000 TPM (45%). Tokens bind first, and the tightest gauge has to
+    # be the one that will actually stop the member.
     report = build_report([call(ts=NOW - 5), call(ts=NOW - 6), call(ts=NOW - 7)],
-                          POOL, {}, NOW)
+                          POOL, NOW)
     row = row_of(report, "GptOss120b_groq_1")
     assert row.tightest.name == "tpm", row.tightest
     assert (row.tightest.used, row.tightest.limit) == (3600, 8000), row.tightest
 
 
-def _check_local_gauges():
-    report = build_report([call(provider="Gemma4_31b_gemini_1")], POOL, {}, NOW)
+def _check_resets():
+    # The window belongs to the attempt that opened it: the oldest one still
+    # inside it. Here that is 40s ago, so the minute clears in 20s -- not in 60.
+    report = build_report([call(ts=NOW - 40), call(ts=NOW - 5)], POOL, NOW)
+    row = row_of(report, "GptOss120b_groq_1")
+
+    assert gauge_of(row, "rpm").resets_in == 20, gauge_of(row, "rpm")
+    assert gauge_of(row, "tpm").resets_in == 20, "tokens were spent at the same moment"
+    assert gauge_of(row, "rpd").resets_in == DAY_SECONDS - 40, gauge_of(row, "rpd")
+
+    # An empty window has no reset, because it has not started. It will start
+    # whenever the next attempt is made.
+    idle = row_of(build_report([], POOL, NOW), "GptOss120b_groq_1")
+    assert all(gauge.resets_in is None for gauge in idle.gauges), idle.gauges
+
+    # A call exactly one window old is still inside it, and clears now.
+    edge = row_of(build_report([call(ts=NOW - MINUTE_SECONDS)], POOL, NOW),
+                  "GptOss120b_groq_1")
+    assert edge.minute.requests == 1 and gauge_of(edge, "rpm").resets_in == 0
+
+    # A refusal opens the request window -- it spent a request -- but not the
+    # token window, which no refusal ever touches. So the two clocks differ.
+    report = build_report([refusal(ts=NOW - 50), call(ts=NOW - 20)], POOL, NOW)
+    row = row_of(report, "GptOss120b_groq_1")
+    assert gauge_of(row, "rpm").resets_in == 10, "the refusal at -50s opened it"
+    assert gauge_of(row, "tpm").resets_in == 40, "the served call at -20s opened it"
+
+
+def _check_refusals():
+    report = build_report([
+        call(),
+        refusal(),
+        call(outcome="error", tokens_in=None, tokens_out=None),
+    ], POOL, NOW)
+    row = row_of(report, "GptOss120b_groq_1")
+
+    assert row.day.requests == 3, "a refused attempt still spent a request"
+    assert (row.day.rate_limited, row.day.errors) == (1, 1), row.day
+    assert row.day.tokens_in == 1000, "only the served call reported tokens"
+
+    # A refusal counts inside the request gauges and is called out there, and
+    # counts nowhere in the token gauges: no tokens were spent being refused.
+    assert gauge_of(row, "rpd").used == 3 and gauge_of(row, "rpd").refused == 1
+    assert gauge_of(row, "rpm").refused == 1
+    assert gauge_of(row, "tpm").used == 1200 and gauge_of(row, "tpm").refused == 0
+    assert any("refused for quota" in note for note in report.notes), report.notes
+
+    # When the provider said when to come back, that beats our window model.
+    report = build_report([refusal(ts=NOW - 10, retry_after=45)], POOL, NOW)
+    assert row_of(report, "GptOss120b_groq_1").blocked_for == 35
+
+    # An expired Retry-After is not a block any more.
+    report = build_report([refusal(ts=NOW - 100, retry_after=45)], POOL, NOW)
+    assert row_of(report, "GptOss120b_groq_1").blocked_for is None
+
+    # And a refusal without one leaves the question to the window model.
+    report = build_report([refusal(ts=NOW - 10)], POOL, NOW)
+    assert row_of(report, "GptOss120b_groq_1").blocked_for is None
+
+
+def _check_accounts_are_separate():
+    report = build_report([
+        call(ts=NOW - 30),
+        call(ts=NOW - 20),
+        call(ts=NOW - 50, provider="GptOss120b_groq_2", account="groq_2"),
+    ], POOL, NOW)
+
+    first = row_of(report, "GptOss120b_groq_1")
+    second = row_of(report, "GptOss120b_groq_2")
+    assert (first.minute.requests, second.minute.requests) == (2, 1), "one model, two budgets"
+    assert gauge_of(first, "rpm").resets_in == 30, "opened by its own oldest call"
+    assert gauge_of(second, "rpm").resets_in == 10, "and so was the other account's"
+
+    # Rollups are per account, never per platform: both Groq accounts are Groq,
+    # and neither lends the other any budget.
+    assert [(a.account, a.day.requests) for a in report.accounts] == [
+        ("gemini_1", 0), ("groq_1", 2), ("groq_2", 1)], report.accounts
+    blocked = build_report([refusal(ts=NOW - 5, retry_after=30)], POOL, NOW)
+    groq_1 = next(a for a in blocked.accounts if a.account == "groq_1")
+    groq_2 = next(a for a in blocked.accounts if a.account == "groq_2")
+    assert groq_1.blocked_for == 25 and groq_2.blocked_for is None
+
+
+def _check_limits_and_notes():
+    report = build_report([call(provider="Gemma4_31b_gemini_1")], POOL, NOW)
     gemma = row_of(report, "Gemma4_31b_gemini_1")
 
     assert [g.name for g in gemma.gauges] == ["rpm", "tpm", "rpd", "tpd"], gemma.gauges
@@ -73,114 +167,29 @@ def _check_local_gauges():
     assert tpm.ratio is None and tpm.used == 1200, "consumption is still counted"
     assert gemma.tightest.name == "rpm", "only a gauge with a ceiling can be tightest"
 
-    # A configured member that has spent nothing is still a row: untouched
-    # budget is what someone deciding whether to start a long run needs to see.
-    empty = build_report([], POOL, {}, NOW)
-    assert len(empty.rows) == 2 and empty.calls == 0
+    empty = build_report([], POOL, NOW)
+    assert len(empty.rows) == 3 and empty.calls == 0
     assert all(row.configured and row.last_call is None for row in empty.rows)
-
-    report = build_report([
-        call(),
-        call(outcome="rate_limited", tokens_in=None, tokens_out=None),
-        call(outcome="error", tokens_in=None, tokens_out=None),
-    ], POOL, {}, NOW)
-    row = row_of(report, "GptOss120b_groq_1")
-    assert row.day.requests == 3, "a refused attempt still spent a request"
-    assert (row.day.rate_limited, row.day.errors) == (1, 1), row.day
-    assert row.day.tokens_in == 1000, "only the served call reported tokens"
-
-
-def _check_vendor_readings():
-    # Groq's `limit_requests` is its *daily* budget and `limit_tokens` its
-    # per-minute one. Nothing in the header says so, so the reading is matched
-    # against the declared limits rather than assumed per platform.
-    vendor = {"GptOss120b_groq_1": {
-        "ts": NOW - 5, "ok": True, "reports": True, "status": 200,
-        "limit_requests": 1000, "remaining_requests": 940,
-        "limit_tokens": 8000, "remaining_tokens": 6000,
-        "reset_requests": 86.4, "reset_tokens": 0.547}}
-    report = build_report([call()], POOL, vendor, NOW)
-    row = row_of(report, "GptOss120b_groq_1")
-
-    rpd = gauge_of(row, "rpd")
-    assert (rpd.source, rpd.used, rpd.limit) == ("vendor", 60, 1000), rpd
-    assert rpd.resets_in == 86.4, rpd
-    tpm = gauge_of(row, "tpm")
-    assert (tpm.source, tpm.used) == ("vendor", 2000), tpm
-    # The vendor said nothing about the other two, so they stay local -- and the
-    # local count is visible next to the vendor's, not overwritten by it.
-    assert gauge_of(row, "rpm").source == "local"
-    assert gauge_of(row, "rpm").used == 1, "the ledger still counts what we sent"
-    assert report.probed == NOW - 5
-
-    # A ceiling that matches no declared limit is still reported, under the
-    # header's own name -- the vendor knows about budgets the config may not.
-    vendor = {"GptOss120b_groq_1": {
-        "ts": NOW, "ok": True, "reports": True,
-        "limit_requests": 7, "remaining_requests": 5}}
-    row = row_of(build_report([], POOL, vendor, NOW), "GptOss120b_groq_1")
-    unmatched = gauge_of(row, "requests")
-    assert (unmatched.used, unmatched.limit) == (2, 7), unmatched
-    assert gauge_of(row, "rpd").source == "local", "the declared limits are untouched"
-
-    # A probe that failed changes nothing: better the local count than a gap.
-    vendor = {"GptOss120b_groq_1": {"ts": NOW, "ok": False, "reports": True,
-                                    "status": 404, "error": "HTTP 404"}}
-    report = build_report([call()], POOL, vendor, NOW)
-    row = row_of(report, "GptOss120b_groq_1")
-    assert all(gauge.source == "local" for gauge in row.gauges), row.gauges
-    assert any("failed to answer" in note for note in report.notes), report.notes
-
-    # A platform that cannot report is said to be silent, not left looking
-    # un-probed -- they read differently to someone deciding what to trust.
-    vendor = {"Gemma4_31b_gemini_1": {"ts": NOW, "reports": False,
-                                      "detail": "gemini returns no rate-limit headers"}}
-    report = build_report([], POOL, vendor, NOW)
-    assert any("publishes no usage figures" in note for note in report.notes), report.notes
-
-
-def _check_notes_and_rollup():
-    report = build_report([call(), call(), call(provider="Gemma4_31b_gemini_1")],
-                          POOL, {}, NOW)
-    groq = next(a for a in report.accounts if a.account == "groq_1")
-    assert groq.day.requests == 2 and groq.day.tokens == 2400, groq
-    assert len(report.accounts) == 2
 
     # A member that has left the config is reported, not dropped.
     report = build_report([call(provider="Llama3_70b_groq_1",
-                                model="llama-3.3-70b-versatile")], POOL, {}, NOW)
+                                model="llama-3.3-70b-versatile")], POOL, NOW)
     row = row_of(report, "Llama3_70b_groq_1")
     assert row.configured is False and row.tightest is None
     assert any("Llama3_70b_groq_1" in note for note in report.notes), report.notes
 
-    report = build_report([call()], None, {}, NOW)
+    report = build_report([call()], None, NOW)
     assert report.rows[0].tightest is None
     assert report.rows[0].model == "openai/gpt-oss-120b", "read off the ledger line"
     assert any("python -m llm_router" in note for note in report.notes), report.notes
 
-    # A stale reading is worse than none if it is presented as current.
-    vendor = {"GptOss120b_groq_1": {"ts": NOW - 7200, "ok": True, "reports": True,
-                                    "limit_requests": 1000, "remaining_requests": 900}}
-    report = build_report([], POOL, vendor, NOW)
-    assert any("2.0h old" in note for note in report.notes), report.notes
-
-
-def _check_reset_parsing():
-    # Groq quotes resets in compound units; the panel wants seconds.
-    assert reset_seconds("1m26.4s") == 86.4
-    assert reset_seconds("547ms") == 0.547
-    assert reset_seconds("2h30m") == 9000
-    assert reset_seconds("7.66s") == 7.66
-    assert reset_seconds(None) is None and reset_seconds("") is None
-    assert reset_seconds("soon") is None
-
 
 def _run():
     _check_windows()
-    _check_local_gauges()
-    _check_vendor_readings()
-    _check_notes_and_rollup()
-    _check_reset_parsing()
+    _check_resets()
+    _check_refusals()
+    _check_accounts_are_separate()
+    _check_limits_and_notes()
     print("quota: all checks passed")
 
 

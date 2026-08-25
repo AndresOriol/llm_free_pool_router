@@ -83,7 +83,7 @@ def _run():
         ledger = Path(tmp) / "ledger.jsonl"
 
         usage.record(_Provider(), tokens_in=812, tokens_out=96)
-        usage.record(_Provider(), outcome="rate_limited")
+        usage.record(_Provider(), outcome="rate_limited", retry_after=33)
 
         served, refused = _lines(ledger)
         assert served["provider"] == "GptOss120b_groq_1", served
@@ -96,6 +96,9 @@ def _run():
         # no token counts to report.
         assert refused["outcome"] == "rate_limited", refused
         assert "tokens_in" not in refused, refused
+        # The provider's own answer to "when can I come back", kept verbatim --
+        # the panel would otherwise have to infer it (llm_router/quota).
+        assert refused["retry_after"] == 33, refused
 
         # Token counts come from the provider's own numbers, wherever the
         # LangChain wrapper put them.

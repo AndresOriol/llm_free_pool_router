@@ -53,8 +53,8 @@ models:
   # Groq retired its whole Llama line (3.3-70b, 3.1-8b, 4-scout) and qwen3-32b;
   # all four answered 404 model_not_found when probed and are removed. A dead
   # entry is not free: the router walks it, and a 404 is not transient, so it
-  # propagates and kills the run. `python -m llm_router.quota status --probe`
-  # is the cheap way to catch the next retirement.
+  # propagates and kills the run. The next retirement shows up in the quota
+  # panel as a member that only ever errors (llm_router/quota/).
 
   # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
   - name: GptOss120b

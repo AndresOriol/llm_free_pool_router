@@ -107,15 +107,19 @@ class RouterChatModel(BaseChatModel):
         attach it to the run via `on_text` so the failed attempt shows up in
         LangSmith instead of vanishing behind the successful reroute.
         """
-        # Recorded before the classification, and whatever the verdict: a
-        # refused attempt still spent a request against the account's free-tier
-        # budget, so a run that spent its afternoon being turned away should
-        # look expensive in the panel rather than free (llm_router/usage.py).
-        usage.record(provider,
-                     outcome="rate_limited" if is_rate_limited(exc) else "error")
-
         transient, retry_after = is_transient(exc)
         detail = provider_error_detail(exc)
+
+        # Recorded whatever the verdict: a refused attempt still spent a request
+        # against the account's free-tier budget, so a run that spent its
+        # afternoon being turned away should look expensive in the panel rather
+        # than free. A rate limit also carries the provider's own Retry-After
+        # when it sent one -- the panel would otherwise have to guess when the
+        # window clears (llm_router/usage.py).
+        rate_limited = is_rate_limited(exc)
+        usage.record(provider,
+                     outcome="rate_limited" if rate_limited else "error",
+                     retry_after=retry_after if rate_limited else None)
         if not transient:
             logger.error(f"{provider.name} failed with a non-transient error: {exc!r}")
             return False

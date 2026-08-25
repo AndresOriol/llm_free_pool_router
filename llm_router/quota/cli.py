@@ -1,26 +1,23 @@
-"""The command line over the ledger and the vendor readings.
+"""The command line over the ledger.
 
 Two readers, one report. `status` prints a table for a human glancing at a
 terminal and, with `--json`, the same report as data -- which is how a coding
 agent asks how much of the free tier is left before deciding to start something
 long. `panel` writes the HTML snapshot.
 
-`--probe` is the only thing here that touches the network, and it is never
-implied: it spends one request per pool member that can answer (see probe.py).
-An agent polling `status --json` must not quietly spend the budget it is asking
-about.
+Nothing here touches the network or spends a request: every figure comes off
+`ledger.jsonl`, so an agent may ask as often as it likes.
 """
 
 import argparse
 import json
-import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import List, Optional
 
-from .format import ago, compact, iso, percent, scaled
+from .format import ago, compact, duration, iso, percent, scaled
 from .html import render_panel
-from .ledger import read_ledger, read_pool, read_vendor, usage_dir
+from .ledger import read_ledger, read_pool, usage_dir
 from .report import Report, Row, build_report
 
 
@@ -28,10 +25,22 @@ def _gauge_text(row: Row, name: str) -> str:
     gauge = next((candidate for candidate in row.gauges if candidate.name == name), None)
     if gauge is None:
         return "-"
-    mark = "" if gauge.source == "local" else "*"
     if gauge.limit is None or gauge.ratio is None:
-        return f"{scaled(name, gauge.used)} (no cap){mark}"
-    return f"{scaled(name, gauge.used)}/{scaled(name, gauge.limit)} {percent(gauge.ratio)}{mark}"
+        return f"{scaled(name, gauge.used)} (no cap)"
+    return f"{scaled(name, gauge.used)}/{scaled(name, gauge.limit)} {percent(gauge.ratio)}"
+
+
+def _resets_text(row: Row) -> str:
+    """When this member's soonest live window clears.
+
+    Only windows with something in them have a reset, and the provider's own
+    Retry-After outranks the window model when we were given one.
+    """
+    if row.blocked_for is not None:
+        return f"blocked {duration(row.blocked_for)}"
+    live = [gauge.resets_in for gauge in row.gauges
+            if gauge.used and gauge.resets_in is not None]
+    return duration(min(live)) if live else "-"
 
 
 def _table(rows: List[List[str]]) -> str:
@@ -49,12 +58,8 @@ def print_status(report: Report) -> None:
     header = ("no calls recorded yet" if report.since is None
               else f"{report.calls} calls recorded since {iso(report.since)}")
     print(f"Pool quota @ {iso(report.generated)} -- {header}")
-    if report.probed:
-        print(f"* = the vendor's own count, read {ago(report.probed, report.generated)}. "
-              "Everything else is this router's ledger (rolling 60s / 24h).")
-    else:
-        print("Every figure is this router's own ledger (rolling 60s / 24h); "
-              "--probe asks the vendors.")
+    print("Counted from this router's ledger. A window opens with its first "
+          "attempt and RESETS one length later (60s / 24h).")
     print()
 
     for note in report.notes:
@@ -69,7 +74,8 @@ def print_status(report: Report) -> None:
               f"{account.day.requests} req, {compact(account.day.tokens)} tok, "
               f"{account.day.rate_limited} rate-limited, {account.day.errors} errored")
         print(_table([
-            ["  MODEL", "RPM 60s", "TPM 60s", "RPD 24h", "TPD 24h", "429", "ERR", "LAST"],
+            ["  MODEL", "RPM 60s", "TPM 60s", "RPD 24h", "TPD 24h",
+             "429", "ERR", "RESETS", "LAST"],
             *[[
                 f"  {row.model}" + ("" if row.configured else " (retired)"),
                 _gauge_text(row, "rpm"),
@@ -78,22 +84,27 @@ def print_status(report: Report) -> None:
                 _gauge_text(row, "tpd"),
                 str(row.day.rate_limited),
                 str(row.day.errors),
+                _resets_text(row),
                 "never" if row.last_call is None else ago(row.last_call, report.generated),
             ] for row in rows],
         ]))
         print()
 
 
-def _probe(directory: Path) -> None:
-    """Ask the vendors, saying what it costs before it costs it."""
-    from ..loader import load_providers_from_config
-    from .probe import probe_cost, probe_pool
+def _only(report: Report, account: str) -> Report:
+    """The report narrowed to one account.
 
-    providers = load_providers_from_config()
-    cost = probe_cost(providers)
-    print(f"Probing {cost} pool member(s); this spends {cost} request(s) of free "
-          f"tier.", file=sys.stderr)
-    probe_pool(providers)
+    Narrowing rather than filtering at render time keeps `--json` and the panel
+    honest: what a reader sees and what the data says are the same thing.
+    """
+    known = {summary.account for summary in report.accounts}
+    if account not in known:
+        raise SystemExit(f"No account {account!r} in the pool. Known: "
+                         f"{', '.join(sorted(known)) or 'none'}")
+    report.rows = [row for row in report.rows if row.account == account]
+    report.accounts = [summary for summary in report.accounts
+                       if summary.account == account]
+    return report
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -105,20 +116,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                              "panel: write the HTML snapshot and print its path.")
     parser.add_argument("--json", action="store_true",
                         help="status only: print the report as JSON")
-    parser.add_argument("--probe", action="store_true",
-                        help="ask each vendor what it has left first; spends one "
-                             "request per member that can answer")
+    parser.add_argument("--account", help="report only this account")
     parser.add_argument("--dir", help="read from this usage directory "
                                       "(default: llm_router/.usage/)")
     parser.add_argument("--out", help="panel only: where to write the HTML")
     args = parser.parse_args(argv)
 
     directory = usage_dir(args.dir)
-    if args.probe:
-        _probe(directory)
-
-    report = build_report(read_ledger(directory), read_pool(directory),
-                          read_vendor(directory))
+    report = build_report(read_ledger(directory), read_pool(directory))
+    if args.account:
+        report = _only(report, args.account)
 
     if args.command == "status":
         if args.json:

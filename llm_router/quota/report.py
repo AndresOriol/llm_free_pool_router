@@ -1,21 +1,36 @@
-"""Turning attempts and vendor readings into the question a human actually asks:
-how close is each free account to the wall, right now.
+"""Turning attempts into the question a human actually asks: how close is each
+free account to the wall, and when does it clear.
 
-**Two sources, and they are not equal.** A vendor reading (probe.py) is what the
-account has left according to the account's owner; the local ledger is what this
-router happens to have spent. Where a vendor reading exists it wins, and every
-gauge says which of the two it came from -- a panel that silently mixed them
-would be worse than one that only counted locally, because it would look
-authoritative while being neither.
+Everything here is derived from `ledger.jsonl`. Nothing is fetched, and no
+figure is a vendor's. That is a real limit and is stated on the panel rather
+than hidden: **the ledger sees only what went through this router**, so a key
+also used from another machine, or by hand, is under-counted here.
 
-**The local windows are rolling, and the vendors' are not.** Groq's request
-budget refills continuously (its reset header reads `1m26.4s` against a
-1,000-request limit, not "at midnight"); Gemini resets daily on Pacific time.
-Encoding a bucket policy per vendor is a thing to get silently wrong, so the
-local view doesn't try: RPM/TPM are the last 60 seconds and RPD/TPD the last 24
-hours, always. That over-reports just after a vendor's own reset and never
-claims headroom that isn't there -- the only safe direction to be wrong in, and
-the reason the local count is a fallback rather than the answer.
+## The window model
+
+A budget is assumed to work like this: the first request starts the window, and
+the window ends one length later, whatever happened in between. So to know when
+the current window began, look back one length from now and take the *oldest*
+attempt in that span -- that attempt opened it, and the budget resets one length
+after it.
+
+That is why `used` and `resets_in` come from the same span: every attempt in the
+last minute belongs to the same minute-window, because the oldest of them opened
+it no earlier than a minute ago.
+
+The assumption is not free. A vendor running a leaky bucket (Groq's request
+budget refills continuously) clears earlier than this predicts, and one running
+a calendar day (Gemini resets at midnight Pacific) clears at a time this cannot
+know. It errs toward saying a budget is still spent, which is the safe
+direction: it will not promise headroom that isn't there. Where the provider
+told us better -- a `Retry-After` on a refusal -- that is used instead.
+
+## Accounts do not share windows
+
+A model is fanned across every account on its platform, so `gemini-3.5-flash`
+may be three rows. Each is its own budget with its own clock, and nothing here
+sums across accounts: a row is one account × one model, and the account rollups
+below aggregate rows *within* one account only.
 """
 
 import time
@@ -25,17 +40,26 @@ from typing import Dict, List, Optional
 MINUTE_SECONDS = 60
 DAY_SECONDS = 86_400
 
-# The order limits are quoted in everywhere else: per-minute then per-day.
+#: Which window each declared limit is measured over.
+WINDOWS = {"rpm": MINUTE_SECONDS, "tpm": MINUTE_SECONDS,
+           "rpd": DAY_SECONDS, "tpd": DAY_SECONDS}
 _LIMIT_NAMES = ("rpm", "tpm", "rpd", "tpd")
 
 
 @dataclass
 class Usage:
+    """What happened inside one window."""
+
     requests: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
+    #: Attempts the provider refused for want of quota. Counted as requests.
     rate_limited: int = 0
     errors: int = 0
+    #: The attempt that opened this window, and the oldest that spent tokens.
+    #: They differ because a refusal spends a request and no tokens.
+    opened: Optional[float] = None
+    opened_tokens: Optional[float] = None
 
     @property
     def tokens(self) -> int:
@@ -43,9 +67,17 @@ class Usage:
         return self.tokens_in + self.tokens_out
 
     def add(self, call: dict) -> None:
+        timestamp = call.get("ts") or 0.0
         self.requests += 1
+        self.opened = timestamp if self.opened is None else min(self.opened, timestamp)
+
+        spent = (call.get("tokens_in") or 0) + (call.get("tokens_out") or 0)
         self.tokens_in += call.get("tokens_in") or 0
         self.tokens_out += call.get("tokens_out") or 0
+        if spent:
+            self.opened_tokens = (timestamp if self.opened_tokens is None
+                                  else min(self.opened_tokens, timestamp))
+
         if call.get("outcome") == "rate_limited":
             self.rate_limited += 1
         elif call.get("outcome") == "error":
@@ -57,6 +89,10 @@ class Usage:
         self.tokens_out += other.tokens_out
         self.rate_limited += other.rate_limited
         self.errors += other.errors
+        for name in ("opened", "opened_tokens"):
+            mine, theirs = getattr(self, name), getattr(other, name)
+            if theirs is not None:
+                setattr(self, name, theirs if mine is None else min(mine, theirs))
 
 
 @dataclass
@@ -65,14 +101,13 @@ class Gauge:
 
     name: str
     used: int
-    #: None when the vendor declares no ceiling (Gemma's TPM).
+    #: None when nothing declares a ceiling (Gemma's TPM is unlimited).
     limit: Optional[int] = None
-    #: Above 1 when a rolling local window has outrun the vendor's own.
     ratio: Optional[float] = None
-    #: "vendor" (the account's own count) or "local" (this router's ledger).
-    source: str = "local"
-    #: Seconds until this budget refills, when the vendor said so.
+    #: Seconds until this window's budget resets, or None if nothing is in it.
     resets_in: Optional[float] = None
+    #: How much of `used` was attempts the provider refused.
+    refused: int = 0
 
 
 @dataclass
@@ -90,10 +125,11 @@ class Row:
     #: The gauge closest to its ceiling: what will stop this member first.
     tightest: Optional[Gauge] = None
     last_call: Optional[float] = None
+    #: When the provider's own Retry-After says this member frees up, if it is
+    #: still in the future. Beats anything derived from the window model.
+    blocked_for: Optional[float] = None
     #: False when the ledger has calls for a member the config no longer has.
     configured: bool = True
-    #: The last vendor reading for this member, as probe.py wrote it.
-    vendor: Optional[dict] = None
 
 
 @dataclass
@@ -104,6 +140,8 @@ class AccountSummary:
     minute: Usage = field(default_factory=Usage)
     day: Usage = field(default_factory=Usage)
     total: Usage = field(default_factory=Usage)
+    #: The soonest a refused member on this account is due back.
+    blocked_for: Optional[float] = None
 
 
 @dataclass
@@ -114,87 +152,62 @@ class Report:
     #: Timestamp of the oldest call on record, or None on an empty ledger.
     since: Optional[float] = None
     calls: int = 0
-    #: When the vendors were last asked, or None if never.
-    probed: Optional[float] = None
     rows: List[Row] = field(default_factory=list)
     accounts: List[AccountSummary] = field(default_factory=list)
     #: What a reader should know before believing the numbers.
     notes: List[str] = field(default_factory=list)
 
 
-def _local_gauges(limits: dict, minute: Usage, day: Usage) -> List[Gauge]:
+def _gauges_for(limits: dict, minute: Usage, day: Usage, now: float) -> List[Gauge]:
     """A gauge per metered quantity, declared ceiling or not.
 
     An undeclared limit still has consumption worth showing -- dropping the
     gauge would leave Gemma's token use nowhere on the page.
     """
-    measured = {"rpm": minute.requests, "tpm": minute.tokens,
-                "rpd": day.requests, "tpd": day.tokens}
     gauges = []
     for name in _LIMIT_NAMES:
+        window = WINDOWS[name]
+        usage = minute if window == MINUTE_SECONDS else day
+        counts_requests = name.startswith("r")
+
+        used = usage.requests if counts_requests else usage.tokens
+        # A refusal opens the request window (it spent a request) but not the
+        # token window (it spent none), so each asks the clock it belongs to.
+        opened = usage.opened if counts_requests else usage.opened_tokens
+
         declared = limits.get(name)
         limit = declared if isinstance(declared, int) and declared > 0 else None
-        used = measured[name]
-        gauges.append(Gauge(name=name, used=used, limit=limit,
-                            ratio=None if limit is None else used / limit))
+        gauges.append(Gauge(
+            name=name,
+            used=used,
+            limit=limit,
+            ratio=None if limit is None else used / limit,
+            resets_in=None if opened is None else max(0.0, opened + window - now),
+            refused=usage.rate_limited if counts_requests else 0,
+        ))
     return gauges
 
 
-def _vendor_gauges(limits: dict, vendor: dict) -> Dict[str, Gauge]:
-    """What the vendor said, mapped onto the limit it belongs to.
-
-    Which window a vendor's header describes is not fixed by the header name:
-    Groq's `x-ratelimit-limit-requests` is the daily budget while its
-    `-limit-tokens` is the per-minute one. Rather than hard-code that per
-    platform -- exactly the special-casing the router refuses -- match the
-    vendor's stated ceiling against the ones the config declares. An unmatched
-    ceiling is still reported, under the header's own name.
-    """
-    gauges: Dict[str, Gauge] = {}
-    for kind, candidates, fallback in (("requests", ("rpm", "rpd"), "requests"),
-                                       ("tokens", ("tpm", "tpd"), "tokens")):
-        limit = vendor.get(f"limit_{kind}")
-        remaining = vendor.get(f"remaining_{kind}")
-        if not isinstance(limit, int) or not isinstance(remaining, int):
-            continue
-        name = next((candidate for candidate in candidates
-                     if limits.get(candidate) == limit), fallback)
-        used = max(0, limit - remaining)
-        gauges[name] = Gauge(name=name, used=used, limit=limit,
-                             ratio=used / limit if limit else None,
-                             source="vendor",
-                             resets_in=vendor.get(f"reset_{kind}"))
-    return gauges
-
-
-def _gauges_for(row: Row) -> List[Gauge]:
-    """Local gauges, overridden by whatever the vendor was able to answer."""
-    gauges = _local_gauges(row.limits, row.minute, row.day)
-    if not row.vendor or not row.vendor.get("ok"):
-        return gauges
-
-    from_vendor = _vendor_gauges(row.limits, row.vendor)
-    merged = [from_vendor.pop(gauge.name, gauge) for gauge in gauges]
-    # Anything the vendor reported that maps to no declared limit still belongs
-    # on the row -- it is the vendor's own account of a budget we did not know
-    # about, which is worth more than our silence.
-    return merged + list(from_vendor.values())
+def _blocked_for(calls: List[dict], now: float) -> Optional[float]:
+    """Seconds until the provider itself said it would take us back."""
+    until = [call["ts"] + call["retry_after"] for call in calls
+             if call.get("outcome") == "rate_limited" and call.get("retry_after")]
+    soonest = max(until, default=None)
+    return round(soonest - now, 1) if soonest and soonest > now else None
 
 
 def build_report(calls: List[dict], pool: Optional[dict],
-                 vendor: Optional[Dict[str, dict]] = None,
                  now: Optional[float] = None) -> Report:
     """Build the whole report.
 
     `pool` may be None -- the panel still reports what was consumed, it just has
-    nothing to measure it against. `vendor` may be empty -- then every gauge is
-    this router's own count, and says so.
+    nothing to measure it against.
     """
     now = time.time() if now is None else now
-    vendor = vendor or {}
     members = {member["provider"]: member for member in (pool or {}).get("pool", [])}
 
     rows: Dict[str, Row] = {}
+    refusals: Dict[str, List[dict]] = {}
 
     def row_for(provider: str, call: Optional[dict] = None) -> Row:
         if provider in rows:
@@ -209,7 +222,6 @@ def build_report(calls: List[dict], pool: Optional[dict],
             priority=(member or {}).get("priority"),
             limits=(member or {}).get("limits") or {},
             configured=member is not None,
-            vendor=vendor.get(provider),
         )
         return rows[provider]
 
@@ -221,10 +233,11 @@ def build_report(calls: List[dict], pool: Optional[dict],
 
     since: Optional[float] = None
     for call in calls:
-        timestamp = call.get("ts") or 0
+        timestamp = call.get("ts") or 0.0
         if since is None or timestamp < since:
             since = timestamp
-        row = row_for(call.get("provider", "unknown"), call)
+        provider = call.get("provider", "unknown")
+        row = row_for(provider, call)
         age = now - timestamp
         row.total.add(call)
         if age <= DAY_SECONDS:
@@ -233,42 +246,47 @@ def build_report(calls: List[dict], pool: Optional[dict],
             row.minute.add(call)
         if row.last_call is None or timestamp > row.last_call:
             row.last_call = timestamp
+        if call.get("outcome") == "rate_limited":
+            refusals.setdefault(provider, []).append(call)
 
     accounts: Dict[str, AccountSummary] = {}
     for row in rows.values():
-        row.gauges = _gauges_for(row)
+        row.gauges = _gauges_for(row.limits, row.minute, row.day, now)
         with_limits = [gauge for gauge in row.gauges if gauge.ratio is not None]
         row.tightest = max(with_limits, key=lambda gauge: gauge.ratio, default=None)
+        row.blocked_for = _blocked_for(refusals.get(row.provider, []), now)
 
-        # Rolled up per account as well, because that is where a free tier's
-        # real budget lives: Groq meters one org-wide request pool across every
-        # model on the account, so the per-model rows flatter it
-        # (docs/03-pool-model.md#34-priority-tiers).
+        # Rolled up per account -- and only within one account, because that is
+        # where a free tier's budget lives. Groq meters one org-wide request
+        # pool across every model on the account, so the per-model rows flatter
+        # it (docs/03-pool-model.md#34-priority-tiers); two accounts on the same
+        # platform share nothing at all.
         key = f"{row.platform}/{row.account}"
         summary = accounts.setdefault(key, AccountSummary(row.account, row.platform))
         summary.members += 1
         summary.minute.merge(row.minute)
         summary.day.merge(row.day)
         summary.total.merge(row.total)
+        if row.blocked_for is not None:
+            summary.blocked_for = (row.blocked_for if summary.blocked_for is None
+                                   else min(summary.blocked_for, row.blocked_for))
 
-    probed = max((reading.get("ts") or 0 for reading in vendor.values()), default=None)
     report = Report(
         generated=now,
         pool_generated=(pool or {}).get("generated"),
         config=(pool or {}).get("config"),
         since=since,
         calls=len(calls),
-        probed=probed or None,
         rows=sorted(rows.values(), key=lambda row: (
-            row.platform, row.account, row.priority if row.priority is not None else 999,
-            row.model)),
+            row.platform, row.account,
+            row.priority if row.priority is not None else 999, row.model)),
         accounts=sorted(accounts.values(), key=lambda a: (a.platform, a.account)),
     )
-    report.notes = _notes(report, pool, vendor, now)
+    report.notes = _notes(report, pool)
     return report
 
 
-def _notes(report: Report, pool: Optional[dict], vendor: dict, now: float) -> List[str]:
+def _notes(report: Report, pool: Optional[dict]) -> List[str]:
     notes = []
     if pool is None:
         notes.append("No pool snapshot found, so there are no limits to measure "
@@ -276,26 +294,11 @@ def _notes(report: Report, pool: Optional[dict], vendor: dict, now: float) -> Li
     if report.calls == 0:
         notes.append("The ledger is empty: nothing recorded since it was last cleared.")
 
-    if not vendor:
-        notes.append("No vendor reading yet: every figure below is this router's own "
-                     "count, which misses anything else using the same keys. "
-                     "`--probe` asks the vendors directly.")
-    elif report.probed and now - report.probed > 3600:
-        age = (now - report.probed) / 3600
-        notes.append(f"The vendor reading is {age:.1f}h old; anything spent since is "
-                     "counted locally or not at all. Re-run with `--probe`.")
-
-    silent = sorted({row.platform for row in report.rows
-                     if row.vendor and not row.vendor.get("reports", True)})
-    if silent:
-        notes.append(f"{', '.join(silent)} publishes no usage figures, so those rows "
-                     "are this router's own count only.")
-
-    failed = [row.provider for row in report.rows
-              if row.vendor and row.vendor.get("reports") and not row.vendor.get("ok")]
-    if failed:
-        notes.append(f"{len(failed)} member(s) failed to answer the last probe "
-                     f"({', '.join(failed)}).")
+    refused = sum(row.day.rate_limited for row in report.rows)
+    if refused:
+        notes.append(f"{refused} attempt(s) in the last 24h were refused for quota. "
+                     "They count as requests here -- they spent one -- but as no "
+                     "tokens, because none were.")
 
     orphans = [row.provider for row in report.rows if not row.configured]
     if orphans:

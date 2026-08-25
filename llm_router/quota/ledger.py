@@ -1,12 +1,10 @@
-"""Reading the three files under `llm_router/.usage/`.
+"""Reading the two files under `llm_router/.usage/`.
 
-All of them are written elsewhere -- the ledger and the pool snapshot by
-[usage.py](../usage.py) as the router runs, the vendor readings by
-[probe.py](probe.py) when asked. Nothing here calls a provider.
+Both are written by [usage.py](../usage.py) as the router runs. Nothing here
+calls a provider, and nothing here touches the network at all.
 
     ledger.jsonl   one line per attempt this router made
     pool.json      the pool as configured, with each model's declared limits
-    vendor.json    what each vendor last said it had left
 
 Every reader here is forgiving: a missing file is an empty result, and a torn
 last line is skipped rather than raised. The eval runner kills runs on a
@@ -16,7 +14,7 @@ records, not a corruption to complain about.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from .. import usage
 
@@ -53,12 +51,3 @@ def _read_json(path: Path) -> Optional[Any]:
 
 def read_pool(directory: Path) -> Optional[dict]:
     return _read_json(Path(directory) / "pool.json")
-
-
-def read_vendor(directory: Path) -> Dict[str, dict]:
-    """The last vendor reading per pool member, or empty if never probed."""
-    payload = _read_json(Path(directory) / "vendor.json")
-    if not isinstance(payload, dict):
-        return {}
-    members = payload.get("members")
-    return members if isinstance(members, dict) else {}

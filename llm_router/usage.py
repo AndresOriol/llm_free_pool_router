@@ -22,6 +22,10 @@ A ledger line:
      "platform": "groq", "model": "openai/gpt-oss-120b",
      "tokens_in": 812, "tokens_out": 96, "outcome": "ok"}
 
+`tokens_in`/`tokens_out` are absent when the attempt was refused -- no tokens
+were spent -- and a refusal carries `retry_after` instead when the provider
+sent one.
+
 `outcome` is `ok`, `rate_limited` or `error`. A refused attempt is recorded
 rather than dropped: it still spent a request against the account's budget, and
 how often an account is being turned away is the most useful thing the panel
@@ -79,8 +83,14 @@ def _message_tokens(message: Any) -> Tuple[Optional[int], Optional[int]]:
 
 
 def record(provider: Any, tokens_in: Optional[int] = None,
-           tokens_out: Optional[int] = None, outcome: str = "ok") -> None:
-    """Append one attempt against `provider` to the ledger."""
+           tokens_out: Optional[int] = None, outcome: str = "ok",
+           retry_after: Optional[int] = None) -> None:
+    """Append one attempt against `provider` to the ledger.
+
+    `retry_after` is the provider's own Retry-After, when it sent one with a
+    refusal. It is the only statement about when a window clears that does not
+    come from our own arithmetic, so it is kept verbatim.
+    """
     entry = {
         "ts": round(time.time(), 3),
         "provider": getattr(provider, "name", "unknown"),
@@ -93,6 +103,8 @@ def record(provider: Any, tokens_in: Optional[int] = None,
         entry["tokens_in"] = int(tokens_in)
     if tokens_out is not None:
         entry["tokens_out"] = int(tokens_out)
+    if retry_after is not None:
+        entry["retry_after"] = int(retry_after)
     _append(entry)
 
 
