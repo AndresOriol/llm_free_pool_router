@@ -21,7 +21,8 @@ from typing import List, Optional
 from .format import ago, compact, duration, percent, scaled, stamp
 from .html import render_panel
 from .ledger import read_ledger, read_pool, usage_dir
-from .report import Report, _fold_models, _fold_platforms, build_report
+from .report import (Report, _fold_models, _fold_platforms, build_report,
+                     declared_limits)
 
 
 def _gauge_text(entry, name: str) -> str:
@@ -46,18 +47,24 @@ def _resets_text(entry) -> str:
     return duration(min(live)) if live else "-"
 
 
+_WINDOW_LABEL = {"rpm": "RPM 60s", "tpm": "TPM 60s", "rpd": "RPD 24h", "tpd": "TPD 24h"}
+
+
 def _table_for(entries, label, now: float) -> str:
-    """One table over anything carrying gauges: model summaries or pool rows."""
+    """One table over anything carrying gauges: model summaries or pool rows.
+
+    A quantity nobody here declares a ceiling for gets no column -- Gemini
+    publishes no tokens-per-day, so that column was a heading over ten rows of
+    "no cap".
+    """
+    names = declared_limits(entries)
     return _table([
-        ["  MODEL", "CTX", "RPM 60s", "TPM 60s", "RPD 24h", "TPD 24h",
+        ["  MODEL", "CTX", *(_WINDOW_LABEL[name] for name in names),
          "REFUSED", "ERR", "RESETS", "LAST"],
         *[[
             f"  {label(entry)}",
             compact(entry.max_input_tokens) if entry.max_input_tokens else "-",
-            _gauge_text(entry, "rpm"),
-            _gauge_text(entry, "tpm"),
-            _gauge_text(entry, "rpd"),
-            _gauge_text(entry, "tpd"),
+            *(_gauge_text(entry, name) for name in names),
             str(entry.day.rate_limited),
             str(entry.day.errors),
             _resets_text(entry),

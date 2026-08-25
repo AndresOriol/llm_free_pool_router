@@ -9,7 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from llm_router.quota.report import DAY_SECONDS, MINUTE_SECONDS, build_report
+from llm_router.quota.report import (DAY_SECONDS, MINUTE_SECONDS, build_report,
+                                     declared_limits)
 
 NOW = 1_800_000_000
 
@@ -192,6 +193,20 @@ def _check_model_fold():
     assert [p.platform for p in report.platforms] == ["gemini", "groq"]
 
 
+def _check_declared_columns():
+    """A column nobody has a ceiling for should not be a column."""
+    report = build_report([], POOL, NOW)
+    groq = [row for row in report.rows if row.platform == "groq"]
+    gemini = [row for row in report.rows if row.platform == "gemini"]
+
+    assert declared_limits(groq) == ("rpm", "tpm", "rpd", "tpd"), declared_limits(groq)
+    # Gemini publishes no tokens-per-day for anything in this pool, and Gemma no
+    # tokens-per-minute either -- so the platform keeps TPM (others declare it
+    # elsewhere in the real pool) but never TPD.
+    assert declared_limits(gemini) == ("rpm", "rpd"), declared_limits(gemini)
+    assert declared_limits([]) == ()
+
+
 def _check_accounts_are_separate():
     report = build_report([
         call(ts=NOW - 30),
@@ -248,6 +263,7 @@ def _run():
     _check_refusals()
     _check_unanswered()
     _check_model_fold()
+    _check_declared_columns()
     _check_accounts_are_separate()
     _check_limits_and_notes()
     print("quota: all checks passed")

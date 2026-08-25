@@ -230,6 +230,20 @@ class Report:
     notes: List[str] = field(default_factory=list)
 
 
+def declared_limits(entries) -> tuple:
+    """Which of the four metered quantities anything here declares a ceiling for.
+
+    A column nobody has a limit for is a column of "no cap": Gemini publishes no
+    tokens-per-day for any model, so a TPD column on that table is four
+    characters of heading and ten rows of nothing. Renderers ask this and drop
+    the rest.
+    """
+    return tuple(name for name in _LIMIT_NAMES
+                 if any(gauge.limit is not None
+                        for entry in entries for gauge in entry.gauges
+                        if gauge.name == name))
+
+
 def _gauges_for(limits: dict, minute: Usage, day: Usage, now: float) -> List[Gauge]:
     """A gauge per metered quantity, declared ceiling or not.
 

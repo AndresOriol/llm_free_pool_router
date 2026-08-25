@@ -21,7 +21,7 @@ from html import escape
 from typing import List, Optional
 
 from .format import ago, compact, duration, percent, scaled, stamp
-from .report import AccountSummary, Gauge, Report, Row
+from .report import Gauge, Report, Row, declared_limits
 
 _STYLE = """
 :root { color-scheme: light dark;
@@ -147,10 +147,6 @@ for (const section of document.querySelectorAll('section[data-platform]')) {
 }
 """
 
-_COLUMNS = (("Model", "left"), ("Context", "num"), ("RPM", "num"), ("TPM", "num"),
-            ("RPD", "num"), ("TPD", "num"), ("Refused", "num"), ("Err", "num"),
-            ("Last", "num"))
-
 
 def _band(ratio: float) -> str:
     """Green / amber / red, on the same thresholds the terminal table uses."""
@@ -190,7 +186,7 @@ def _count_cell(value: int) -> str:
     return f'<td class="num{"" if value else " zero"}" data-sort="{value}">{value}</td>'
 
 
-def _entry_row(entry, scope: str, subtitle: str, now: float,
+def _entry_row(entry, scope: str, subtitle: str, now: float, names: tuple,
                account: str = "", retired: bool = False) -> str:
     """One table row, over a model summary or a single pool member alike."""
     by_name = {gauge.name: gauge for gauge in entry.gauges}
@@ -205,7 +201,7 @@ def _entry_row(entry, scope: str, subtitle: str, now: float,
       <code>{escape(entry.model)}</code>{tags}
       <div class="sub">{subtitle}</div></td>
     <td class="num" data-sort="{window or 0}">{compact(window) if window else "&mdash;"}</td>
-    {"".join(_gauge_cell(by_name.get(name)) for name in ("rpm", "tpm", "rpd", "tpd"))}
+    {"".join(_gauge_cell(by_name.get(name)) for name in names)}
     {_count_cell(entry.day.rate_limited)}{_count_cell(entry.day.errors)}
     <td class="when" data-sort="{entry.last_call or 0}">{
       'never' if entry.last_call is None else escape(ago(entry.last_call, now))}</td>
@@ -222,13 +218,17 @@ def _controls(accounts: List[str]) -> str:
 
 
 def _section(platform, models, rows: List[Row], now: float) -> str:
-    head = "".join(f'<th class="{align}">{label}</th>' for label, align in _COLUMNS)
+    # A quantity nobody on this platform has a ceiling for gets no column.
+    names = declared_limits(models + rows)
+    head = "".join(f"<th>{label}</th>" for label in
+                   ("Model", "Context", *(name.upper() for name in names),
+                    "Refused", "Err", "Last"))
     body = [_entry_row(model, "models",
                        f'{len(model.accounts)} account(s)'
                        + ("" if model.priority is None else f' &middot; priority {model.priority}'),
-                       now)
+                       now, names)
             for model in models]
-    body += [_entry_row(row, "account", escape(row.account), now,
+    body += [_entry_row(row, "account", escape(row.account), now, names,
                         account=row.account, retired=not row.configured)
              for row in rows]
     return f"""<section data-platform="{escape(platform.platform)}">
