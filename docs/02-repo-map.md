@@ -21,7 +21,10 @@ Selection and state. Never makes an API call itself.
 | [providers.py](../llm_router/providers.py) | *Which SDK do I call for this provider type?* — `OpenAICompatibleProvider` (Groq and anything OpenAI-shaped) and `GeminiProvider` |
 | [loader.py](../llm_router/loader.py) | *How do accounts get built from config?* — reads YAML + `.env`, fans models across accounts, skips entries with missing keys |
 | [router.py](../llm_router/router.py) | *Which account is best right now?* — `AutonomousLLMRouter.get_best_provider()` |
-| [config.yaml](../llm_router/config.yaml) | *What's in the pool?* — accounts and models, see [5.2](05-providers.md#52-config-schema) |
+| [__main__.py](../llm_router/__main__.py) | *What are my limits, before I've run anything?* — `python -m llm_router` builds the pool and writes its snapshot, calling nothing |
+| [usage.py](../llm_router/usage.py) | *What has this pool spent?* — the append-only ledger and the pool snapshot behind [14. Quota panel](14-quota-panel.md) |
+| [quota/](../llm_router/quota/) | *How close is each account to its wall?* — the reader over that ledger: table, JSON, filterable HTML panel |
+| [config.yaml](../llm_router/config.yaml) | *What's in the pool?* — accounts, models and their declared `limits`, see [5.2](05-providers.md#52-config-schema) |
 | `.env` (gitignored) | The actual API keys. Never in code or config. |
 
 ## 2.3 `agent/` — the coding agent
@@ -66,7 +69,7 @@ Code lives with the code it measures; scenario *data* does not (see
 | [`fake_agent.py`](../evals/fake_agent.py) | Stub agent, so the runner's own paths can be exercised without spending quota |
 | [`configs/*.yaml`](../evals/configs/) | One file per agent configuration under test |
 | [`CONFIGS.md`](../evals/CONFIGS.md) | The ledger: every configuration tried, its verdict, and why |
-| `results/runs/<run_id>/` | One self-contained directory per run — committed, durable evidence |
+| `results/runs/<run_id>/` | One self-contained directory per run — durable evidence, gitignored by default; commit one with `git add -f` when a verdict rests on it |
 | `.worktrees/` | Scratch checkouts of configurations under test (gitignored) |
 
 ## 2.5 Everything else
@@ -106,6 +109,9 @@ Worth knowing before debugging something that "should work":
 - Cooldown state is **in-memory, per process**. Two agent processes do not
   share knowledge of which accounts are hot. This is a known limitation, not a
   bug ([13.4](13-roadmap.md#134-open-questions)).
+- `llm_router/.usage/` — this machine's usage ledger and pool snapshot.
+  Gitignored, rebuilt as the router runs; deleting it only loses history
+  ([14.3](14-quota-panel.md#143-two-files-under-llm_routerusage)).
 - `evals/.worktrees/` — throwaway checkouts, safe to delete.
 - LangSmith runs — useful for watching, but they expire, which is precisely why
   the local trace exists ([7. Observability](07-observability.md)).

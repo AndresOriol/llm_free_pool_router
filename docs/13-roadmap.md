@@ -157,4 +157,4 @@ billing, admin UI), no paid-tier fallback, no ToS circumvention.
 
 ---
 
-**Previous:** [← 12. Development harness](12-development-harness.md) · **Back to** [wiki index](README.md)
+**Previous:** [← 12. Development harness](12-development-harness.md) · **Next:** [14. Quota panel →](14-quota-panel.md)

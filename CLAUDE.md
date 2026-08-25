@@ -39,6 +39,11 @@ task, replicated. It is deleted, not disabled — `git log` is the record.
   filters to the ones available and large enough for the request, and returns
   the highest-priority one. Selection only; it never makes a call.
   Configured via [llm_router/config.yaml](llm_router/config.yaml).
+- [llm_router/quota](llm_router/quota/) — answers "how much free tier is left",
+  entirely from the usage ledger the router now writes: one line per model over
+  every account serving it, filterable down to a single account. A terminal
+  table, `--json` for an agent, and a static HTML panel. It reports; it never
+  gates a call ([14. Quota panel](docs/14-quota-panel.md)).
 - [agent/runtime](agent/runtime/) — the substrate: `RouterChatModel` (the
   failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
   `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
@@ -68,6 +73,7 @@ this file is the agent entry point (goal, standards, this index) — both stay
 short and link into the wiki rather than growing inline.
 
 Quick pointers: [4. Failover](docs/04-failover.md) for how the router works,
+[14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
 [5. Providers](docs/05-providers.md) for accounts and limits,
 [12. Development harness](docs/12-development-harness.md) for which model tier
 does what, [13. Roadmap and scope](docs/13-roadmap.md) for what's next and

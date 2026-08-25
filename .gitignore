@@ -3,6 +3,15 @@
 __pycache__/
 .pytest_cache/
 
-# Eval worktrees are throwaway checkouts of this repo. Results are NOT ignored:
-# they are the durable record that replaces expiring hosted traces (~40 KB/run).
+# Eval worktrees are throwaway checkouts of this repo.
 evals/.worktrees/
+
+# Run results stay on disk but out of git. They are still the durable record
+# that replaces expiring hosted traces -- keep the directory, and commit a run
+# by hand (`git add -f`) when it is the evidence behind a verdict. The twelve
+# already committed stay tracked; .gitignore does not untrack anything.
+evals/results/runs/
+
+# What this machine's accounts have spent, plus the pool snapshot the quota
+# panel measures it against. Local state, rewritten as the router runs.
+/llm_router/.usage/

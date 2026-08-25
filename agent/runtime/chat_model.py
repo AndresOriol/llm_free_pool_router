@@ -17,8 +17,10 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import ConfigDict
 
+from llm_router import usage
 from llm_router.base_provider import (estimate_tokens, is_decommissioned,
-                                      is_transient, provider_error_detail)
+                                      is_rate_limited, is_transient,
+                                      provider_error_detail, reached_provider)
 
 logger = logging.getLogger("LLMRouter")
 
@@ -104,6 +106,7 @@ class RouterChatModel(BaseChatModel):
                 # nesting and trips the tracer's run_map ("No indexed run ID").
                 message = self._underlying(provider).invoke(
                     messages, config=self.provider_config, stop=stop, **kwargs)
+                usage.record_call(provider, message)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
                 if not self._handle_failure(provider, exc, run_manager):
@@ -124,17 +127,32 @@ class RouterChatModel(BaseChatModel):
         attach it to the run via `on_text` so the failed attempt shows up in
         LangSmith instead of vanishing behind the successful reroute.
         """
+        transient, retry_after = is_transient(exc)
         detail = provider_error_detail(exc)
 
-        # Checked before is_transient, which would call this a fatal 4xx and
-        # kill the run. The model is gone, so the pool stops offering it and the
-        # loop tries the next member instead -- no cooldown, because a cooldown
-        # is a wait and there is nothing to wait for.
+        # Recorded whatever the verdict: an attempt the provider *answered*
+        # spent a request against the account's free-tier budget, so a run that
+        # spent its afternoon being turned away should look expensive in the
+        # panel rather than free. One that never got an answer is marked, and
+        # the panel leaves it out of the count. A rate limit also carries the
+        # provider's own Retry-After when it sent one -- the panel would
+        # otherwise have to guess when the window clears (llm_router/usage.py).
+        # Recorded before the retirement check below, so attempts burned on a
+        # model that has gone away still show up as spend rather than as free.
+        rate_limited = is_rate_limited(exc)
+        usage.record(provider,
+                     outcome="rate_limited" if rate_limited else "error",
+                     retry_after=retry_after if rate_limited else None,
+                     reached=reached_provider(exc))
+
+        # Checked before the `not transient` branch below, which would call this
+        # a fatal 4xx and kill the run. The model is gone, so the pool stops
+        # offering it and the loop tries the next member instead -- no cooldown,
+        # because a cooldown is a wait and there is nothing to wait for.
         if is_decommissioned(exc):
             provider.retire(detail or repr(exc))
             return True
 
-        transient, retry_after = is_transient(exc)
         if not transient:
             logger.error(f"{provider.name} failed with a non-transient error: {exc!r}")
             return False

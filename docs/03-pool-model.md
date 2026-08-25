@@ -69,6 +69,30 @@ so a new model can be slotted in without renumbering:
 | workhorse fallback | 20–29 | Weaker, but see the finding below — this tier does more real work than its name suggests. |
 | last resort | 30+ | Only when everything above is cooling down. |
 
+### Ordering inside a band
+
+Within a band the order is capability first **until latency says otherwise**.
+The reasoning band is led by `gemini-3.6-flash`, then `3.7`, then `3.5`, with
+`openai/gpt-oss-120b` behind them at 4.
+
+`3.7` is the newer and stronger model and still sits second, because a loop that
+makes a call per step pays for latency on every one of them. Measured
+2026-08-25: `3.7` answered in 33–54s and returned `503 UNAVAILABLE`
+("experiencing high demand") once in four calls, against 0.9s for `3.6`. It
+spends output budget thinking before it writes — asked for five output tokens it
+returned `MAX_TOKENS` and no text at all. Strongest-first is the right default;
+40× slower and one refusal in four is what overrides it. The tier exists
+for judgement over a wide view, and gpt-oss-120b cannot hold one — its 8,000
+token ceiling is a tenth of what the Geminis take
+([5.3](05-providers.md#53-why-max_input_tokens-matters)). It stays in the band
+because the flash models run out fast: 20 requests a day each, which a working
+afternoon spends.
+
+The lite models are ordered the same way inside the workhorse band —
+`3.5-flash-lite` ahead of `3.1`, ahead of `2.5` — behind `gpt-oss-20b`, which
+keeps that slot because a well-scoped mechanical step usually fits its window
+and Groq answers faster.
+
 ### The finding that produced the tiers
 
 This came out of reading actual traces, not from taste. On any task longer than

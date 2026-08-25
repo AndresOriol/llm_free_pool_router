@@ -60,6 +60,35 @@ def _run():
     # Gemini-style APIError exposes .code, not .status_code.
     assert is_transient(_Exc("overloaded", code=503))[0] is True
 
+    # The wait is usually not in a header. langchain_google_genai re-raises the
+    # quota refusal as a plain exception with no response object, so the only
+    # copy left is the message -- which carries it twice, once truncated in a
+    # RetryInfo field and once in prose. Both are read and the longer wins,
+    # rounded up: retrying a fraction of a second early buys another refusal.
+    gemini = _Exc("429 RESOURCE_EXHAUSTED. {'error': {'message': 'You exceeded your "
+                  "current quota. Please retry in 37.677718404s.', 'details': "
+                  "[{'@type': '...RetryInfo', 'retryDelay': '37s'}]}}")
+    assert is_transient(gemini) == (True, 38), is_transient(gemini)
+
+    # Groq says it in prose only.
+    groq = _Exc("rate_limit_exceeded: Limit 8000, Used 6180, Requested 6247. "
+                "Please try again in 33.2025s. Need more tokens?")
+    assert is_transient(groq) == (True, 34), is_transient(groq)
+
+    # Compound units, which is how a wait over a minute is quoted.
+    assert is_transient(_Exc("rate limit. Please try again in 1m26.4s")) == (True, 87)
+
+    # And nothing invented when no wait was offered. Model names and token
+    # counts are full of digits followed by letters; none of them is a duration.
+    assert is_transient(_Exc("rate limit reached, calm down")) == (True, None)
+    assert is_transient(
+        _Exc("rate limit on gemini-3.5-flash after 120b tokens")) == (True, None)
+
+    # A header still wins when there is one, and an HTTP-date is not a number.
+    assert is_transient(_Exc("rate limit", retry_after="4.5")) == (True, 5)
+    assert is_transient(
+        _Exc("rate limit", retry_after="Wed, 21 Oct 2026 07:28:00 GMT")) == (True, None)
+
     # Network errors carry no status; classify by exception class name.
     assert is_transient(TimeoutError("timed out"))[0] is True
     assert is_transient(ConnectionError("reset"))[0] is True

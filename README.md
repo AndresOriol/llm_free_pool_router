@@ -50,5 +50,8 @@ Everything beyond the quick start lives in the wiki — start at
   [4. Failover](docs/04-failover.md)
 - **Curious how this project is built (agent roles, model tiers)?** →
   [12. Development harness](docs/12-development-harness.md)
+- **How much of the free tier is left?** →
+  [14. Quota panel](docs/14-quota-panel.md) —
+  `python -m llm_router.quota status`
 - **Where is this going next?** → [13. Roadmap and scope](docs/13-roadmap.md)
 - **Project goals and standards** → [CLAUDE.md](CLAUDE.md)
