@@ -172,24 +172,37 @@ as LangSmith already built it.
 DEEP_TRACE_FILE=run-tree.json python -m agent.deep workdir < brief.md
 ```
 
-**Two ids, and the difference is the whole trap.** `collect_runs()` learns
-locally which runs happened, so no network call is needed during the run. But it
-appends in **completion order**, so its first entry is the innermost LLM call —
-and asking LangSmith for a leaf returns a perfectly valid *one-span* tree that
-looks like a working trace until you count the spans. It was recorded that way
-twice before the count was checked. The fetch therefore climbs to the root
-itself using LangSmith's own `trace_id`, which makes it correct regardless of
-which span id the caller hands it.
+**Ask for the trace, not for a run.** `collect_runs()` learns locally which runs
+happened, so no network call is needed during the run. But it appends in
+**completion order**, so its first entry is the innermost LLM call — and under
+the old v1 fetch, asking LangSmith for a leaf returned a perfectly valid
+*one-span* tree that looked like a working trace until you counted the spans. It
+was recorded that way twice before the count was checked. Every run carries the
+root's id as `trace_id`, and the v2 endpoint is keyed on exactly that, so the
+question is now unaskable: any span the collector saw names the whole trace.
 
-**Everything the vendor returns is kept**, and the meta block is written even
-when the fetch fails, so a run with no trace says so on disk instead of leaving
-an absent file to explain later. Deciding which fields are surplus is a question
-to answer against a real tree rather than in advance — and the first real tree
-answers it: of 93 spans in a one-line fix, **72 were middleware wrappers
-carrying no information, and they were 79% of the bytes.** Keeping only the
-`llm` and `tool` spans leaves 21% of the size with everything a metric or a
-post-mortem reads. That pruning is not done yet; the number is recorded so it
-can be.
+**The v1 run endpoints are gone on 2027-01-31.** `Client.read_run` (`GET
+/runs/{run_id}`) and the `load_child_runs=True` flag behind it (`POST
+/runs/query`) are replaced by `Client.traces.list_runs`, which is why
+`requirements.txt` pins `langsmith>=0.11.1` — the `traces` resource does not
+exist before it. Two consequences worth knowing when reading the code: the
+project id is now a **required** argument, taken off the collector's `RunTree`
+as `session_id` so the common path still costs no extra round trip; and the
+response is **flat**, so the nesting is rebuilt locally from each run's
+`parent_run_ids`. A span whose parent is missing is re-attached to the root
+rather than dropped, because silently losing a span is the failure this whole
+file exists to avoid.
+
+**Everything the vendor returns is kept** — which under v2 means asking for it,
+since the endpoint returns bare ids unless the fields are named, so the fetch
+names all of them. The meta block is written even when the fetch fails, so a run
+with no trace says so on disk instead of leaving an absent file to explain later.
+Deciding which fields are surplus is a question to answer against a real tree
+rather than in advance — and the first real tree answers it: of 93 spans in a
+one-line fix, **72 were middleware wrappers carrying no information, and they
+were 79% of the bytes.** Keeping only the `llm` and `tool` spans leaves 21% of
+the size with everything a metric or a post-mortem reads. That pruning is not
+done yet; the number is recorded so it can be.
 
 **It needs `LANGSMITH_TRACING=1` and a key.** Without them the run is unaffected
 and the record says `"trace": null` — which is the right failure, because losing
