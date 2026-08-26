@@ -3,9 +3,6 @@
 __pycache__/
 .pytest_cache/
 
-# Eval worktrees are throwaway checkouts of this repo.
-evals/.worktrees/
-
 # Run output is an artifact, not source. It stays on disk as the durable record
 # that replaces expiring hosted traces, and none of it belongs in git -- a run
 # is megabytes of log that no one reads back through a diff, and it would sit

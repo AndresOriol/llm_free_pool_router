@@ -79,6 +79,27 @@ drawing from whatever its own commit pinned
 master` today and `ref: master` next week are different configurations, and the
 records say so.
 
+**The checkout does not outlive the batch.** One worktree per arm is created
+when the batch starts and removed when it ends, because keeping them is a cost
+with no return: what makes a run reproducible is the `config_sha` in its
+`run.json` and the `config.yaml` copied next to it, and
+
+```bash
+git worktree add --detach /tmp/rebuild <config_sha>
+```
+
+rebuilds the tree from those at any point later. Keeping them instead meant a
+directory holding one full copy of the repo per (config, SHA) pair ever run —
+33 of them, 47 MB, none of it information the run records did not already
+carry.
+
+`agent_cmd` stays overridable even though there is one shipping agent, because
+there is more than one thing to launch from a config: `evals/fake_agent.py`
+exercises the runner's own paths without spending quota, and `agent.explore`
+([15](15-explorer.md)) deliberately takes the same arguments as `agent.code`,
+so pointing an arm at the explorer is a config line rather than a second
+runner. A config that omits it gets `python -m agent.code <workdir>`.
+
 A configuration may also **pin a single model**, bypassing failover. That isn't
 how the agent ships, but it's the lowest-variance way to attribute a change to
 the prompt or loop rather than to which account happened to be warm
@@ -107,7 +128,10 @@ others — destroying comparability.
 7. **Record** — write `evals/results/runs/<run_id>/`, one self-contained
    directory.
 
-`run_id` is `<scenario>_<task>_<config>_r<rep>_<UTC timestamp>`.
+`run_id` is `<UTC timestamp>_<scenario>_<task>_<config>_r<rep>`. The stamp
+leads so that a plain listing of `results/runs/` is chronological and the newest
+batch is the last thing on screen — and so `bundle --since` is a prefix
+comparison rather than a slice off the end of a variable-length name.
 
 ## 8.6 Fair comparison
 

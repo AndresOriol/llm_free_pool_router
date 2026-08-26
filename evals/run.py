@@ -21,8 +21,15 @@ from evals import verify as verify_mod
 
 
 def _run_id(scenario, task, config, rep) -> str:
+    """Timestamp first, description after.
+
+    The scenario used to lead, which sorted the results directory by task and
+    left "which run is the newest" to be answered by reading every name in it.
+    A fixed-width UTC stamp in front makes a plain listing chronological, and
+    makes `--since` a prefix comparison.
+    """
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return f"{scenario.id}_{task.id}_{config.name}_r{rep}_{stamp}"
+    return f"{stamp}_{scenario.id}_{task.id}_{config.name}_r{rep}"
 
 
 def _execute(config, workdir: Path, prompt: str, trace_path: Path,
@@ -34,9 +41,9 @@ def _execute(config, workdir: Path, prompt: str, trace_path: Path,
            # metered per account, so what a run spends is spent against the same
            # budget every other run draws on -- but `llm_router/usage.py` locates
            # `.usage/` beside its own package, which inside a worktree is the
-           # worktree's copy. Runs were writing their usage into
-           # `evals/.worktrees/<name>-<sha>/` and the quota panel never saw a
-           # single one of them.
+           # worktree's copy. Runs were writing their usage into the throwaway
+           # checkout, which is deleted at the end of the batch, and the quota
+           # panel never saw a single one of them.
            "LLM_ROUTER_USAGE_DIR": str((config.repo / "llm_router" / ".usage").resolve()),
            **config.secrets, **config.env,
            "EVAL_TRACE_FILE": str(trace_path)}
@@ -109,6 +116,11 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
     results_dir = Path(results_dir).resolve()
     out_dir = results_dir / "runs" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Copied now rather than at the end, so a run that dies mid-flight still
+    # says what it was. With `config_sha` in run.json this is the whole recipe
+    # for rebuilding the configuration: `git worktree add --detach <sha>` plus
+    # the overrides in this file. Nothing else about the checkout is kept.
+    shutil.copyfile(config.path, out_dir / "config.yaml")
 
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)

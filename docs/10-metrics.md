@@ -108,6 +108,7 @@ would be doing the deciding. Keep the columns visible.
 ```
 evals/results/runs/<run_id>/
   run.json         fingerprint, scenario tag, metrics, outcome
+  config.yaml      the configuration file this run was launched from
   trace.jsonl      captured events
   stdout.log
   stderr.log
