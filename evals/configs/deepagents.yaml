@@ -1,23 +1,24 @@
-# The deepagents harness: one conversation, wide members only.
+# The coding agent: one conversation, wide members only.
 #
-# The arm that tests whether the SDK's own context management (summarization,
-# message eviction, tool-output offloading) now does what the narrow-role graph
-# was built to do by hand -- on a pool whose wide members hold 128k-250k tokens.
+# The only agent configuration. Everything it used to be compared against --
+# the narrow-role harness and its seven variants -- is deleted, and in git along
+# with what each one showed (evals/CONFIGS.md).
 #
-# This is the comparison the architecture rests on being re-run: the
-# conversational loop this replaces spent 226,854 input tokens against the
-# narrow-role harness's 5,756 (docs/06-agent.md#681). That baseline predates
-# SummarizationMiddleware and ran on a pool whose floor was 6,000 tokens, so the
-# result is a hypothesis again rather than a settled fact -- which is the whole
-# reason this is a configuration and not a merge.
+# The comparison this arm never won is still open. The conversational loop it
+# descends from spent 226,854 input tokens against the narrow-role harness's
+# 5,756 (docs/06-agent.md#641), and the first two runs of *this* configuration
+# took 134,000-162,000. That baseline predates SummarizationMiddleware and ran
+# on a pool whose floor was 6,000 tokens, so it is a hypothesis rather than a
+# settled fact -- but nothing has closed it, and `input_tokens` is the column
+# to read first on every batch (docs/06-agent.md#611-the-arm-that-was-deleted).
 #
-# Run it interleaved against `session`, never alone:
-#   python -m evals run --config session --config deepagents --reps 3
+# HARNESS_SHELL is deliberately absent: the agent is more capable with a real
+# shell, but eval runs are not containerized, and the default must not widen the
+# blast radius silently (docs/design/long-run-harness.md#42-bash-for-the-executor).
 name: deepagents
 repo: ../..
 ref: harness/deepagents
 env_file: ../../llm_router/.env
-agent_cmd: ["python", "-m", "agent.deep", "{workdir}"]
 overrides:
   router_config: llm_router/config.yaml
   env: {}

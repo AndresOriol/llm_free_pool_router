@@ -16,17 +16,15 @@ that works one project unattended on its own branch, updates its docs, and
 writes an account a human reviews instead of the code
 ([design note](design/long-run-harness.md)).
 
-The open question inside Phase 2 is **which harness**, and it is now an
-experiment rather than a plan
-([6.1](06-agent.md#61-two-architectures-one-question)). Both arms exist,
-both run end to end, and the comparison has not been made:
+The question of **which harness** is closed by decision rather than by
+measurement: the narrow-role arm is deleted and `agent/deep/` is what ships
+([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). What that bets is that a
+maintained SDK harness plus a 128,000-token floor does the job well enough that
+maintaining a bespoke one is not worth it — and the bet is **unsettled**, because
+the deleted arm was winning on cost when it was retired. The open item is no
+longer *which*, it is *what the survivor costs*.
 
-| Arm | What it bets |
-| --- | --- |
-| `agent/harness/` | Splitting work so every call fits the narrowest member is what makes an unattended run affordable |
-| `agent/deep/` | A maintained SDK harness plus a 128,000-token floor now does that job well enough that maintaining a bespoke one is not worth it |
-
-**The redirection that produced the second arm** was to stop treating Groq's
+**The redirection that made this possible** was to stop treating Groq's
 8,000-token ceiling as a constraint on *coding* work. A Groq account holds
 100,000 tokens per day, so one wide request would spend the whole day's budget —
 those members can never serve a conversation. A coding session therefore
@@ -38,38 +36,42 @@ work that fits it.
 
 In order. The ordering is the argument.
 
-1. **Run the two arms interleaved.** The blocking item, and the reason both
-   exist. `session` against `deepagents`, n=3 to start, over the four scenarios
-   that still discriminate. Until this lands the choice of harness is back to
-   being decided by argument, which is the thing this repo exists not to do.
-   Budget it first: a deepagents run cost 14–21 model calls in the spike, and
-   the flash tier is 20 requests per day per model per account
-   ([8.9](08-evaluation-method.md#89-budget)).
-2. **Back up `agent_evals`.** Four of five scenario tags and three of four topic
+1. **Price the surviving arm.** `deepagents`, n=3 to start, over the four
+   scenarios that still discriminate. There is no longer another arm to
+   interleave against, so the standard is the deleted one's recorded 5,756 input
+   tokens. Until this lands, the harness choice rests on argument, which is the
+   thing this repo exists not to do. Budget it first: a run cost 14–21 model
+   calls in the spike, and the flash tier is 20 requests per day per model per
+   account ([8.9](08-evaluation-method.md#89-budget)).
+2. **Rebuild the standing-maintainer loop on this arm.** `NOTES.md` in, an
+   account out, a journal that survives a crash, and incremental commits all
+   lived in the deleted arm's `record/`. The coding agent commits and does none
+   of the rest, so Phase 2's daily cycle has a hole in it
+   ([design note](design/long-run-harness.md)).
+3. **Back up `agent_evals`.** Four of five scenario tags and three of four topic
    branches exist only on the machine that made them. Tags are never pushed by
    default, so this is one command and it is the only item here that loses data
    if left ([11.4](11-eval-status.md#114-blockers)).
-3. **Keep authoring scenarios.** `long-context` next: size-based routing is half
-   the architecture and nothing probes it — and it is now the axis the two arms
-   most obviously differ on.
-4. **Make the dead-model retirement outlive the process.** `404
+4. **Keep authoring scenarios.** `long-context` next: size-based routing is half
+   the architecture and nothing probes it.
+5. **Make the dead-model retirement outlive the process.** `404
    model_not_found` no longer kills a run — the router retires the member and
    carries on ([4.6](04-failover.md#46-known-gaps)), which is what let the
    trimmed eval pool go. But `retire()` marks one provider instance, so every
    fresh run spends an attempt rediscovering the same dead model. A
    decommissioned model should be disabled *permanently*, the way a
    rate-limited one is benched *temporarily*.
-5. **Prune the run tree.** 79% of a recorded tree was middleware wrapper spans
-   carrying nothing ([7.7](07-observability.md#77-the-record-one-run-tree)).
+6. **Prune the run tree.** 79% of a recorded tree was middleware wrapper spans
+   carrying nothing ([7.6](07-observability.md#76-the-record-one-run-tree)).
    Worth doing once a metric actually reads the tree, not before.
-6. **Then** the judge (P2), then compare/report (P3).
+7. **Then** the judge (P2), then compare/report (P3).
 
 ### 13.2.1 What the architecture work settled, and what it did not
 
-`harness/adhoc-router` holds the narrow-role arm
-([6.1](06-agent.md#61-two-architectures-one-question)). Seven
-variants and a conversational baseline were measured before it; all of them are
-in `git log` now. What that measurement established, and what a fresh session
+`harness/adhoc-router` holds the narrow-role arm as it was when it was deleted
+([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). Seven variants and a
+conversational baseline were measured against it; all of them are in `git log`
+now. What that measurement established, and what a fresh session
 should not redo:
 
 - **Cost replicated: 7.3 calls and 5,756 input tokens against the conversational
@@ -77,11 +79,11 @@ should not redo:
   This is why the architecture is what it is.
 - **Pass rates on L0 are noise.** Do not re-run configurations against
   `retry-after-case`; the answer will be a different random ordering
-  ([6.8.2](06-agent.md#682-the-pass-column-is-noise)).
+  ([6.8.2](06-agent.md#642-the-pass-column-is-noise)).
 - **Every failure was `reasoning`** — 12 of 13, zero `retrieval`, zero
   `tooling`. Each configuration found the file, edited it, ran the tests, and
   got the fix conceptually wrong
-  ([6.8.3](06-agent.md#683-every-failure-is-reasoning)).
+  ([6.8.3](06-agent.md#643-every-failure-is-reasoning)).
   **This is the load-bearing result**: topology changes address retrieval,
   tooling and stopping, and none of those is the bottleneck. Further
   architecture work has close to nothing left to give on correctness.
@@ -90,12 +92,13 @@ So the architecture is a *cost* win whose *correctness* is still unpriced. What
 prices it is a scenario set and a diagnosis of what actually goes wrong inside a
 run, not more topologies.
 
-**The deepagents arm is not a new topology, and this section is not an argument
-against it.** Everything above says that rearranging *this repo's* roles cannot
-buy correctness. The question the second arm asks is different: whether a
-harness this repo does not maintain does the same job well enough that the
-maintenance is not worth paying for. That is a cost-of-ownership question with a
-correctness floor, and the same measurement answers it.
+**None of this argues against the arm that survived.** Everything above says
+that rearranging *this repo's* roles cannot buy correctness. The question the
+surviving arm answers is a different one — whether a harness this repo does not
+maintain does the same job well enough that the maintenance is not worth paying
+for — and it is a cost-of-ownership question with a correctness floor. It was
+answered by decision; the measurement that would have checked it is item 1
+above.
 
 ### Evaluation build order
 
@@ -146,16 +149,16 @@ Live, unresolved, and worth deciding when the evidence arrives — not before.
 
 | Question | What would settle it |
 | --- | --- |
-| **Which harness ships** — narrow roles, or the deepagents arm? | An interleaved comparison on the scenarios that still discriminate ([13.2](#132-what-to-do-next)). A draw keeps the one this repo does not have to maintain. |
-| Does the deepagents arm need the parts of `deepagents-code` not carried over — skills, memory, the rubric grader? | A failure the comparison produces that one of them would have prevented. Not before ([6.9.2](06-agent.md#692-what-makes-a-deep-agent-a-coding-agent)). |
-| Which run-tree fields are worth keeping? | A metric actually reading the tree. 79% of the bytes are middleware wrappers, but "unused today" is not "surplus" ([7.7](07-observability.md#77-the-record-one-run-tree)). |
+| **Was deleting the narrow-role arm a mistake?** | `input_tokens` per run for `deepagents` across the discriminating scenarios, read against the deleted arm's recorded 5,756 ([13.2](#132-what-to-do-next), item 1). |
+| Does the coding agent need the parts of `deepagents-code` not carried over — skills, memory, the rubric grader? | A failure the comparison produces that one of them would have prevented. Not before ([6.9.2](06-agent.md#652-the-configuration-ported-from-dcode)). |
+| Which run-tree fields are worth keeping? | A metric actually reading the tree. 79% of the bytes are middleware wrappers, but "unused today" is not "surplus" ([7.6](07-observability.md#76-the-record-one-run-tree)). |
 | Default repetition count: 3 is cheap but weak, 5 costs most of a day's quota on a full suite. | The first real baseline's observed run-to-run variance. |
 | Should **pinned-model mode** be the default comparison mode, with pool mode reserved for final validation? | Whether pool-mode variance actually swamps the effect sizes we care about. |
 | Does the agent get a git tool? | If yes, scenarios can ship real history ("find the commit that broke this") and materialization becomes a bundle restore instead of `git archive`. |
 | How does a free-pool judge get validated? | It must agree with the Claude judge on a labelled set before its scores can be trusted. |
 | Where does shared cooldown state live, if it ever needs to be shared across processes? | A second concurrent consumer actually existing. |
 | Where do per-provider curated docs live once the provider list grows? | The provider list growing past what one page holds ([5. Providers](05-providers.md)). |
-| Should a node's slice of the log grow when the pool has the room, or stay narrow on principle? | An L2 scenario run with `write` given the `notes` and `exec` kinds. The recorded failure it targets is a writer acting on a brief that carried nothing ([6.5](06-agent.md#65-what-each-role-sees)). |
+| Should the web explorer's notes be read by the coding agent automatically, or only when the brief says to? | A run where the coding agent ignored a `/research/` file that answered its question ([15.1](15-explorer.md#151-what-it-is-for)). |
 
 ## 13.5 Settled decisions
 
@@ -171,8 +174,8 @@ still holds.
 | Provider SDKs run with `max_retries=0`. | The SDK would retry the same dead account — the job the router owns one level up. |
 | Scenarios live in a separate repo from the harness. | Configurations are branches of this repo; anything shared and append-only would conflict on every merge. |
 | Results are one directory per run, with no index. | Same reason. A summary is a glob. |
-| ~~LangSmith is for watching, never for the record.~~ **Reopened.** The record is now the run tree LangSmith already built, *snapshotted* to disk after the run. | The requirement — a verdict rests on files on disk — is met by the snapshot. What expiry forbids is depending on the hosted copy at scoring time, not asking for the tree once while it exists ([7.7](07-observability.md#77-the-record-one-run-tree)). |
-| ~~One architecture; the conversational loop is deleted, not disabled.~~ **Reopened.** | Its inputs changed: the SDK now ships summarization and offloading, and the floor for coding work is 128,000 tokens rather than 6,000. The 39× result still stands, which is why the new arm is a configuration and not a merge ([6.1](06-agent.md#61-two-architectures-one-question)). |
+| ~~LangSmith is for watching, never for the record.~~ **Reopened.** The record is now the run tree LangSmith already built, *snapshotted* to disk after the run. | The requirement — a verdict rests on files on disk — is met by the snapshot. What expiry forbids is depending on the hosted copy at scoring time, not asking for the tree once while it exists ([7.6](07-observability.md#76-the-record-one-run-tree)). |
+| ~~One architecture; the conversational loop is deleted, not disabled.~~ **Reopened.** | Its inputs changed: the SDK now ships summarization and offloading, and the floor for coding work is 128,000 tokens rather than 6,000. The 39× result still stands, which is why the new arm is a configuration and not a merge ([6.1](06-agent.md#61-one-conversation-on-the-pool)). |
 | Only the sync path is implemented. | Both callers are sync. A hand-written async loop was built, found unused, and removed. |
 | Docker is optional until L3. | L0–L2 scenarios are authored dependency-free, so the restricted `python`/`pytest` backend suffices. |
 

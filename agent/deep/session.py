@@ -1,10 +1,11 @@
 """One deepagents session over one workdir, on the pool.
 
-The second agent architecture, built to be measured against the first rather
-than to replace it (docs/12-development-harness.md#127). The narrow-role graph
-in `agent/harness/` splits work so every call fits the pool's *narrowest*
-member; this one keeps a conversation and makes it fit by staying on the pool's
-*widest* members and letting the SDK compact the history.
+The coding arm. It keeps a conversation and makes it fit by staying on the
+pool's *widest* members and letting the SDK compact the history. The narrow-role
+graph it replaced did the opposite -- it split work so every call fitted the
+pool's *narrowest* member -- and it is retired: the constraint that produced it
+was lifted once a session could route to members holding 128,000 input tokens
+([6. The coding agent](../../docs/06-agent.md)).
 
 `build_agent` is this project's `create_cli_agent`
 (`libs/code/deepagents_code/agent.py`, MIT): the function that turns a generic
@@ -113,8 +114,8 @@ def check_floor(router, floor: int = CONTEXT_FLOOR) -> int:
     if not wide:
         raise SystemExit(
             f"No provider in the pool holds {floor:,} input tokens, so this "
-            f"harness cannot run on it. Widen the floor, or use "
-            f"`python -m agent.harness`, which is built for narrow members.")
+            f"agent cannot run on it. Widen the floor with DEEP_CONTEXT_FLOOR, "
+            f"or add a wide-context member to the pool.")
     logger.info(f"{len(wide)} of {len(router.providers)} providers meet the "
                 f"{floor:,}-token floor.")
     return len(wide)

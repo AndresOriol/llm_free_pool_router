@@ -7,14 +7,16 @@ A review answers what the metrics cannot: **where a run turned, and what context
 it had at that point.** It carries no score — the verdict is in the run's
 `run.json`, computed from hidden tests.
 
-**The same six headings serve both arms**, so a `session` review and a
-`deepagents` review can be read against each other. What differs is the evidence
-and therefore the question:
+**The six headings are fixed**, so reviews can be read against each other. The
+evidence a review has to work from is `trace.json` when tracing was on and
+`trace.jsonl` plus `stderr.log` otherwise, and "what it had there" means what was
+still in the history after compaction — and what the agent never went and
+fetched.
 
-| Arm | Evidence | "What it had there" means |
-| --- | --- | --- |
-| Narrow roles (`session`, `context-and-gate`, `harness-v*`) | `journal.jsonl`, `steps/NN-<role>.md`, `rationale.md`, `trace.jsonl` | What the orchestrator's brief pushed down to that role |
-| Conversational (`deepagents`) | `trace.json` when tracing is on, otherwise `stderr.log` | What was still in the history after compaction, and what the agent never went and fetched |
+Reviews of runs from the deleted narrow-role arm (`session`, `context-and-gate`,
+`harness-v*`) are still here and still readable. They quote `journal.jsonl`,
+`steps/NN-<role>.md` and `rationale.md`, which no run produces any more
+([6.1.1](../../../docs/06-agent.md#611-the-arm-that-was-deleted)).
 
 Two things to know before reading a `deepagents` review. `trace.json` is fetched
 from LangSmith *after* the run, so a timed-out run has none and the review works

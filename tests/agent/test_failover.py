@@ -16,7 +16,11 @@ from agent.runtime.chat_model import RouterChatModel
 from langchain_core.messages import AIMessage
 from llm_router.base_provider import LLMProvider
 from llm_router.router import AutonomousLLMRouter
-from tests.agent.test_harness import check
+
+
+def check(label, cond):
+    if not cond:
+        raise AssertionError(label)
 
 
 class _Exc(Exception):

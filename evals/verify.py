@@ -33,11 +33,10 @@ def _normalize(patch_text: str) -> str:
 
 
 ARTIFACT_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-                 # A session initializes a repo to commit into and journals its
-                 # steps beside it. Both are the harness's own bookkeeping, not
-                 # the change under test, and left in they would dominate the
-                 # diff the judge reads.
-                 ".git", ".harness"}
+                 # An agent that commits its own work initializes a repo to
+                 # commit into. That is its bookkeeping, not the change under
+                 # test, and left in it would dominate the diff the judge reads.
+                 ".git"}
 
 
 def _force_writable(func, path, _exc) -> None:

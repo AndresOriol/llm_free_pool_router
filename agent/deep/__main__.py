@@ -1,8 +1,8 @@
 """CLI: python -m agent.deep [workdir] < brief.md
 
-Same shape as `python -m agent.harness` on purpose -- workdir as an argument,
-task on stdin, exit at EOF -- so an eval configuration can swap one for the
-other by changing `agent_cmd` and nothing else (evals/agent_config.py).
+Workdir as an argument, task on stdin, exit at EOF. `python -m agent.explore`
+takes the same shape, so an eval configuration or a script swaps one agent for
+the other by changing `agent_cmd` and nothing else (evals/agent_config.py).
 
 Environment:
   ROUTER_CONFIG      pool config to load; unset uses llm_router/config.yaml
@@ -72,11 +72,11 @@ def main() -> None:
     # The eval runner names the trace itself, per run, so a configuration
     # cannot set DEEP_TRACE_FILE ahead of time -- it does not yet know the run
     # directory. It exports EVAL_TRACE_FILE instead, pointing at the flat
-    # `trace.jsonl` the narrow-role arm writes from callbacks. This arm's record
-    # is one nested object fetched from LangSmith (agent/deep/trace.py), so it
-    # takes the directory and not the name: writing a JSON tree to a `.jsonl`
-    # path would both lie about the format and feed evals/metrics.py a file it
-    # would parse to zero events without complaining.
+    # `trace.jsonl` the callback handler writes (agent/runtime/trace.py). The
+    # run tree is a second, nested record fetched from LangSmith
+    # (agent/deep/trace.py), so it takes the directory and not the name:
+    # writing a JSON tree to a `.jsonl` path would both lie about the format
+    # and overwrite the file every metric is summed over.
     trace_file = os.environ.get("DEEP_TRACE_FILE")
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
         trace_file = Path(os.environ["EVAL_TRACE_FILE"]).with_name("trace.json")

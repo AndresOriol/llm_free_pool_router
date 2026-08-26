@@ -22,8 +22,10 @@ several, review the first and say so.
 The system under review is a **conversational coding agent** — `create_deep_agent`
 configured the way `deepagents-code` configures one, with this project's free-tier
 pool as its model (`agent/deep/`,
-[6.9](../../docs/06-agent.md#69-the-deepagents-arm)). One conversation, one
-workdir, one task on stdin.
+[6.5](../../docs/06-agent.md#65-what-makes-it-a-coding-agent)). One conversation, one
+workdir, one task on stdin. It is the **only** coding agent; the narrow-role arm
+it was compared against is deleted
+([6.1.1](../../docs/06-agent.md#611-the-arm-that-was-deleted)).
 
 Four properties of it shape every review you will write:
 
@@ -32,8 +34,8 @@ Four properties of it shape every review you will write:
   "it acted blind" is never a handoff bug here — it is either an agent that did
   not look, or a history that no longer contained what it had already found.
 - **The history is compacted by the SDK**, not by a design of ours.
-  Summarization, message eviction and tool-output offloading are the bet this arm
-  is testing: that they now do by default what the narrow-role graph did by hand.
+  Summarization, message eviction and tool-output offloading are the standing
+  bet: that they do by default what the deleted narrow-role graph did by hand.
   When a run forgets something it established earlier, that is the bet failing,
   and it is the most valuable thing you can find.
 - **The model changes between steps.** The router picks per call, so one session
@@ -46,11 +48,14 @@ Four properties of it shape every review you will write:
   refused command is a tooling failure, not a reasoning one
   (`agent/deep/shell.py`, `agent/runtime/backend.py`).
 
-**Why this arm exists at all** is a cost claim: the conversational loop lost the
-last comparison 226,854 input tokens to 5,756, and this is the re-run
-([6.8.1](../../docs/06-agent.md#681-the-cost-result-is-the-one-that-replicated)).
+**The open question about it is cost.** The conversational loop lost the last
+comparison 226,854 input tokens to 5,756, and the arm that won was retired
+without the re-run ever happening
+([6.4.1](../../docs/06-agent.md#641-the-cost-result-is-the-one-that-replicated)).
 Every review therefore says something about *token trajectory*, not only about
-correctness. A run that passed expensively has not settled the question.
+correctness. A run that passed expensively has not settled the question — and
+there is no longer a cheaper arm to fall back to, which makes the number matter
+more rather than less.
 
 `agent/deep/session.py` holds the loop's knobs; `agent/deep/system_prompt.md` is
 what the model was told.
@@ -77,26 +82,31 @@ the time of writing, **no recorded deepagents run has one.** Do not stall waitin
 for it and do not make its absence the finding; note in §6 that the turn-level
 record was unrecoverable, and review the run from `stderr.log`.
 
-**Several zeroes in `run.json` are artifacts, not measurements.**
-`evals/metrics.py` derives its counts from `trace.jsonl`, the flat event log the
-*narrow-role* arm writes. This arm writes no such file, so `provider_calls`,
-`tokens_in`, `tokens_out`, `steps`, `tool_calls`, `models_used`, `ran_own_tests`
-and `self_corrected` read zero or empty on every deepagents run regardless of what
-happened. **Never cite them, and never let a reader infer this arm is cheap from
-`tokens_in: 0`** — that is the exact number the two arms are being compared on.
-Count from `stderr.log` instead, and say that you did.
+**Check `run.json`'s counts against the run's date before citing them.**
+`evals/metrics.py` derives `provider_calls`, `tokens_in`, `tokens_out`, `steps`,
+`tool_calls`, `models_used`, `ran_own_tests` and `self_corrected` from
+`trace.jsonl`. That file is now written by this arm too — the JSONL callback
+handler is attached in `agent/deep/session.py` — so on a current run the numbers
+are real and you should use them.
 
-A run from the narrow-role arm (`config: session`, `context-and-gate`,
-`harness-v*`) is a different animal, with `journal.jsonl`, `steps/NN-<role>.md`
-and `rationale.md` in place of the tree. Read those files rather than this
-section's table — `docs/07-observability.md#76` describes them — and keep the same
-six headings, so the two arms' reviews stay readable side by side.
+**On runs recorded before that was wired, every one of them reads zero**, because
+nothing wrote the file. A zero is therefore ambiguous: it means either "no
+`trace.jsonl`" or "genuinely nothing happened". Look for the file before quoting
+the number, and **never let a reader infer this arm is cheap from
+`tokens_in: 0`** — that is the exact number the arm is judged on. With no file,
+count from `stderr.log` and say that you did.
+
+Runs from the deleted narrow-role arm (`config: session`, `context-and-gate`,
+`harness-v*`) are a different animal, with `journal.jsonl`, `steps/NN-<role>.md`
+and `rationale.md` in place of the tree. Nothing produces those any more, but old
+runs still carry them; read those files rather than this section's table and keep
+the same six headings.
 
 ## 2. Reconstruct the trajectory
 
 With a `trace.json`, read `turns`. The flattening that used to be your job is now
 done on the way to disk
-([7.8](../../docs/07-observability.md#78-what-goes-to-disk-the-condensed-run)):
+([7.8](../../docs/07-observability.md#77-what-goes-to-disk-the-condensed-run)):
 the middleware spans are gone and each tool call sits under the turn that asked
 for it. What is *not* pruned is the conversation: every turn keeps its `input`,
 the whole history that call received, so §4's question is answered by reading
@@ -179,7 +189,7 @@ or if no single turn is decisive, say so instead of manufacturing one.
 
 ## 4. Reconstruct what the conversation held there — the core of the review
 
-This is where the two arms' reviews differ most. There is no brief to quote. The
+This is where a review of this arm differs most from the old ones. There is no brief to quote. The
 question is what was still in the history at that turn, and it wants a concrete
 answer:
 
@@ -192,7 +202,7 @@ answer:
   `context_rewritten` date the compaction, and diffing that turn's `input`
   against the previous turn's names exactly which messages stopped being
   visible. Cite the turn number and the message that went missing.
-- **What it never went and got.** Unlike a worker in the narrow-role arm, this
+- **What it never went and got.** Unlike a worker in the deleted narrow-role arm, this
   agent *could* have looked. If it edited a file it never read, or fixed a symptom
   without opening the module that caused it, that is a judgement failure and you
   should call it one — not a context failure.

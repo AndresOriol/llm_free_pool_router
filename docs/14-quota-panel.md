@@ -59,7 +59,7 @@ limits nobody is using.
 where the panel is opened before any agent has run.
 
 Recording happens at the one place that knows which account served a call: the
-failover loop in [`RouterChatModel`](../agent/router_chat_model.py). Token counts
+failover loop in [`RouterChatModel`](../agent/runtime/chat_model.py). Token counts
 are the provider's own numbers, never `estimate_tokens` — a panel reporting a
 chars/4 guess as consumption would be worse than reporting nothing.
 

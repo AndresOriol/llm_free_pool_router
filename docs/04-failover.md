@@ -48,7 +48,7 @@ floor is a **preference** — prefer a wide member, settle for a narrow one rath
 than stall an unattended run behind a busy account.
 
 `strict_context` makes it a **hard filter**, and the conversational harness needs
-that ([6.9.1](06-agent.md#691-the-pool-drops-in-with-no-adapter)). Falling
+that ([6.5.1](06-agent.md#651-the-pool-drops-in-with-no-adapter)). Falling
 through to an 8,000-token member there is not a degraded answer but a failed
 call, and Groq's 100,000-tokens-per-day ceiling means those members could never
 have served the request anyway. When nothing wide is free, selection returns

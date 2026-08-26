@@ -23,15 +23,15 @@ would silently invalidate old comparisons.
 **The requirement stands; the rule that implemented it was too strong.** What
 expiry actually forbids is *depending on the hosted copy at scoring time*. It
 does not forbid asking LangSmith for the tree once, while it still exists, and
-writing it down. That distinction is what [7.7](#77-the-record-one-run-tree)
+writing it down. That distinction is what [7.6](#76-the-record-one-run-tree)
 takes, and it is the difference between snapshotting a structure that already
 exists and rebuilding it by hand from callbacks.
 
-The two arms are at different points in that move
-([6.1](06-agent.md#61-two-architectures-one-question)): the narrow-role harness
-still composes its record locally ([7.3](#73-the-local-trace),
-[7.6](#76-what-a-session-records-about-itself)); the deepagents arm fetches the
-tree.
+So a run leaves **two** records, and both are load-bearing. The flat JSONL
+([7.3](#73-the-local-trace)) is what every automatic metric is summed over and
+is written whether or not LangSmith is reachable; the fetched tree
+([7.6](#76-the-record-one-run-tree)) is what a human or a post-mortem agent
+actually reads.
 
 ## 7.2 LangSmith
 
@@ -63,7 +63,7 @@ is attached explicitly by the router's failure handler
 Set `EVAL_TRACE_FILE` and the agent appends one JSON object per LLM/tool event:
 
 ```bash
-EVAL_TRACE_FILE=run.jsonl python -m agent.harness workdir < brief.md
+EVAL_TRACE_FILE=run.jsonl python -m agent.deep workdir < brief.md
 ```
 
 Unset, nothing is attached and the agent behaves exactly as before. Zero cost
@@ -125,48 +125,24 @@ Llama3_70b_groq_1 has finished its cooldown and is available again.
 Everything else is quieted deliberately, because these five lines are the ones
 that explain a run's behaviour.
 
-## 7.6 What a session records about itself
+## 7.6 The record: one run tree
 
-The trace answers *what happened*. A session harness run also has to answer
-*what each role was given*, and that is a different file.
+The narrow-role arm wrote four files about itself, three of which recorded
+handoffs *between roles*. A conversation has no handoffs, so when that arm was
+deleted ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)) the only record left
+was a flat event log that a reader has to re-assemble into the tree it came
+from.
 
-| Under the workdir's `.harness/` | One line/file per | Holds |
-| --- | --- | --- |
-| `journal.jsonl` | completed step | The brief (`goal`, `context`, `done_when`), the resulting `status` and `finding`, and the commands run with their exit codes |
-| `steps/NN-<role>.md` | model turn | The brief, the prompt as rendered, the raw reply before parsing, and the tool calls with their outputs |
-| `reports/session-*.md` | session | The rationale, built from the journal — the artefact a human reviews instead of the code |
-
-The split is a cost decision. The journal is the crash-resume substrate
-([6.1](06-agent.md#61-two-architectures-one-question)),
-re-read line by line every time a killed session resumes, so the bulk stays out
-of it. The transcript runs to a few kilobytes per turn and is only opened when a
-step needs explaining.
-
-**Why the transcript exists.** A recorded run's journal said a writer was
-blocked for want of the contents of a file, and nothing on disk said what the
-writer had been handed. The orchestrator curating context downward is the whole
-mechanism of the session design
-([design note §8.1](design/long-run-harness.md#81-the-handoff-envelope)), and it
-was the one variable not being logged. Naming a failure and diagnosing it are
-different things, and only the second changes anything.
-
-The eval runner copies all three into the run's results directory, before it
-prunes the workdir. They are what the per-run post-mortem reads
-([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
-
-## 7.7 The record: one run tree
-
-What [7.6](#76-what-a-session-records-about-itself) describes is four files, and
-three of them exist to record handoffs *between narrow roles*. A conversation
-has no handoffs, so for the deepagents arm
-([6.9](06-agent.md#69-the-deepagents-arm)) most of that record has nothing to
-describe — and the part that remains is a flat event log that a reader has to
-re-assemble into the tree it came from.
+The JSONL in [7.3](#73-the-local-trace) is still written, and still has to be:
+every automatic metric is a sum over it ([10. Metrics](10-metrics.md)), and it
+lands on disk whether or not LangSmith is reachable. What it does not do is
+*read* well. So the two coexist and answer different questions — the flat file
+is what gets counted, the tree below is what gets read.
 
 So that arm records the tree instead, at
 [agent/deep/trace.py](../agent/deep/trace.py): one nested JSON object per run,
 built from the tree LangSmith already assembled and then condensed down to the
-turns, the tool calls and what each one cost ([7.8](#78-what-goes-to-disk-the-condensed-run)).
+turns, the tool calls and what each one cost ([7.7](#77-what-goes-to-disk-the-condensed-run)).
 
 ```bash
 DEEP_TRACE_FILE=run-tree.json python -m agent.deep workdir < brief.md
@@ -196,7 +172,7 @@ file exists to avoid.
 **Everything the vendor returns is fetched** — which under v2 means asking for
 it, since the endpoint returns bare ids unless the fields are named, so the
 fetch names all of them. What is *written* is smaller, and deliberately: see
-[7.8](#78-what-goes-to-disk-the-condensed-run).
+[7.8](#77-what-goes-to-disk-the-condensed-run).
 
 **Children are sorted by `start_time`.** `traces.list_runs` returns the batch
 newest-first, so appending in arrival order built every tree backwards — turn
@@ -207,7 +183,7 @@ the context shrinking from one turn to the next instead of growing.
 and the record says `"run": null` — which is the right failure, because losing
 a record is bad and losing the *run* because recording it failed is worse.
 
-## 7.8 What goes to disk: the condensed run
+## 7.7 What goes to disk: the condensed run
 
 The fetched tree is faithful and unreadable. The first real one measured **22 MB
 across 255 spans** for a 17-turn run, and **88% of that was `inputs`** — because
