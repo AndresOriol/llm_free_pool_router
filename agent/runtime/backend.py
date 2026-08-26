@@ -1,9 +1,9 @@
 """The filesystem jail, plus enough `execute` for the agent to run its own tests.
 
 Built on deepagents' `FilesystemBackend`, which is where the path-jailed
-`glob`/`grep`/`read`/`write` come from. Both arms sit on it. It is all that
-agent/harness takes from deepagents, which drives its own graph; agent/deep
-takes the agent loop as well.
+`glob`/`grep`/`read`/`write` come from. Both agents sit on it -- the coding
+agent (agent/deep) and the web explorer (agent/explore) -- and both take the
+agent loop from deepagents as well.
 
 `FilesystemBackend` alone exposes no `execute`, so an agent on it can write code
 but never run it -- it cannot close its own loop (write a test, run it, react to
@@ -109,6 +109,13 @@ class RestrictedShellBackend(FilesystemBackend, SandboxBackendProtocol):
         if "/" in program or "\\" in program:
             return (f"'{program}' names a path. Programs must be named bare, "
                     f"e.g. 'python -m pytest'.")
+        if not self._allowed:
+            # An agent configured with no programs at all -- the explorer, whose
+            # job is reading and writing, not running. Saying "only runs []" to
+            # a model reads as a bug it should work around, and it will try.
+            return ("there is no shell here: this agent runs no programs at "
+                    "all. Use the file tools, and the web tools if you have "
+                    "them; there is nothing to execute.")
         if program not in self._allowed:
             return (f"'{program}' is not allowed. This backend only runs "
                     f"{sorted(self._allowed)} (named bare, no path).")

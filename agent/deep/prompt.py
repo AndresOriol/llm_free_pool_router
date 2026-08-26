@@ -41,19 +41,19 @@ _TEMPLATE = Path(__file__).with_name("system_prompt.md")
 # Kept from dcode: the two places a model reaches for a shell when a first-class
 # tool exists. Both were worth saying out loud there and are worth more here,
 # because a shell command that edits a file bypasses the backend's own checks.
-_FS_TOOL_GUIDANCE = (
+FS_TOOL_GUIDANCE = (
     "IMPORTANT: Use the specialized tools instead of shell commands:\n\n"
     "- `edit_file` over `sed`/`awk`\n"
     "- `write_file` over `echo`/heredoc"
 )
 
-_HEADLESS_PREAMBLE = (
+HEADLESS_PREAMBLE = (
     "You received a single task and must complete it fully and autonomously. "
     "There is no human available to answer follow-up questions, so do NOT ask "
     "for clarification — make reasonable assumptions and proceed."
 )
 
-_HEADLESS_AMBIGUITY = (
+HEADLESS_AMBIGUITY = (
     "- Do NOT ask clarifying questions — there is no human to answer them. Make "
     "reasonable assumptions and proceed.\n"
     "- If you encounter ambiguity, choose the most reasonable interpretation and "
@@ -103,9 +103,9 @@ def build(floor: int, members: int = 0,
         .replace("{mode_description}",
                  "non-interactive (headless) mode — there is no human operator "
                  "monitoring your output in real time")
-        .replace("{interactive_preamble}", _HEADLESS_PREAMBLE)
-        .replace("{ambiguity_guidance}", _HEADLESS_AMBIGUITY)
-        .replace("{filesystem_tool_guidance}", _FS_TOOL_GUIDANCE)
+        .replace("{interactive_preamble}", HEADLESS_PREAMBLE)
+        .replace("{ambiguity_guidance}", HEADLESS_AMBIGUITY)
+        .replace("{filesystem_tool_guidance}", FS_TOOL_GUIDANCE)
         .replace("{model_identity_section}", pool_identity_section(floor, members))
         .replace("{working_dir_section}", workdir_section())
     )

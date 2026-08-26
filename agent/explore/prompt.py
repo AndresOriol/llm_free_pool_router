@@ -1,0 +1,53 @@
+"""The explorer's system prompt.
+
+Assembled the same way `agent/deep/prompt.py` assembles the coding agent's, and
+sharing three of its sections outright -- the pool identity, the jail's `/`, and
+the headless preamble are facts about *this project*, not about coding, so a
+second copy of them would be a second thing to keep true.
+
+What is not shared is the body. The coding prompt is ported from
+`deepagents-code` and is about editing a repository; this one is about the web
+and about leaving a written record, which is a different job with a different
+failure mode. The coding agent fails by breaking the build. This one fails by
+writing something confident and unsourced, so the template spends most of its
+length on citation and on saying what could not be found.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from pathlib import Path
+from typing import Optional, Sequence
+
+from agent.deep.prompt import (FS_TOOL_GUIDANCE, HEADLESS_AMBIGUITY,
+                               HEADLESS_PREAMBLE, pool_identity_section,
+                               workdir_section)
+
+logger = logging.getLogger("harness.explore")
+
+_TEMPLATE = Path(__file__).with_name("system_prompt.md")
+
+
+def build(floor: int, members: int = 0,
+          extra_sections: Optional[Sequence[str]] = None) -> str:
+    """The full system prompt for one exploration."""
+    result = (
+        _TEMPLATE.read_text(encoding="utf-8")
+        .replace("{interactive_preamble}", HEADLESS_PREAMBLE)
+        .replace("{ambiguity_guidance}", HEADLESS_AMBIGUITY)
+        .replace("{filesystem_tool_guidance}", FS_TOOL_GUIDANCE)
+        .replace("{model_identity_section}", pool_identity_section(floor, members))
+        .replace("{working_dir_section}", workdir_section())
+    )
+
+    if extra_sections:
+        result = result.rstrip() + "\n\n" + "\n\n".join(extra_sections) + "\n"
+
+    # A typo in the template would otherwise ship a literal `{placeholder}` to
+    # the model, which reads as an instruction it cannot follow rather than as
+    # a bug.
+    unreplaced = re.findall(r"\{[a-z_]+\}", result)
+    if unreplaced:
+        logger.warning(f"System prompt has unreplaced placeholders: {unreplaced}")
+    return result
