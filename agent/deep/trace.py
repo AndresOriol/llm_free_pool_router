@@ -32,7 +32,8 @@ by hand from callbacks.
   deciding which fields are surplus stays a question to answer against a real
   tree rather than in advance.
 
-The tree arrives flat, so the nesting is rebuilt here from `parent_run_ids`.
+The tree arrives flat, so the nesting is rebuilt here from `parent_run_ids` and
+sorted back into `start_time` order.
 """
 
 from __future__ import annotations
@@ -95,8 +96,13 @@ def nest(runs: list) -> Optional[dict]:
     """The trace's runs, flat and in start_time order, as one nested object.
 
     `parent_run_ids` is the ancestor chain root-first, so the immediate parent
-    is its last entry. Children are appended in the order they arrive, which is
-    start_time order, so the tree reads chronologically at every level.
+    is its last entry.
+
+    Children are sorted by `start_time`, so the tree reads chronologically at
+    every level. This is not decoration. `traces.list_runs` returns the batch
+    newest-first, and appending in arrival order silently built every tree
+    backwards -- turn 17 first, turn 1 last -- which reads as a plausible run
+    right up until you notice the context shrinking instead of growing.
 
     A run whose parent is missing from the batch is treated as a root rather
     than dropped: losing a span silently is the failure this whole module is
@@ -124,7 +130,7 @@ def nest(runs: list) -> Optional[dict]:
     if not roots:
         return None
     if len(roots) == 1:
-        return roots[0]
+        return _sorted(roots[0])
 
     named = next((r for r in roots
                   if str(r.get("id")) == str(r.get("trace_id"))), roots[0])
@@ -133,7 +139,17 @@ def nest(runs: list) -> Optional[dict]:
             named.setdefault("child_runs", []).append(orphan)
     logger.warning(f"Trace had {len(roots)} roots; kept {named.get('id')} as "
                    f"the root and hung the rest off it.")
-    return named
+    return _sorted(named)
+
+
+def _sorted(node: dict) -> dict:
+    """One node's descendants, put back into start_time order."""
+    children = node.get("child_runs")
+    if children:
+        children.sort(key=lambda c: str(c.get("start_time") or ""))
+        for child in children:
+            _sorted(child)
+    return node
 
 
 async def _list_runs(client, trace_id: str, project_id: str) -> Optional[dict]:

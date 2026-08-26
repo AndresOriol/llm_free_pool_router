@@ -22,9 +22,11 @@ from agent.deep.trace import nest, write
 class _Run:
     """Stand-in for a v2 `Run`: a pydantic model, so it knows how to dump."""
 
-    def __init__(self, run_id, trace_id, ancestors, name):
+    def __init__(self, run_id, trace_id, ancestors, name, start=None):
         self._data = {"id": run_id, "trace_id": trace_id, "name": name,
                       "parent_run_ids": list(ancestors)}
+        if start is not None:
+            self._data["start_time"] = start
 
     def model_dump(self, **_kwargs):
         return dict(self._data)
@@ -63,10 +65,14 @@ def _run():
         return 1 + sum(_count(kid) for kid in node.get("child_runs", []))
     assert _count(tree) == 4, _count(tree)
 
-    # Children come back in the order they arrived, which is start_time order.
-    # The response is ordered; the dict that rebuilds the tree must not undo it.
-    wide = [_Run("root", "root", [], "agent")] + [
-        _Run(f"k{i}", "root", ["root"], f"step-{i}") for i in range(10)
+    # Children come back in start_time order however the batch arrived. This is
+    # the check for the ordering bug: `traces.list_runs` returns newest-first,
+    # and appending in arrival order built every tree backwards -- last turn
+    # first -- which reads as a plausible run until you notice the context
+    # shrinking. So the batch here is handed over reversed on purpose.
+    wide = [_Run("root", "root", [], "agent", "2026-01-01T00:00:00Z")] + [
+        _Run(f"k{i}", "root", ["root"], f"step-{i}", f"2026-01-01T00:00:{i:02d}Z")
+        for i in reversed(range(10))
     ]
     assert _names(nest(wide)) == [f"step-{i}" for i in range(10)]
 
