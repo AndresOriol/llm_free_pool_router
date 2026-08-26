@@ -21,7 +21,7 @@ architectures to keep" ([6.1](../../../docs/06-agent.md#61-two-architectures-one
 | Arm | Config | What it is | What it leaves behind |
 | --- | --- | --- | --- |
 | Narrow roles | `session`, `context-and-gate`, `harness-v*` | A LangGraph state machine of narrow roles over a shared log, briefs pushed down | `journal.jsonl`, `steps/NN-<role>.md`, `rationale.md`, `trace.jsonl` |
-| **Conversational** | `deepagents` | One `create_deep_agent` conversation, SDK-compacted, on the pool's wide members | `trace.json` (a LangSmith run tree) when tracing is on, and `stderr.log` |
+| **Conversational** | `deepagents` | One `create_deep_agent` conversation, SDK-compacted, on the pool's wide members | `trace.json` (the condensed run: a header, then `turns`, each with the history that entered the model and what came back) when tracing is on, and `stderr.log` |
 
 They are run interleaved and must be analysed together:
 
@@ -112,8 +112,8 @@ While reading, check three things that only show up in the evidence:
   not happen.
 - **Does every claim in that account trace to a command that actually ran?** The
   journal has exit codes on the narrow arm; on the conversational arm you need the
-  tool spans in `trace.json`, and without one you should say the claim is
-  unverifiable rather than accept it.
+  `tool_results` on a turn in `trace.json`, and without one you should say the
+  claim is unverifiable rather than accept it.
 - **Did the docs get updated?** A code change with a stale doc is a failed session,
   not a passing one with a nit.
 

@@ -65,7 +65,7 @@ ls evals/results/runs/<run_id>/
 | --- | --- |
 | `run.json` | The verdict and the automatic metrics: `outcome`, `failure_class`, `f2p_*`, `p2p_*`, `wall_time_s`, `tampered_files`, and the diff summary |
 | `stderr.log` | **The router's narration — on this arm, your primary source.** One `Routing to <account> (model=…, ~N tok)` line per provider call, plus every reroute, cooldown and pool-wait, all timestamped |
-| `trace.json` | The run tree fetched from LangSmith: one nested object, each span with inputs, outputs, timing, tokens and error. The best source **when it exists** — see below |
+| `trace.json` | The condensed run fetched from LangSmith: a `run` header, the `task`, the `system_prompt`, then `turns` — each turn holding `input` (the whole conversation as that call received it), `output` (what came back) and `tool_results`. The best source **when it exists** — see below |
 | `diff.patch` | What actually changed in the tree |
 | `verify.txt` | The hidden tests' output — tail-read it, pytest puts the summary last |
 | `stdout.log` | The agent's final message and its todo list, printed by `_summary` in `agent/deep/__main__.py` |
@@ -94,11 +94,35 @@ six headings, so the two arms' reviews stay readable side by side.
 
 ## 2. Reconstruct the trajectory
 
-With a `trace.json`, walk the spans. The tree is large and mostly noise — of 93
-spans in a one-line fix, 72 were middleware wrappers carrying no information
-([7.7](../../docs/07-observability.md#77-the-record-one-run-tree)). Do not read it
-raw into your context. Flatten it first, keeping the `llm` and `tool` spans, then
-open only the ones that matter for their `inputs`/`outputs`.
+With a `trace.json`, read `turns`. The flattening that used to be your job is now
+done on the way to disk
+([7.8](../../docs/07-observability.md#78-what-goes-to-disk-the-condensed-run)):
+the middleware spans are gone and each tool call sits under the turn that asked
+for it. What is *not* pruned is the conversation: every turn keeps its `input`,
+the whole history that call received, so §4's question is answered by reading
+rather than by inference. That makes the file ~250 KB for a 17-turn run and
+**not something to `cat` whole**. Start with the header and the shape of the
+turns, then open the ones that matter:
+
+```bash
+python -c "import json;d=json.load(open('trace.json'));print(json.dumps(d['run'],indent=2));[print(t['n'],t['model'],t['context_messages'],'REWRITTEN' if t.get('context_rewritten') else '',[r['name'] for r in t.get('tool_results',[])]) for t in d['turns']]"
+```
+
+Five fields carry most of the diagnosis:
+
+- **`turns[n].input`** — the whole conversation as that call received it. This
+  is the file's reason to exist: it settles what the model could see, so never
+  infer context loss you could have read. Roles are `system` (stood in for by a
+  marker, since the prompt is written once at the top), `human`, `ai` and
+  `tool`; a `tool` message carries the `tool_call_id` that requested it.
+- **`context_messages`**, read down the column. It should climb. A drop, or a
+  `context_rewritten: true`, dates a summarization — then diff that turn's
+  `input` against the previous turn's to say exactly what stopped being visible.
+- **`attempts`**, present only on turns where the pool had to retry. Its
+  `error` is the provider's own words.
+- **`tool_results[].status` and `.output`** — what the tool actually returned,
+  not what the model then claimed it returned.
+- **`run.turns` against `run.seconds`** — see the gap analysis in §3.
 
 Without one, reconstruct from `stderr.log`. Every provider call is one timestamped
 line, so the step count, the model mix, the reroutes and — most usefully — **the
@@ -164,7 +188,10 @@ answer:
   history** when it acted. A fact discovered at step 4 and absent at step 30 is the
   compaction bet failing, and it is the most important thing this review can
   report. The `~N tok` sawtooth in `stderr.log` dates the compaction; with a
-  `trace.json`, the step's `inputs` settle it outright.
+  `trace.json` this is not a matter of inference at all: `context_messages` and
+  `context_rewritten` date the compaction, and diffing that turn's `input`
+  against the previous turn's names exactly which messages stopped being
+  visible. Cite the turn number and the message that went missing.
 - **What it never went and got.** Unlike a worker in the narrow-role arm, this
   agent *could* have looked. If it edited a file it never read, or fixed a symptom
   without opening the module that caused it, that is a judgement failure and you
@@ -243,7 +270,7 @@ Say in the header line that the counts came from `stderr.log` rather than
 `run.json`, whenever they did.
 
 **Every claim cites where it came from** — `stderr.log:412`, `verify.txt:20`, a
-span id in `trace.json`, a hunk in `diff.patch`. Not "the agent went off on its
+turn number in `trace.json`, a hunk in `diff.patch`. Not "the agent went off on its
 own" but "`stderr.log`: 25 calls in 97s, all `gemini-2.5-flash`; the first edit
 lands at 08:32:41 against `alerts/rules.py`, which no prior call had read". The
 reader must be able to open it and disagree with you.
@@ -258,7 +285,9 @@ itself the argument for turning tracing on. Write it every time anyway.
 - Do not score, rank, or compare configurations. One run carries no rate.
 - Do not cite `provider_calls`, `tokens_in`, `models_used`, `steps` or
   `self_corrected` from a deepagents `run.json`. They are zero by construction.
-- Do not read the whole `trace.json` into context. Flatten it first (§2).
+- Do not read the whole `trace.json` into context. It is condensed, not small —
+  every turn keeps its full history, so a 17-turn run is ~250 KB. Read the
+  header and the turn shape first, then open individual turns (§2).
 - Do not grade prose quality — that is J1's job, and J1 does not exist.
 - Do not read the withheld `evaluation/` material in the scenario repo as if the
   agent should have known it. It could not see it. Use it to say what a correct
