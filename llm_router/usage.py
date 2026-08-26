@@ -18,9 +18,13 @@ it cannot go stale behind an edited `config.yaml`. The panel joins them on
 
 A ledger line:
 
-    {"ts": 1756..., "provider": "GptOss120b_groq_1", "account": "groq_1",
+    {"ts": 1756..., "at": "2026-08-26T09:46:52+02:00",
+     "provider": "GptOss120b_groq_1", "account": "groq_1",
      "platform": "groq", "model": "openai/gpt-oss-120b",
      "tokens_in": 812, "tokens_out": 96, "outcome": "ok"}
+
+`ts` is what the panel measures windows with; `at` is the same instant written
+out in local time, for reading the file by eye.
 
 `tokens_in`/`tokens_out` are absent when the attempt was refused -- no tokens
 were spent -- and a refusal carries `retry_after` instead when the provider
@@ -48,6 +52,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional, Tuple
 
@@ -102,8 +107,14 @@ def record(provider: Any, tokens_in: Optional[int] = None,
     because it cost the account nothing, so the panel can leave it out of the
     request count.
     """
+    now = time.time()
     entry = {
-        "ts": round(time.time(), 3),
+        "ts": round(now, 3),
+        # The same instant, in the timezone of whoever is reading the file.
+        # Every window in the panel is computed from `ts`; this is here so a
+        # human scanning the ledger can tell which run a line belongs to
+        # without converting epoch seconds in their head.
+        "at": datetime.fromtimestamp(now).astimezone().isoformat(timespec="seconds"),
         "provider": getattr(provider, "name", "unknown"),
         "account": getattr(provider, "account", "") or "unknown",
         "platform": getattr(provider, "platform", "") or "unknown",
