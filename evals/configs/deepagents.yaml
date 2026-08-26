@@ -19,5 +19,5 @@ ref: harness/deepagents
 env_file: ../../llm_router/.env
 agent_cmd: ["python", "-m", "agent.deep", "{workdir}"]
 overrides:
-  router_config: llm_router/config.eval.yaml
+  router_config: llm_router/config.yaml
   env: {}

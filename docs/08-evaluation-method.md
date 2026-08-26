@@ -63,16 +63,21 @@ name: baseline
 repo: ../free_coding_agent
 ref: master                 # branch, tag or SHA
 overrides:
-  router_config: null       # or a path to an alternative config.yaml (ROUTER_CONFIG)
+  router_config: null       # a pool config, resolved in the repo (ROUTER_CONFIG)
   env:
     RECURSION_LIMIT: "150"
 ```
 
 Resolution is `git worktree add --detach`, so a configuration runs from a clean
 tree without disturbing your working copy — you can keep editing `master` while
-a comparison runs. The runner records the resolved **SHA** plus a hash of the
-effective overrides as the fingerprint: `ref: master` today and `ref: master`
-next week are different configurations, and the records say so.
+a comparison runs. `router_config` is the one path resolved against the repo
+rather than the worktree, which is why every configuration sets it to
+`llm_router/config.yaml`: one pool, shared by every arm, instead of each arm
+drawing from whatever its own commit pinned
+([5.2](05-providers.md#52-config-schema)). The runner records the resolved
+**SHA** plus a hash of the effective overrides as the fingerprint: `ref:
+master` today and `ref: master` next week are different configurations, and the
+records say so.
 
 A configuration may also **pin a single model**, bypassing failover. That isn't
 how the agent ships, but it's the lowest-variance way to attribute a change to

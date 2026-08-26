@@ -5,7 +5,7 @@ task on stdin, exit at EOF -- so an eval configuration can swap one for the
 other by changing `agent_cmd` and nothing else (evals/agent_config.py).
 
 Environment:
-  ROUTER_CONFIG      alternative pool config (evals use config.eval.yaml)
+  ROUTER_CONFIG      pool config to load; unset uses llm_router/config.yaml
   DEEP_TRACE_FILE    where to write the run tree; unset writes none
   EVAL_TRACE_FILE    set by the eval runner; the run tree lands beside it
   DEEP_CONTEXT_FLOOR override the input-token floor (default 128,000)

@@ -25,5 +25,5 @@ ref: harness/context-and-gate
 env_file: ../../llm_router/.env
 agent_cmd: ["python", "-m", "agent.harness", "{workdir}"]
 overrides:
-  router_config: llm_router/config.eval.yaml
+  router_config: llm_router/config.yaml
   env: {}

@@ -52,10 +52,12 @@ In order. The ordering is the argument.
 3. **Keep authoring scenarios.** `long-context` next: size-based routing is half
    the architecture and nothing probes it — and it is now the axis the two arms
    most obviously differ on.
-4. **Fix the dead-model crash properly.** `404 model_not_found` propagates and
-   kills a run ([4.6](04-failover.md#46-known-gaps)). Evals work around it with
-   a trimmed pool (`llm_router/config.eval.yaml`); the shipping pool still dies
-   on it. A decommissioned model should be disabled *permanently*, the way a
+4. **Make the dead-model retirement outlive the process.** `404
+   model_not_found` no longer kills a run — the router retires the member and
+   carries on ([4.6](04-failover.md#46-known-gaps)), which is what let the
+   trimmed eval pool go. But `retire()` marks one provider instance, so every
+   fresh run spends an attempt rediscovering the same dead model. A
+   decommissioned model should be disabled *permanently*, the way a
    rate-limited one is benched *temporarily*.
 5. **Prune the run tree.** 79% of a recorded tree was middleware wrapper spans
    carrying nothing ([7.7](07-observability.md#77-the-record-one-run-tree)).
