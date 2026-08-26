@@ -46,6 +46,7 @@ from langchain_core.tracers.context import collect_runs
 from agent.deep import context, prompt
 from agent.deep import trace as run_trace
 from agent.deep.shell import ShellAllowListMiddleware
+from agent.runtime.trace import tracer_from_env
 
 logger = logging.getLogger("harness.deep")
 
@@ -156,6 +157,21 @@ def run_session(model, task: str, workdir: Path, config=None,
     config = dict(config or {})
     config.setdefault("recursion_limit", RECURSION_LIMIT)
     workdir = Path(workdir)
+
+    # Two records, because they answer different questions and one of them
+    # expires. The run tree below is the readable account of the session; the
+    # flat JSONL is what every automatic metric is summed over
+    # (evals/metrics.py), and it must exist on disk even when LangSmith is
+    # unreachable or switched off. Registered as an inheritable callback so it
+    # also sees the provider calls underneath RouterChatModel, which is what
+    # makes a failover bounce countable ([7.3](../../docs/07-observability.md)).
+    #
+    # Passing callbacks here does not displace `collect_runs` below: the
+    # collector arrives through a context var, and langchain_core adds those on
+    # top of whatever the config carries rather than instead of it.
+    jsonl = tracer_from_env()
+    if jsonl is not None:
+        config["callbacks"] = list(config.get("callbacks") or []) + [jsonl]
 
     agent = build_agent(workdir, model, floor=floor, members=members,
                         allow_shell=allow_shell)
