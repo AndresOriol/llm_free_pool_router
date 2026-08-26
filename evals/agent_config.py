@@ -20,7 +20,7 @@ import yaml
 
 # What actually launches the agent. Overridable so the pipeline can be tested
 # against a stub without spending free-tier quota on the real pool.
-DEFAULT_AGENT_CMD = ["python", "-m", "agent.deep", "{workdir}"]
+DEFAULT_AGENT_CMD = ["python", "-m", "agent.code", "{workdir}"]
 
 
 def read_env_file(path: Path) -> dict:

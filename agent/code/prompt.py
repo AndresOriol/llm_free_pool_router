@@ -34,7 +34,7 @@ import re
 from pathlib import Path
 from typing import Optional, Sequence
 
-logger = logging.getLogger("harness.deep")
+logger = logging.getLogger("harness.code")
 
 _TEMPLATE = Path(__file__).with_name("system_prompt.md")
 
@@ -68,7 +68,7 @@ def pool_identity_section(floor: int, members: int = 0) -> str:
 
     Says only what survives a reroute. The floor is what the strict context
     filter guarantees, so it is the one number the model can plan against
-    (agent/deep/session.py).
+    (agent/code/session.py).
     """
     section = ("### Model Identity\n\n"
                "You are served by a pool of models rather than one model, and "

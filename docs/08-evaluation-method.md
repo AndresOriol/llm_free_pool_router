@@ -92,7 +92,7 @@ others — destroying comparability.
 
 1. **Materialize** — `git archive` the scenario tag into a scratch workdir.
    Hash every file in the scenario's `immutable` manifest.
-2. **Run** — `python -m agent.deep <workdir> < prompt` from the
+2. **Run** — `python -m agent.code <workdir> < prompt` from the
    configuration's worktree, with `EVAL_TRACE_FILE` set. Kill at `timeout_s`.
 3. **Capture** — stdout/stderr, wall time, exit status, `trace.jsonl`, and
    `diff.patch` (workdir vs untouched code, caches pruned).

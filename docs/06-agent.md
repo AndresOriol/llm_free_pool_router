@@ -7,12 +7,12 @@ other one deleted, and what the survivor can and cannot do.*
 
 ## 6.1 One conversation, on the pool
 
-[agent/deep/](../agent/deep/). A **session**: one long unattended run over one
+[agent/code/](../agent/code/). A **session**: one long unattended run over one
 project, task on stdin, process exits at EOF, every model call routed through the
 pool ([4. Failover](04-failover.md)).
 
 ```bash
-python -m agent.deep ../my-project < brief.md
+python -m agent.code ../my-project < brief.md
 ```
 
 `workdir` is the project. The task arrives on stdin and the process exits at
@@ -153,7 +153,7 @@ cheaper agent reaches this failure mode sooner, not later.**
 
 ## 6.5 What makes it a coding agent
 
-[agent/deep/](../agent/deep/). Almost none of this is agent design.
+[agent/code/](../agent/code/). Almost none of this is agent design.
 `create_deep_agent` already assembles the todo list, the filesystem tools, the
 subagent `task` tool and summarization, and the `execute` tool switches itself
 on because `RestrictedShellBackend` satisfies `SandboxBackendProtocol`. Two
@@ -183,10 +183,10 @@ exception, so the model reads the reason and corrects itself instead of retrying
 
 | Ported | Where |
 | --- | --- |
-| System prompt: understand → build → test → verify; match the spec exactly; parallel tool calls; paginated reads; git safety; root-cause debugging; stop after three identical failures | [system_prompt.md](../agent/deep/system_prompt.md) |
-| Prompt assembly and its interpolated sections | [prompt.py](../agent/deep/prompt.py) |
-| `LocalContextMiddleware` — git branch, status, a depth-limited tree | [context.py](../agent/deep/context.py) |
-| `ShellAllowListMiddleware` | [shell.py](../agent/deep/shell.py) |
+| System prompt: understand → build → test → verify; match the spec exactly; parallel tool calls; paginated reads; git safety; root-cause debugging; stop after three identical failures | [system_prompt.md](../agent/code/system_prompt.md) |
+| Prompt assembly and its interpolated sections | [prompt.py](../agent/code/prompt.py) |
+| `LocalContextMiddleware` — git branch, status, a depth-limited tree | [context.py](../agent/code/context.py) |
+| `ShellAllowListMiddleware` | [shell.py](../agent/code/shell.py) |
 
 Three parts are **adapted rather than copied**, and each adaptation is a fact
 about this pool rather than a preference:

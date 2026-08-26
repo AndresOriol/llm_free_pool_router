@@ -17,7 +17,7 @@ writes an account a human reviews instead of the code. The daily cycle and what
 it requires are argued in
 [docs/design/long-run-harness.md](docs/design/long-run-harness.md).
 
-**The agent is not bespoke.** There is one coding agent, [agent/deep](agent/deep/):
+**The agent is not bespoke.** There is one coding agent, [agent/code](agent/code/):
 a conversation configured the way LangChain's `deepagents-code` configures one,
 with the pool as its model. The narrow-role harness it replaced is deleted.
 
@@ -57,11 +57,11 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
   `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
   nothing about sessions.
-- [agent/deep](agent/deep/) — the coding agent: `create_deep_agent` over that
+- [agent/code](agent/code/) — the coding agent: `create_deep_agent` over that
   jailed backend, with the configuration ported from `deepagents-code`
-  ([prompt.py](agent/deep/prompt.py), [context.py](agent/deep/context.py),
-  [shell.py](agent/deep/shell.py)). Its record is one LangSmith run tree
-  ([trace.py](agent/deep/trace.py)) plus the `EVAL_TRACE_FILE` JSONL every
+  ([prompt.py](agent/code/prompt.py), [context.py](agent/code/context.py),
+  [shell.py](agent/code/shell.py)). Its record is one LangSmith run tree
+  ([trace.py](agent/code/trace.py)) plus the `EVAL_TRACE_FILE` JSONL every
   metric is summed over.
 - [agent/explore](agent/explore/) — the web explorer: the same loop and jail
   with its tools pointed outward. `web_search` and `read_url` are grounded calls

@@ -14,7 +14,7 @@ the simpler configuration.
 > **The configurations in this table no longer exist as files, and neither does
 > the architecture most of them were variants of.** The narrow-role harness —
 > every `harness-v*` row, `adhoc-harness`, `session` and `context-and-gate` —
-> was deleted, leaving `evals/configs/deepagents.yaml` as the only agent
+> was deleted, leaving `evals/configs/code.yaml` as the only agent
 > configuration ([6.1.1](../docs/06-agent.md#611-the-arm-that-was-deleted)).
 > These rows stay because a ledger of what was tried and what it showed is the
 > point of the file; `git log` has the code behind each name.
@@ -33,13 +33,13 @@ the simpler configuration.
 | `harness-v2-seeded` | `harness/adhoc-router` | Glob the file list, skip `locate` | L0, n=3 | 0/3 | **dropped** |
 | `harness-v7-orchestrated` | `harness/adhoc-router` | Hub and spoke; execution as an agent | L0, n=3 | 0/3, most calls | **dropped for this task shape** |
 | `harness-v8-session` | `harness/adhoc-router` | A session: briefed roles, journal, branch, docs and rationale as deliverables | L1+L2 `session`, n=2 | 2/4 | **no verdict** — ran alone, no baseline |
-| `deepagents` | `harness/deepagents` | A conversation instead of narrow roles: `create_deep_agent` on the pool behind a hard 128k context floor, configured like `deepagents-code` | — | **never run** | **the only configuration left** — no eval run recorded, so no verdict |
+| `code` (was `deepagents`) | `harness/deepagents` | A conversation instead of narrow roles: `create_deep_agent` on the pool behind a hard 128k context floor, configured like `deepagents-code` | — | **never run** | **the only configuration left** — no eval run recorded, so no verdict |
 
-### deepagents, before any eval run (2026-08-25)
+### code, before any eval run (2026-08-25)
 
 The arm exists and works; nothing about it is comparable to anything yet. Two
 ad-hoc runs outside the runner — no scenario, no hidden tests — are recorded in
-[docs/11-eval-status.md](../docs/11-eval-status.md#the-deepagents-arm-first-look-2026-08-25)
+[docs/11-eval-status.md](../docs/11-eval-status.md#the-coding-agent-first-look-2026-08-25)
 because they bear on whether the comparison is worth its quota.
 
 The short version: both runs produced a correct minimal fix, and neither
@@ -53,7 +53,7 @@ fired, so this is a reason to run the comparison carefully rather than a result.
 `harness-v8-session`'s mistake and it is why that row still says no verdict:
 
 ```bash
-python -m evals run --config session --config deepagents --reps 3
+python -m evals run --config code --reps 3
 ```
 
 ### harness-v8-session, first batch (2026-08-07)

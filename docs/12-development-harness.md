@@ -95,7 +95,7 @@ themselves. The loop:
 2. Launch one-shot, pointing stdin at a one-line instruction:
 
    ```bash
-   echo "Read /tasks/my-brief.md and do it" | python -m agent.deep <workdir>
+   echo "Read /tasks/my-brief.md and do it" | python -m agent.code <workdir>
    ```
 
    EOF makes the process exit, so this works as a background job.

@@ -13,7 +13,7 @@ or a comparison is decided. A status page nobody updates is worse than none.
 The pipeline works end to end, and there are now **five scenarios across four
 topics**, three of them L1 or L2, including the set's first `trap`. What changed
 this week is that there is now **one coding agent instead of two**: the
-narrow-role graph was deleted and `agent/deep/` is what ships
+narrow-role graph was deleted and `agent/code/` is what ships
 ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). It runs end to end but
 **has never been run as an eval configuration**, so the comparison that would
 have justified the choice never happened, and the cost gap it was losing on is
@@ -54,7 +54,7 @@ git; the ledger is in
 [evals/CONFIGS.md](../evals/CONFIGS.md); the architectures are
 [6.1](06-agent.md#61-one-conversation-on-the-pool).
 
-### The deepagents arm, first look (2026-08-25)
+### The coding agent, first look (2026-08-25)
 
 **Not eval data.** Two ad-hoc runs on throwaway projects, outside the runner, no
 scenario and no hidden tests — recorded because they bear on whether the
@@ -115,11 +115,11 @@ Four observations:
 | Five of the eight scenario categories are still unwritten | `feature`, `tests`, `refactor`, `long-context` and `ambiguous` have never been run, so nothing probes size-based routing or multi-file construction ([9.6](09-scenarios.md#96-categories-to-cover)) | P4 |
 | A model retired upstream costs an attempt on every run | No longer a crash: the router retires the member and carries on, which is what retired the trimmed eval pool. The retirement lasts one process, so each fresh run rediscovers it | [13.2](13-roadmap.md#132-what-to-do-next) |
 | **Four of five scenario tags, and three of four topic branches, are local only** | `origin` has `topic/alerts` and a stale `scenario/retry-after-case`; everything else exists on one machine. Tags are not pushed by default, so this is silent. The scenario set is unrecoverable if the disk goes | [13.2](13-roadmap.md#132-what-to-do-next), item 2 |
-| **The shipping agent has never run under the runner** | Its config exists (`evals/configs/deepagents.yaml`) and it works, but no eval run has been recorded — and the arm it replaced is deleted, so there is nothing left to compare it against except its own history | [13.2](13-roadmap.md#132-what-to-do-next), item 1 |
+| **The shipping agent has never run under the runner** | Its config exists (`evals/configs/code.yaml`) and it works, but no eval run has been recorded — and the arm it replaced is deleted, so there is nothing left to compare it against except its own history | [13.2](13-roadmap.md#132-what-to-do-next), item 1 |
 
 ## 11.5 What to do next
 
-1. **Run `deepagents` over the four non-exhausted scenarios** and establish
+1. **Run `code` over the four non-exhausted scenarios** and establish
    what it actually costs. The interleaved comparison is no longer possible —
    the other arm is deleted — so the standard it is held to is its own recorded
    `input_tokens` against the 5,756 the deleted arm managed

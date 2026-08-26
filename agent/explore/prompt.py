@@ -1,6 +1,6 @@
 """The explorer's system prompt.
 
-Assembled the same way `agent/deep/prompt.py` assembles the coding agent's, and
+Assembled the same way `agent/code/prompt.py` assembles the coding agent's, and
 sharing three of its sections outright -- the pool identity, the jail's `/`, and
 the headless preamble are facts about *this project*, not about coding, so a
 second copy of them would be a second thing to keep true.
@@ -20,7 +20,7 @@ import re
 from pathlib import Path
 from typing import Optional, Sequence
 
-from agent.deep.prompt import (FS_TOOL_GUIDANCE, HEADLESS_AMBIGUITY,
+from agent.code.prompt import (FS_TOOL_GUIDANCE, HEADLESS_AMBIGUITY,
                                HEADLESS_PREAMBLE, pool_identity_section,
                                workdir_section)
 

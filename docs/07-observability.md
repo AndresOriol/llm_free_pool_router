@@ -63,7 +63,7 @@ is attached explicitly by the router's failure handler
 Set `EVAL_TRACE_FILE` and the agent appends one JSON object per LLM/tool event:
 
 ```bash
-EVAL_TRACE_FILE=run.jsonl python -m agent.deep workdir < brief.md
+EVAL_TRACE_FILE=run.jsonl python -m agent.code workdir < brief.md
 ```
 
 Unset, nothing is attached and the agent behaves exactly as before. Zero cost
@@ -140,12 +140,12 @@ lands on disk whether or not LangSmith is reachable. What it does not do is
 is what gets counted, the tree below is what gets read.
 
 So that arm records the tree instead, at
-[agent/deep/trace.py](../agent/deep/trace.py): one nested JSON object per run,
+[agent/code/trace.py](../agent/code/trace.py): one nested JSON object per run,
 built from the tree LangSmith already assembled and then condensed down to the
 turns, the tool calls and what each one cost ([7.7](#77-what-goes-to-disk-the-condensed-run)).
 
 ```bash
-DEEP_TRACE_FILE=run-tree.json python -m agent.deep workdir < brief.md
+AGENT_TRACE_FILE=run-tree.json python -m agent.code workdir < brief.md
 ```
 
 **Ask for the trace, not for a run.** `collect_runs()` learns locally which runs

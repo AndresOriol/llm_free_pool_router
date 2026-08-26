@@ -39,19 +39,19 @@ what a session is.
 | [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
 | [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
 
-`agent/deep/` is the **coding agent**: `create_deep_agent` over that backend,
+`agent/code/` is the **coding agent**: `create_deep_agent` over that backend,
 configured the way `deepagents-code` configures one. See
 [6.5](06-agent.md#65-what-makes-it-a-coding-agent). It is mostly configuration —
 the loop, the tools and the compaction come from the SDK.
 
 | File | The question it answers |
 | --- | --- |
-| [session.py](../agent/deep/session.py) | *What turns a generic deep agent into this coding agent?* — backend, middleware, prompt, subagent, and the context floor check that fails before the run rather than during it |
-| [prompt.py](../agent/deep/prompt.py) + [system_prompt.md](../agent/deep/system_prompt.md) | *What is the agent told?* — the ported prompt, and the three sections only the running configuration can fill |
-| [context.py](../agent/deep/context.py) | *What does it know before its first tool call?* — git branch, status and a depth-limited tree, so orientation isn't bought with model calls |
-| [shell.py](../agent/deep/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
-| [trace.py](../agent/deep/trace.py) | *What happened during a run, durably?* — the LangSmith run tree, fetched and written down ([7.6](07-observability.md#76-the-record-one-run-tree)) |
-| [`__main__.py`](../agent/deep/__main__.py) | CLI: workdir as an argument, task on stdin |
+| [session.py](../agent/code/session.py) | *What turns a generic deep agent into this coding agent?* — backend, middleware, prompt, subagent, and the context floor check that fails before the run rather than during it |
+| [prompt.py](../agent/code/prompt.py) + [system_prompt.md](../agent/code/system_prompt.md) | *What is the agent told?* — the ported prompt, and the three sections only the running configuration can fill |
+| [context.py](../agent/code/context.py) | *What does it know before its first tool call?* — git branch, status and a depth-limited tree, so orientation isn't bought with model calls |
+| [shell.py](../agent/code/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
+| [trace.py](../agent/code/trace.py) | *What happened during a run, durably?* — the LangSmith run tree, fetched and written down ([7.6](07-observability.md#76-the-record-one-run-tree)) |
+| [`__main__.py`](../agent/code/__main__.py) | CLI: workdir as an argument, task on stdin |
 
 `agent/explore/` is the **web explorer**: the same loop and the same jail, with
 its tools pointed outward and no shell at all. See

@@ -1,4 +1,4 @@
-"""One deepagents session over one workdir, on the pool.
+"""One coding session over one workdir, on the pool.
 
 The coding arm. It keeps a conversation and makes it fit by staying on the
 pool's *widest* members and letting the SDK compact the history. The narrow-role
@@ -32,7 +32,7 @@ The three seams that are ours rather than dcode's:
    budget. A conversation cannot be trimmed to fit them, so this refuses to
    route below the floor and waits for a wide member. Groq stays in the pool for
    work that fits it.
-3. **The record is a run tree** fetched from LangSmith (agent/deep/trace.py).
+3. **The record is a run tree** fetched from LangSmith (agent/code/trace.py).
 """
 
 from __future__ import annotations
@@ -44,12 +44,12 @@ from typing import Optional, Sequence
 from langchain_core.messages import HumanMessage
 from langchain_core.tracers.context import collect_runs
 
-from agent.deep import context, prompt
-from agent.deep import trace as run_trace
-from agent.deep.shell import ShellAllowListMiddleware
+from agent.code import context, prompt
+from agent.code import trace as run_trace
+from agent.code.shell import ShellAllowListMiddleware
 from agent.runtime.trace import tracer_from_env
 
-logger = logging.getLogger("harness.deep")
+logger = logging.getLogger("harness.code")
 
 # The floor, in input tokens. Sized to admit both Gemini families (250,000) and
 # Gemma (128,000) while excluding every Groq member (8,000). A property of the
@@ -62,7 +62,7 @@ CONTEXT_FLOOR = 128_000
 RECURSION_LIMIT = 120
 
 # Kept in step with RestrictedShellBackend's own allowlist. The backend is the
-# boundary; this is what the model gets told (agent/deep/shell.py).
+# boundary; this is what the model gets told (agent/code/shell.py).
 ALLOWED_PROGRAMS = ("python", "python3", "py", "pytest", "git")
 
 
@@ -114,7 +114,7 @@ def check_floor(router, floor: int = CONTEXT_FLOOR) -> int:
     if not wide:
         raise SystemExit(
             f"No provider in the pool holds {floor:,} input tokens, so this "
-            f"agent cannot run on it. Widen the floor with DEEP_CONTEXT_FLOOR, "
+            f"agent cannot run on it. Widen the floor with AGENT_CONTEXT_FLOOR, "
             f"or add a wide-context member to the pool.")
     logger.info(f"{len(wide)} of {len(router.providers)} providers meet the "
                 f"{floor:,}-token floor.")
@@ -139,7 +139,7 @@ def _trace_locator(runs) -> tuple[Optional[str], Optional[str]]:
     innermost LLM call first and the root last.
 
     `project_id` is the same field LangSmith calls `session_id`. The collector
-    leaves it unset, so this is normally None and agent/deep/trace.py resolves
+    leaves it unset, so this is normally None and agent/code/trace.py resolves
     the project by name instead.
     """
     if not runs:
@@ -195,7 +195,7 @@ def run_session(model, task: str, workdir: Path, config=None,
             "trace_id": trace_id,
             "project_id": project_id,
             "workdir": str(workdir),
-            "harness": "deepagents",
+            "harness": "code",
             "context_floor": floor,
             "eligible_providers": members,
             "tracing_enabled": run_trace.tracing_enabled(),

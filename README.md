@@ -33,7 +33,7 @@ unattended on its own branch, and keeps going through free-tier limits by
 switching model mid-task:
 
 ```bash
-echo "Read NOTES.md and do what the newest feedback asks for" | python -m agent.deep ../my-project
+echo "Read NOTES.md and do what the newest feedback asks for" | python -m agent.code ../my-project
 ```
 
 See [docs/06-agent.md](docs/06-agent.md).

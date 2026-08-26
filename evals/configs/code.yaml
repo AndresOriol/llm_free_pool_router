@@ -1,5 +1,8 @@
 # The coding agent: one conversation, wide members only.
 #
+# Renamed from `deepagents` when agent/deep became agent/code. No run was
+# ever recorded under the old name, so nothing in results/ is orphaned.
+#
 # The only agent configuration. Everything it used to be compared against --
 # the narrow-role harness and its seven variants -- is deleted, and in git along
 # with what each one showed (evals/CONFIGS.md).
@@ -15,7 +18,7 @@
 # HARNESS_SHELL is deliberately absent: the agent is more capable with a real
 # shell, but eval runs are not containerized, and the default must not widen the
 # blast radius silently (docs/design/long-run-harness.md#42-bash-for-the-executor).
-name: deepagents
+name: code
 repo: ../..
 ref: harness/deepagents
 env_file: ../../llm_router/.env

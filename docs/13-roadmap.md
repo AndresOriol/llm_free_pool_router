@@ -17,7 +17,7 @@ writes an account a human reviews instead of the code
 ([design note](design/long-run-harness.md)).
 
 The question of **which harness** is closed by decision rather than by
-measurement: the narrow-role arm is deleted and `agent/deep/` is what ships
+measurement: the narrow-role arm is deleted and `agent/code/` is what ships
 ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). What that bets is that a
 maintained SDK harness plus a 128,000-token floor does the job well enough that
 maintaining a bespoke one is not worth it — and the bet is **unsettled**, because
@@ -36,7 +36,7 @@ work that fits it.
 
 In order. The ordering is the argument.
 
-1. **Price the surviving arm.** `deepagents`, n=3 to start, over the four
+1. **Price the surviving arm.** `code`, n=3 to start, over the four
    scenarios that still discriminate. There is no longer another arm to
    interleave against, so the standard is the deleted one's recorded 5,756 input
    tokens. Until this lands, the harness choice rests on argument, which is the
@@ -125,7 +125,7 @@ plan that ignores one of them is wrong.
 - **A conversation costs one to two orders of magnitude more than narrow roles.**
   A one-line fix ran to ~20 calls and ~227,000 input tokens on the original
   conversational loop, and 14–21 calls and 134,000–162,000 tokens on the current
-  deepagents arm, against 7.3 and 5,756 for narrow roles. Throughput is the
+  coding agent, against 7.3 and 5,756 for narrow roles. Throughput is the
   binding constraint on long tasks — though on the scenarios measured so far,
   *correctness* failures were all `reasoning`, so throughput and capability are
   separate problems and only the first has been solved.
@@ -149,7 +149,7 @@ Live, unresolved, and worth deciding when the evidence arrives — not before.
 
 | Question | What would settle it |
 | --- | --- |
-| **Was deleting the narrow-role arm a mistake?** | `input_tokens` per run for `deepagents` across the discriminating scenarios, read against the deleted arm's recorded 5,756 ([13.2](#132-what-to-do-next), item 1). |
+| **Was deleting the narrow-role arm a mistake?** | `input_tokens` per run for `code` across the discriminating scenarios, read against the deleted arm's recorded 5,756 ([13.2](#132-what-to-do-next), item 1). |
 | Does the coding agent need the parts of `deepagents-code` not carried over — skills, memory, the rubric grader? | A failure the comparison produces that one of them would have prevented. Not before ([6.9.2](06-agent.md#652-the-configuration-ported-from-dcode)). |
 | Which run-tree fields are worth keeping? | A metric actually reading the tree. 79% of the bytes are middleware wrappers, but "unused today" is not "surplus" ([7.6](07-observability.md#76-the-record-one-run-tree)). |
 | Default repetition count: 3 is cheap but weak, 5 costs most of a day's quota on a full suite. | The first real baseline's observed run-to-run variance. |

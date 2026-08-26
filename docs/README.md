@@ -17,7 +17,7 @@ New here? Start with [1. Overview](01-overview.md), then
 else on this page is design and changes rarely; this block is state.*
 
 - **There is one coding agent now, and its cost is unproven.** The narrow-role
-  arm is deleted; `agent/deep/` keeps a conversation on the pool's *widest*
+  arm is deleted; `agent/code/` keeps a conversation on the pool's *widest*
   members (≥128,000 input tokens), configured the way `deepagents-code`
   configures one. That was a decision about what to maintain, **not** a finding:
   the last measurement had the deleted arm winning on input tokens 39× over, on

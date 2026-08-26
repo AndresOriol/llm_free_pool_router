@@ -2,7 +2,7 @@
 
 Built on deepagents' `FilesystemBackend`, which is where the path-jailed
 `glob`/`grep`/`read`/`write` come from. Both agents sit on it -- the coding
-agent (agent/deep) and the web explorer (agent/explore) -- and both take the
+agent (agent/code) and the web explorer (agent/explore) -- and both take the
 agent loop from deepagents as well.
 
 `FilesystemBackend` alone exposes no `execute`, so an agent on it can write code

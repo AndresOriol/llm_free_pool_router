@@ -1,4 +1,4 @@
-"""Checks for the deepagents arm's record -- the LangSmith run tree.
+"""Checks for the coding agent's record -- the LangSmith run tree.
 
 The fetch itself needs the network, so what is checked here is everything that
 does not: rebuilding the nesting from the flat list v2 `traces.list_runs`
@@ -9,7 +9,7 @@ order reads as a plausible run until you notice it is backwards, and a condense
 that drops the wrong span leaves a record that is merely incomplete rather than
 obviously broken -- so the assertions here are mostly counts.
 
-No framework: `python -m tests.agent.test_deep_trace` (or run the file).
+No framework: `python -m tests.agent.test_code_trace` (or run the file).
 """
 
 import json
@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from agent.deep.trace import condense, nest, write
+from agent.code.trace import condense, nest, write
 
 
 class _Run:
@@ -114,7 +114,7 @@ def _run():
         written = json.loads(target.read_text(encoding="utf-8"))
         assert written["run"]["spans_fetched"] == 4, written["run"]
 
-    print("deep trace: all checks passed")
+    print("code trace: all checks passed")
 
 
 def _msg(kind, text, tool_calls=None, name=None):
@@ -231,7 +231,7 @@ def _run_condense():
     # A lone successful attempt only restates the turn, so it is not recorded.
     assert not any("attempts" in t for t in out["turns"]), out["turns"]
 
-    print("deep trace condense: all checks passed")
+    print("code trace condense: all checks passed")
 
 
 def _run_failover_and_compaction():
@@ -290,18 +290,18 @@ def _run_failover_and_compaction():
     # Nothing to condense is not an empty run, it is no run.
     assert condense(None) is None
 
-    print("deep trace failover/compaction: all checks passed")
+    print("code trace failover/compaction: all checks passed")
 
-def test_deep_trace():
+def test_code_trace():
     """Collected by pytest -- see the note in test_restricted_backend.py."""
     _run()
 
 
-def test_deep_trace_condense():
+def test_code_trace_condense():
     _run_condense()
 
 
-def test_deep_trace_failover_and_compaction():
+def test_code_trace_failover_and_compaction():
     _run_failover_and_compaction()
 
 

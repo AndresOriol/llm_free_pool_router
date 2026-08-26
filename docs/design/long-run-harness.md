@@ -7,7 +7,7 @@ graduate into [6. The coding agent](../06-agent.md) and
 
 > **Read this as history from §3 onward.** The narrow-role harness this note
 > argues for — the orchestrator, the briefed roles, the shared log, the journal,
-> `record/` — was **deleted**. `agent/deep/` is the only coding agent
+> `record/` — was **deleted**. `agent/code/` is the only coding agent
 > ([6.1.1](../06-agent.md#611-the-arm-that-was-deleted)). What survives is the
 > *requirement* set: §1's daily cycle, §2's constraints and §3's R-numbers still
 > describe what a standing maintainer has to do, and most of it is not built on
@@ -96,7 +96,7 @@ measurement this section calls for was ever taken.
 
 **The cost of being wrong is asymmetric, which is why this is measured rather
 than switched.** The narrow-role harness ran this class of task on 5,756 input
-tokens; the deepagents arm's first two runs took 134,000–162,000. If that gap
+tokens; the coding agent's first two runs took 134,000–162,000. If that gap
 holds under the runner, "the constraint was lifted" will have been true and
 irrelevant — a session that costs 25× more is not better for having been
 permitted.

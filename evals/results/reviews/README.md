@@ -18,7 +18,7 @@ Reviews of runs from the deleted narrow-role arm (`session`, `context-and-gate`,
 `steps/NN-<role>.md` and `rationale.md`, which no run produces any more
 ([6.1.1](../../../docs/06-agent.md#611-the-arm-that-was-deleted)).
 
-Two things to know before reading a `deepagents` review. `trace.json` is fetched
+Two things to know before reading a `code` review. `trace.json` is fetched
 from LangSmith *after* the run, so a timed-out run has none and the review works
 from the router's narration in `stderr.log`. And `run.json`'s trace-derived
 metrics — `provider_calls`, `tokens_in`, `models_used`, `steps` — are zero on that

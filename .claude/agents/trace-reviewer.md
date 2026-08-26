@@ -21,7 +21,7 @@ several, review the first and say so.
 
 The system under review is a **conversational coding agent** — `create_deep_agent`
 configured the way `deepagents-code` configures one, with this project's free-tier
-pool as its model (`agent/deep/`,
+pool as its model (`agent/code/`,
 [6.5](../../docs/06-agent.md#65-what-makes-it-a-coding-agent)). One conversation, one
 workdir, one task on stdin. It is the **only** coding agent; the narrow-role arm
 it was compared against is deleted
@@ -42,11 +42,11 @@ Four properties of it shape every review you will write:
   is routinely served by four or five members (`stderr.log` narrates each choice).
   Nothing the model "knows" outside the conversation survives a reroute — which is
   why the prompt states a context *floor* rather than a model identity
-  (`agent/deep/prompt.py`).
+  (`agent/code/prompt.py`).
 - **The blast radius is a jail.** `/` is the workdir; only `python`, `pytest` and
   `git` run, by subcommand, `shell=False`. A run that spent its turns fighting a
   refused command is a tooling failure, not a reasoning one
-  (`agent/deep/shell.py`, `agent/runtime/backend.py`).
+  (`agent/code/shell.py`, `agent/runtime/backend.py`).
 
 **The open question about it is cost.** The conversational loop lost the last
 comparison 226,854 input tokens to 5,756, and the arm that won was retired
@@ -57,7 +57,7 @@ correctness. A run that passed expensively has not settled the question — and
 there is no longer a cheaper arm to fall back to, which makes the number matter
 more rather than less.
 
-`agent/deep/session.py` holds the loop's knobs; `agent/deep/system_prompt.md` is
+`agent/code/session.py` holds the loop's knobs; `agent/code/system_prompt.md` is
 what the model was told.
 
 ## 1. Get the evidence
@@ -73,12 +73,12 @@ ls evals/results/runs/<run_id>/
 | `trace.json` | The condensed run fetched from LangSmith: a `run` header, the `task`, the `system_prompt`, then `turns` — each turn holding `input` (the whole conversation as that call received it), `output` (what came back) and `tool_results`. The best source **when it exists** — see below |
 | `diff.patch` | What actually changed in the tree |
 | `verify.txt` | The hidden tests' output — tail-read it, pytest puts the summary last |
-| `stdout.log` | The agent's final message and its todo list, printed by `_summary` in `agent/deep/__main__.py` |
+| `stdout.log` | The agent's final message and its todo list, printed by `_summary` in `agent/code/__main__.py` |
 
 **`trace.json` is frequently absent, and its absence is neither your fault nor the
 run's.** It requires `LANGSMITH_TRACING=1` and a key, and it is fetched *after* the
 work finishes — so a run killed by the eval runner's timeout never writes one. At
-the time of writing, **no recorded deepagents run has one.** Do not stall waiting
+the time of writing, **no recorded run of this agent has one.** Do not stall waiting
 for it and do not make its absence the finding; note in §6 that the turn-level
 record was unrecoverable, and review the run from `stderr.log`.
 
@@ -86,7 +86,7 @@ record was unrecoverable, and review the run from `stderr.log`.
 `evals/metrics.py` derives `provider_calls`, `tokens_in`, `tokens_out`, `steps`,
 `tool_calls`, `models_used`, `ran_own_tests` and `self_corrected` from
 `trace.jsonl`. That file is now written by this arm too — the JSONL callback
-handler is attached in `agent/deep/session.py` — so on a current run the numbers
+handler is attached in `agent/code/session.py` — so on a current run the numbers
 are real and you should use them.
 
 **On runs recorded before that was wired, every one of them reads zero**, because
@@ -206,7 +206,7 @@ answer:
   agent *could* have looked. If it edited a file it never read, or fixed a symptom
   without opening the module that caused it, that is a judgement failure and you
   should call it one — not a context failure.
-- **What the prompt told it.** `agent/deep/system_prompt.md`, plus the sections
+- **What the prompt told it.** `agent/code/system_prompt.md`, plus the sections
   `prompt.py` interpolates and the `### Project` block from `context.py`. If the
   file it needed fell outside that listing (capped at `MAX_ENTRIES = 200`,
   `MAX_DEPTH = 3`), the agent started blind to it and had to go find it.
@@ -224,12 +224,12 @@ prior finding, an exit code.
 
 One or two changes, each naming the mechanism:
 
-- the system prompt (`agent/deep/system_prompt.md`, `prompt.py`),
-- what the project section states, or how far it lists (`agent/deep/context.py`),
-- the execution allowlist or the jail (`agent/deep/shell.py`,
+- the system prompt (`agent/code/system_prompt.md`, `prompt.py`),
+- what the project section states, or how far it lists (`agent/code/context.py`),
+- the execution allowlist or the jail (`agent/code/shell.py`,
   `agent/runtime/backend.py`),
 - a loop knob — `CONTEXT_FLOOR`, `RECURSION_LIMIT`, the middleware list, the
-  subagent list (`agent/deep/session.py`),
+  subagent list (`agent/code/session.py`),
 - summarization's own settings, which are the SDK's defaults today and have never
   been tuned here — say so plainly if that is your answer,
 - the pool the run drew from (`llm_router/config.yaml`, the floor),
@@ -258,13 +258,13 @@ To `evals/results/reviews/<run_id>.md`. Never delete or overwrite an existing on
 a diagnosis that quietly stops being true between two runs is a finding in itself.
 
 Sections, in this order — the headings are pinned so that two reviews months apart,
-and a `session` review against a `deepagents` one, can be read side by side. The
+and a `session` review against a `code` one, can be read side by side. The
 prose inside them is yours:
 
 ```markdown
 # <run_id>
 
-- **Outcome:** <from run.json, plus f2p/p2p> · **Config:** <name> · **Arm:** deepagents
+- **Outcome:** <from run.json, plus f2p/p2p> · **Config:** <name> · **Arm:** code
 - **Provider calls:** <counted from stderr.log> · **Wall:** <s> · **Models:** <mix>
 - **Reviewed:** <date> · **Evidence:** `evals/results/runs/<run_id>/`
 
@@ -294,7 +294,7 @@ itself the argument for turning tracing on. Write it every time anyway.
 
 - Do not score, rank, or compare configurations. One run carries no rate.
 - Do not cite `provider_calls`, `tokens_in`, `models_used`, `steps` or
-  `self_corrected` from a deepagents `run.json`. They are zero by construction.
+  `self_corrected` from a `code` `run.json`. They are zero by construction.
 - Do not read the whole `trace.json` into context. It is condensed, not small —
   every turn keeps its full history, so a 17-turn run is ~250 KB. Read the
   header and the turn shape first, then open individual turns (§2).

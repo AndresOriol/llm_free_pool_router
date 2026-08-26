@@ -1,4 +1,4 @@
-"""The deepagents harness's configuration, checked without the network.
+"""The coding agent's configuration, checked without the network.
 
 Everything here is about what the agent is *told* and what it is *allowed*,
 which is the part of the configuration that can be wrong silently. Whether the
@@ -10,8 +10,8 @@ from pathlib import Path
 
 from langchain_core.messages import ToolMessage
 
-from agent.deep import context, prompt
-from agent.deep.shell import ShellAllowListMiddleware
+from agent.code import context, prompt
+from agent.code.shell import ShellAllowListMiddleware
 
 
 class _Request:

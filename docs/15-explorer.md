@@ -19,7 +19,7 @@ The explorer is the half that looks it up.
 
 ```bash
 python -m agent.explore ../my-project < question.md   # researches, writes /research
-python -m agent.deep    ../my-project < brief.md      # builds, reads /research
+python -m agent.code    ../my-project < brief.md      # builds, reads /research
 ```
 
 **They meet on disk and nowhere else.** The explorer writes `/research/*.md`

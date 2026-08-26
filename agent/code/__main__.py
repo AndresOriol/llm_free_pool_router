@@ -1,4 +1,4 @@
-"""CLI: python -m agent.deep [workdir] < brief.md
+"""CLI: python -m agent.code [workdir] < brief.md
 
 Workdir as an argument, task on stdin, exit at EOF. `python -m agent.explore`
 takes the same shape, so an eval configuration or a script swaps one agent for
@@ -6,9 +6,9 @@ the other by changing `agent_cmd` and nothing else (evals/agent_config.py).
 
 Environment:
   ROUTER_CONFIG      pool config to load; unset uses llm_router/config.yaml
-  DEEP_TRACE_FILE    where to write the run tree; unset writes none
+  AGENT_TRACE_FILE    where to write the run tree; unset writes none
   EVAL_TRACE_FILE    set by the eval runner; the run tree lands beside it
-  DEEP_CONTEXT_FLOOR override the input-token floor (default 128,000)
+  AGENT_CONTEXT_FLOOR override the input-token floor (default 128,000)
   HARNESS_SHELL=1    give the agent an unrestricted shell -- not contained,
                      so this is the operator's call, never a default
 """
@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
-from agent.deep.session import CONTEXT_FLOOR, check_floor, run_session
+from agent.code.session import CONTEXT_FLOOR, check_floor, run_session
 from agent.runtime.awake import keep_awake
 from agent.runtime.chat_model import RouterChatModel
 
@@ -61,7 +61,7 @@ def main() -> None:
     if not task:
         raise SystemExit("No task given.")
 
-    floor = int(os.environ.get("DEEP_CONTEXT_FLOOR") or CONTEXT_FLOOR)
+    floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
     model, members = build(floor)
 
     shell = os.environ.get("HARNESS_SHELL") == "1"
@@ -70,14 +70,14 @@ def main() -> None:
                         "Run this inside a container.")
 
     # The eval runner names the trace itself, per run, so a configuration
-    # cannot set DEEP_TRACE_FILE ahead of time -- it does not yet know the run
+    # cannot set AGENT_TRACE_FILE ahead of time -- it does not yet know the run
     # directory. It exports EVAL_TRACE_FILE instead, pointing at the flat
     # `trace.jsonl` the callback handler writes (agent/runtime/trace.py). The
     # run tree is a second, nested record fetched from LangSmith
-    # (agent/deep/trace.py), so it takes the directory and not the name:
+    # (agent/code/trace.py), so it takes the directory and not the name:
     # writing a JSON tree to a `.jsonl` path would both lie about the format
     # and overwrite the file every metric is summed over.
-    trace_file = os.environ.get("DEEP_TRACE_FILE")
+    trace_file = os.environ.get("AGENT_TRACE_FILE")
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
         trace_file = Path(os.environ["EVAL_TRACE_FILE"]).with_name("trace.json")
 

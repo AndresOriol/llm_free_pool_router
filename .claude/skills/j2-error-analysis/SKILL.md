@@ -19,14 +19,14 @@ measurement is not "did this prompt change help" but "what does the one
 surviving architecture actually cost"
 ([6.1](../../../docs/06-agent.md#61-one-conversation-on-the-pool)).
 
-There is **one** agent configuration, `deepagents`: a single `create_deep_agent`
+There is **one** agent configuration, `code`: a single `create_deep_agent`
 conversation, SDK-compacted, on the pool's wide members. It leaves behind
 `trace.jsonl` (the flat event log every automatic metric is summed over),
 `trace.json` (the condensed run — a header, then `turns`) when tracing is on, and
 `stderr.log`.
 
 ```bash
-python -m evals run --config deepagents --reps 3
+python -m evals run --config code --reps 3
 ```
 
 The narrow-role arm — `session`, `context-and-gate`, `harness-v*`, which wrote
@@ -71,9 +71,9 @@ rather than substituting the bundle's clip.
 
 `evals/metrics.py` derives every trace-based metric from `trace.jsonl`. That file
 **used not to be written by this arm at all**: the JSONL callback handler was only
-attached when the narrow-role arm was retired, in `agent/deep/session.py`.
+attached when the narrow-role arm was retired, in `agent/code/session.py`.
 
-So on any `deepagents` run recorded before that, `provider_calls`, `tokens_in`,
+So on any `code` run recorded before that, `provider_calls`, `tokens_in`,
 `tokens_out`, `steps`, `tool_calls`, `bad_tool_calls`, `models_used`,
 `ran_own_tests` and `self_corrected` are zero or empty *by construction*, whatever
 the run did. **A zero is ambiguous, and reading one as cheapness inverts the
@@ -142,7 +142,7 @@ Cluster the notes into named categories and count them. Rules:
   "failed" rather than a diagnosis. Subdividing it is the standing job, and
   `stopping` needs the same treatment.
 - Each category must name **what would fix it**, and the levers are
-  `agent/deep/system_prompt.md`, `context.py`, the shell allowlist, and the knobs
+  `agent/code/system_prompt.md`, `context.py`, the shell allowlist, and the knobs
   in `session.py` (`CONTEXT_FLOOR`, `RECURSION_LIMIT`, the middleware and
   subagent lists). A category whose fix is "be smarter" is not a category.
 
@@ -171,7 +171,7 @@ two reports is itself a finding.
 Structure is yours; these properties are not:
 
 - **Every claim cites its evidence.** `run_id`, and where inside it. Not "the agent
-  often edits before reading" but "`threshold-off-by-one_…_deepagents_r1`:
+  often edits before reading" but "`threshold-off-by-one_…_code_r1`:
   `stderr.log` shows 25 calls in 97s and the first edit at 08:32:41, before any read
   of `alerts/rules.py`". The reader must be able to open it and disagree.
 - **Counts from different architectures are never merged into a single rate**

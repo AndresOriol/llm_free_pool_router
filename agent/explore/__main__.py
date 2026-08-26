@@ -1,17 +1,17 @@
 """CLI: python -m agent.explore [workdir] < brief.md
 
-Same shape as `python -m agent.deep` -- workdir as an argument, task on stdin,
+Same shape as `python -m agent.code` -- workdir as an argument, task on stdin,
 exit at EOF -- so the two are interchangeable in a script or an eval
 configuration, and so the obvious workflow needs no glue:
 
     python -m agent.explore  ./project < question.md   # research, writes /research
-    python -m agent.deep     ./project < brief.md      # build, reads /research
+    python -m agent.code     ./project < brief.md      # build, reads /research
 
 Environment:
   ROUTER_CONFIG      pool config to load; unset uses llm_router/config.yaml
-  DEEP_TRACE_FILE    where to write the run tree; unset writes none
+  AGENT_TRACE_FILE    where to write the run tree; unset writes none
   EVAL_TRACE_FILE    set by the eval runner; the run tree lands beside it
-  DEEP_CONTEXT_FLOOR override the input-token floor (default 128,000)
+  AGENT_CONTEXT_FLOOR override the input-token floor (default 128,000)
 
 There is no HARNESS_SHELL here. The coding agent has one because it has to run
 the tests it writes; this one runs nothing, and an escape hatch nobody needs is
@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
-from agent.deep.session import CONTEXT_FLOOR, check_floor
+from agent.code.session import CONTEXT_FLOOR, check_floor
 from agent.explore.session import RESEARCH_DIR, check_search, run_session
 from agent.runtime.awake import keep_awake
 from agent.runtime.chat_model import RouterChatModel
@@ -71,10 +71,10 @@ def main() -> None:
     if not task:
         raise SystemExit("No task given.")
 
-    floor = int(os.environ.get("DEEP_CONTEXT_FLOOR") or CONTEXT_FLOOR)
+    floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
     model, members, web = build(floor)
 
-    trace_file = os.environ.get("DEEP_TRACE_FILE")
+    trace_file = os.environ.get("AGENT_TRACE_FILE")
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
         trace_file = Path(os.environ["EVAL_TRACE_FILE"]).with_name("trace.json")
 

@@ -3,7 +3,7 @@
 Nothing here knows what a session is. `RouterChatModel` fronts the pool,
 `RestrictedShellBackend` is the filesystem/exec jail an agent is confined to,
 `make_tools` is that backend's model-facing face, and `JsonlTracer` records
-what every call cost. `agent/deep` and `agent/explore` are its consumers; the
+what every call cost. `agent/code` and `agent/explore` are its consumers; the
 router's own smoke test is another.
 """
 

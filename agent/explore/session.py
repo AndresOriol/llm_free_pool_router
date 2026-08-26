@@ -1,6 +1,6 @@
 """One exploration over one workdir: the web in, files out.
 
-The same machinery as the coding agent (agent/deep) with three deliberate
+The same machinery as the coding agent (agent/code) with three deliberate
 differences, and nothing else changed -- the loop, the compaction, the jail and
 the failover are shared, because two agents diverging on those would be two
 things to debug rather than one.
@@ -32,9 +32,9 @@ from typing import Optional, Sequence
 from langchain_core.messages import HumanMessage
 from langchain_core.tracers.context import collect_runs
 
-from agent.deep import context
-from agent.deep import trace as run_trace
-from agent.deep.session import CONTEXT_FLOOR, RECURSION_LIMIT, _trace_locator
+from agent.code import context
+from agent.code import trace as run_trace
+from agent.code.session import CONTEXT_FLOOR, RECURSION_LIMIT, _trace_locator
 from agent.explore import prompt, search
 from agent.runtime.trace import tracer_from_env
 
