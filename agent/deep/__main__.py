@@ -7,6 +7,7 @@ other by changing `agent_cmd` and nothing else (evals/agent_config.py).
 Environment:
   ROUTER_CONFIG      alternative pool config (evals use config.eval.yaml)
   DEEP_TRACE_FILE    where to write the run tree; unset writes none
+  EVAL_TRACE_FILE    set by the eval runner; the run tree lands beside it
   DEEP_CONTEXT_FLOOR override the input-token floor (default 128,000)
   HARNESS_SHELL=1    give the agent an unrestricted shell -- not contained,
                      so this is the operator's call, never a default
@@ -67,7 +68,18 @@ def main() -> None:
         logging.warning("HARNESS_SHELL=1: the agent has an unrestricted shell. "
                         "Run this inside a container.")
 
+    # The eval runner names the trace itself, per run, so a configuration
+    # cannot set DEEP_TRACE_FILE ahead of time -- it does not yet know the run
+    # directory. It exports EVAL_TRACE_FILE instead, pointing at the flat
+    # `trace.jsonl` the narrow-role arm writes from callbacks. This arm's record
+    # is one nested object fetched from LangSmith (agent/deep/trace.py), so it
+    # takes the directory and not the name: writing a JSON tree to a `.jsonl`
+    # path would both lie about the format and feed evals/metrics.py a file it
+    # would parse to zero events without complaining.
     trace_file = os.environ.get("DEEP_TRACE_FILE")
+    if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
+        trace_file = Path(os.environ["EVAL_TRACE_FILE"]).with_name("trace.json")
+
     final, written = run_session(
         model, task, workdir, floor=floor, members=members, allow_shell=shell,
         trace_path=Path(trace_file) if trace_file else None)
