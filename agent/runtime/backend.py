@@ -1,8 +1,9 @@
 """The filesystem jail, plus enough `execute` for the agent to run its own tests.
 
 Built on deepagents' `FilesystemBackend`, which is where the path-jailed
-`glob`/`grep`/`read`/`write` come from. That is the only thing this project uses
-deepagents for; its agent loop is not used.
+`glob`/`grep`/`read`/`write` come from. Both arms sit on it. It is all that
+agent/harness takes from deepagents, which drives its own graph; agent/deep
+takes the agent loop as well.
 
 `FilesystemBackend` alone exposes no `execute`, so an agent on it can write code
 but never run it -- it cannot close its own loop (write a test, run it, react to

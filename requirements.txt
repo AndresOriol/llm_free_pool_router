@@ -1,10 +1,11 @@
 dotenv
 pyyaml
 
-# The agent stack. `deepagents` is here for its FilesystemBackend only -- the
-# path-jailed glob/grep/read that RestrictedShellBackend extends. The library's
-# agent loop is not used: it accumulated the whole conversation into every call,
-# which a 6,000-token pool member cannot serve.
+# The agent stack. Both arms extend `deepagents`' FilesystemBackend -- the
+# path-jailed glob/grep/read under RestrictedShellBackend. agent/deep takes its
+# agent loop too; agent/harness drives its own graph, because that loop resends
+# the whole conversation every call and the narrow-role arm was built to fit an
+# 8,000-token pool member.
 deepagents
 langgraph
 langchain-core
