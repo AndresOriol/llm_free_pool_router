@@ -165,8 +165,8 @@ re-assemble into the tree it came from.
 
 So that arm records the tree instead, at
 [agent/deep/trace.py](../agent/deep/trace.py): one nested JSON object per run,
-each span carrying its inputs, outputs, timing, token counts and error, exactly
-as LangSmith already built it.
+built from the tree LangSmith already assembled and then condensed down to the
+turns, the tool calls and what each one cost ([7.8](#78-what-goes-to-disk-the-condensed-run)).
 
 ```bash
 DEEP_TRACE_FILE=run-tree.json python -m agent.deep workdir < brief.md
@@ -193,20 +193,95 @@ response is **flat**, so the nesting is rebuilt locally from each run's
 rather than dropped, because silently losing a span is the failure this whole
 file exists to avoid.
 
-**Everything the vendor returns is kept** — which under v2 means asking for it,
-since the endpoint returns bare ids unless the fields are named, so the fetch
-names all of them. The meta block is written even when the fetch fails, so a run
-with no trace says so on disk instead of leaving an absent file to explain later.
-Deciding which fields are surplus is a question to answer against a real tree
-rather than in advance — and the first real tree answers it: of 93 spans in a
-one-line fix, **72 were middleware wrappers carrying no information, and they
-were 79% of the bytes.** Keeping only the `llm` and `tool` spans leaves 21% of
-the size with everything a metric or a post-mortem reads. That pruning is not
-done yet; the number is recorded so it can be.
+**Everything the vendor returns is fetched** — which under v2 means asking for
+it, since the endpoint returns bare ids unless the fields are named, so the
+fetch names all of them. What is *written* is smaller, and deliberately: see
+[7.8](#78-what-goes-to-disk-the-condensed-run).
+
+**Children are sorted by `start_time`.** `traces.list_runs` returns the batch
+newest-first, so appending in arrival order built every tree backwards — turn
+17 first, turn 1 last. That reads as a plausible run right up until you notice
+the context shrinking from one turn to the next instead of growing.
 
 **It needs `LANGSMITH_TRACING=1` and a key.** Without them the run is unaffected
-and the record says `"trace": null` — which is the right failure, because losing
+and the record says `"run": null` — which is the right failure, because losing
 a record is bad and losing the *run* because recording it failed is worse.
+
+## 7.8 What goes to disk: the condensed run
+
+The fetched tree is faithful and unreadable. The first real one measured **22 MB
+across 255 spans** for a 17-turn run, and **88% of that was `inputs`** — because
+every level of the six-deep middleware tower carries its own copy of the whole
+message history, and the history is replayed in full on every turn. The
+conversation underneath is a few dozen KB. The rest is the same text written
+back down a hundred-odd times.
+
+So `condense()` keeps the run and drops the recording apparatus. Three moves:
+
+| Move | What goes | Why it is safe |
+| --- | --- | --- |
+| **Only spans that did something survive** | the 195 `chain` spans — middleware wrappers, the graph's `model` and `tools` nodes | their inputs and outputs are their child's; an `llm` span is a turn and a `tool` span is a tool call, and between them they hold everything |
+| **Tools group under the turn that asked for them**, matched by `tool_call_id` | the graph's sibling arrangement, where a tool call hangs off the root next to the model call rather than under it | a turn becomes what it actually is: the model spoke, then these tools ran and returned this |
+| **One copy of the history per call, not eight** | the same messages recopied at every level of the middleware tower | the tower's copies are all the same list; the call's own `input` is the one that matters |
+
+Also lifted out and written once: the **system prompt** and the **task**, which
+are constant and large; and the **tool schemas**, of which only the names
+survive — hundreds of KB repeated on every model span, and the schemas are in
+the code. Inside each turn's `input` the system prompt is stood in for by a
+marker rather than repeated, because 15 KB × 17 turns is a quarter of a
+megabyte of the same text. A system message that *differs* from the hoisted one
+is written in full, because then it is news.
+
+The result on that same run is **248 KB, 1.1% of the original**, with nothing a
+turn did truncated: prompts, replies, tool arguments, tool output and errors are
+kept whole. It is the duplication that goes, not the content.
+
+### The shape of a turn
+
+Each turn answers "what entered the model here, and what came back":
+
+| Field | What it holds |
+| --- | --- |
+| `input` | **the whole conversation as that call received it** — every message in order, each with its role, text, `tool_call_id` and the tool calls it carried |
+| `output` | what the model returned: `text` when it spoke, `tool_calls` with their arguments, `finish_reason`, and `error` if the call failed |
+| `tool_results` | what running those calls produced — linked back by `tool_call_id`, with status, duration and full output. Kept apart from `output` because these did not come out of the model, and without repeating the arguments already recorded there |
+| `model`, `provider`, `tokens`, `seconds` | which member of the pool served this turn and what it cost |
+
+Storing the history per call is redundant on purpose — turn N's `input` is
+mostly turn N-1's — and it is the redundancy worth paying for, because the
+question this file exists to answer is *what did the model actually see at the
+moment it went wrong*. At 17 turns it costs about 200 KB. The duplication that
+was removed was the other kind: the same list copied eight times **within a
+single turn** by the middleware tower, which answers nothing.
+
+### What the condense refuses to lose
+
+Two things are worth spending bytes on, because nothing else in the record holds
+them:
+
+- **`attempts`** — the provider calls the router made for one turn. Omitted when
+  a single attempt succeeded, since that only restates the turn; present the
+  moment the pool had to work for the answer. This is the failover
+  ([4. Failover](04-failover.md)) and it is invisible in every other artefact.
+  `run.provider_failures` counts them.
+- **`context_rewritten`** — a flag on any turn whose history is not the previous
+  turn's extended, which from outside is what summarization looks like. `input`
+  holds what the model saw either way; the flag is what says *this* turn is
+  where to look, without diffing seventeen histories to find it. `context_messages`
+  is the cheap version to scan: read down the column, it should climb, and a
+  drop dates the summarization. A post-mortem asking "was that fact still in the
+  context?" ([9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem))
+  is asking about precisely this event.
+
+The header also keeps `langsmith_url`, so the untouched tree is one click away
+until it expires — which is the whole reason a local snapshot exists
+([7.1](#71-why-two)), and the reason the condense can afford to be aggressive.
+
+**The root span is usually still `pending` when the fetch runs.** It closes last
+and the tracer flushes asynchronously, so its own end time and latency are
+typically absent; the wall time is taken from the last span to finish instead.
+For the same reason the final turn's text is sometimes missing from the tree —
+`stdout.log` holds the agent's closing message, and is the place to read it.
 
 ---
 
