@@ -11,6 +11,12 @@ langchain-core
 langchain-openai
 langchain-google-genai
 
+# `langsmith` arrives transitively via langchain-core, but agent/deep/trace.py
+# calls it directly and needs `Client.traces`, the v2 replacement for the run
+# endpoints LangSmith removes on 2027-01-31. That resource does not exist
+# before 0.11, so the floor is a real requirement and not tidiness.
+langsmith>=0.11.1,<1.0.0
+
 # The agent runs its target project's tests via `python -m pytest`
 # (RestrictedShellBackend), so pytest must be importable in this interpreter.
 pytest

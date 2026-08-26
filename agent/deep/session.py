@@ -119,22 +119,25 @@ def check_floor(router, floor: int = CONTEXT_FLOOR) -> int:
     return len(wide)
 
 
-def _root_run_id(runs) -> Optional[str]:
-    """The id of the tree's root, given every run the collector saw.
+def _trace_locator(runs) -> tuple[Optional[str], Optional[str]]:
+    """What the fetch needs to name this trace: `(trace_id, project_id)`.
 
-    Not `runs[0]`. The collector appends in *completion* order, so the first
-    entry is the innermost LLM call, and fetching it returns a one-span tree
-    that looks like a working trace until you count the spans. The root is the
-    run with no parent; `trace_id` is the fallback, since every run in a tree
-    carries the root's id there.
+    Not `runs[0].id`. The collector appends in *completion* order, so the first
+    entry is the innermost LLM call, and naming a leaf used to return a one-span
+    tree that looked like a working trace until you counted the spans. Every run
+    in a tree carries the root's id as `trace_id`, so any of them will do --
+    which is why this reads the *first* run rather than hunting for the root.
+
+    `project_id` is the same field LangSmith calls `session_id`. It is required
+    by `traces.list_runs`, and having it here saves a lookup; None is fine, and
+    agent/deep/trace.py resolves the project by name instead.
     """
     if not runs:
-        return None
-    root = next((r for r in runs if getattr(r, "parent_run_id", None) is None), None)
-    if root is not None:
-        return str(root.id)
-    trace_id = getattr(runs[0], "trace_id", None)
-    return str(trace_id) if trace_id else str(runs[0].id)
+        return None, None
+    first = runs[0]
+    trace_id = getattr(first, "trace_id", None) or first.id
+    project_id = getattr(first, "session_id", None)
+    return str(trace_id), str(project_id) if project_id else None
 
 
 def run_session(model, task: str, workdir: Path, config=None,
@@ -149,19 +152,20 @@ def run_session(model, task: str, workdir: Path, config=None,
     agent = build_agent(workdir, model, floor=floor, members=members,
                         allow_shell=allow_shell)
 
-    # `collect_runs` learns the root run id from the same callbacks LangSmith's
-    # tracer uses, so the fetch afterwards knows what to ask for without a
-    # network round trip during the run.
+    # `collect_runs` learns the trace and project ids from the same callbacks
+    # LangSmith's tracer uses, so the fetch afterwards knows what to ask for
+    # without a network round trip during the run.
     with collect_runs() as collected:
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
 
-    root_id = _root_run_id(collected.traced_runs)
+    trace_id, project_id = _trace_locator(collected.traced_runs)
 
     written = None
     if trace_path is not None:
-        tree = run_trace.fetch_tree(root_id) if root_id else None
+        tree = run_trace.fetch_tree(trace_id, project_id) if trace_id else None
         written = run_trace.write(trace_path, tree, meta={
-            "root_run_id": root_id,
+            "trace_id": trace_id,
+            "project_id": project_id,
             "workdir": str(workdir),
             "harness": "deepagents",
             "context_floor": floor,
