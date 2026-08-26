@@ -20,6 +20,7 @@ from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
 from agent.deep.session import CONTEXT_FLOOR, check_floor, run_session
+from agent.runtime.awake import keep_awake
 from agent.runtime.chat_model import RouterChatModel
 
 logging.basicConfig(level=logging.INFO,
@@ -80,9 +81,14 @@ def main() -> None:
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
         trace_file = Path(os.environ["EVAL_TRACE_FILE"]).with_name("trace.json")
 
-    final, written = run_session(
-        model, task, workdir, floor=floor, members=members, allow_shell=shell,
-        trace_path=Path(trace_file) if trace_file else None)
+    # Hours of wall time with long gaps between calls looks like an idle
+    # machine to Windows. Suspending mid-request is what left one run waiting
+    # 43 minutes on a socket that had died while it slept.
+    with keep_awake():
+        final, written = run_session(
+            model, task, workdir, floor=floor, members=members,
+            allow_shell=shell,
+            trace_path=Path(trace_file) if trace_file else None)
 
     _summary(final, written)
     # Exit 0 for any clean end. Whether the work was any good is the hidden

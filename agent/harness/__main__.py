@@ -11,6 +11,7 @@ from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
 from agent.harness.session import MAX_STEPS, run_session
+from agent.runtime.awake import keep_awake
 from agent.runtime.backend import RestrictedShellBackend
 from agent.runtime.chat_model import RouterChatModel
 from agent.runtime.tools import make_tools
@@ -72,9 +73,13 @@ def main() -> None:
 
     model, toolset = build(workdir, config)
 
-    log, stats, outcome, steps = run_session(
-        model, toolset, task, workdir, config=config,
-        max_steps=int(os.environ.get("HARNESS_MAX_STEPS") or MAX_STEPS))
+    # Hours of wall time with long gaps between calls looks like an idle
+    # machine to Windows. Suspending mid-request is what left one run waiting
+    # 43 minutes on a socket that had died while it slept.
+    with keep_awake():
+        log, stats, outcome, steps = run_session(
+            model, toolset, task, workdir, config=config,
+            max_steps=int(os.environ.get("HARNESS_MAX_STEPS") or MAX_STEPS))
     _summary(outcome, log, stats, len(steps))
     # Exit 0 for any *clean* end -- done, gave up, or out of budget. All three
     # wrote a rationale and left the branch reviewable, which is what R3 asks of
