@@ -173,6 +173,35 @@ def _await(coro):
         return pool.submit(asyncio.run, coro).result()
 
 
+def resolve_project_id(project_id: Optional[str] = None) -> Optional[str]:
+    """The project the trace lives in, looked up by name when not already known.
+
+    `traces.list_runs` requires it and the collector does not supply it, so this
+    is the common path rather than the fallback. Returned rather than resolved
+    privately inside the fetch so the caller can record the id it actually
+    queried: a run record naming one project while the request used another is
+    a record that cannot be checked.
+    """
+    if project_id:
+        return str(project_id)
+    if not tracing_enabled():
+        return None
+    try:
+        from langsmith import Client
+    except ImportError:
+        logger.warning("langsmith is not installed; no trace recorded.")
+        return None
+
+    name = (os.environ.get("LANGSMITH_PROJECT") or
+            os.environ.get("LANGCHAIN_PROJECT") or "default")
+    try:
+        return str(Client().read_project(project_name=name).id)
+    except Exception as exc:  # noqa: BLE001 - no such project, or offline
+        logger.warning(f"Could not resolve LangSmith project {name!r}, so no "
+                       f"trace recorded: {exc!r}")
+        return None
+
+
 def fetch_tree(trace_id: str, project_id: Optional[str] = None) -> Optional[dict]:
     """The run tree from LangSmith, or None if it can't be had.
 
@@ -195,19 +224,11 @@ def fetch_tree(trace_id: str, project_id: Optional[str] = None) -> Optional[dict
         logger.warning("langsmith is not installed; no trace recorded.")
         return None
 
-    client = Client()
-
+    project_id = resolve_project_id(project_id)
     if not project_id:
-        name = (os.environ.get("LANGSMITH_PROJECT") or
-                os.environ.get("LANGCHAIN_PROJECT") or "default")
-        try:
-            project_id = str(client.read_project(project_name=name).id)
-        except Exception as exc:  # noqa: BLE001 - no such project, or offline
-            logger.warning(f"Could not resolve LangSmith project {name!r}, so "
-                           f"no trace recorded: {exc!r}")
-            return None
+        return None
 
-    return _await(_list_runs(client, str(trace_id), str(project_id)))
+    return _await(_list_runs(Client(), str(trace_id), str(project_id)))
 
 
 def write(path: Path, tree: Optional[dict], meta: dict) -> Optional[Path]:

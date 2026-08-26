@@ -122,21 +122,29 @@ def check_floor(router, floor: int = CONTEXT_FLOOR) -> int:
 def _trace_locator(runs) -> tuple[Optional[str], Optional[str]]:
     """What the fetch needs to name this trace: `(trace_id, project_id)`.
 
-    Not `runs[0].id`. The collector appends in *completion* order, so the first
-    entry is the innermost LLM call, and naming a leaf used to return a one-span
-    tree that looked like a working trace until you counted the spans. Every run
-    in a tree carries the root's id as `trace_id`, so any of them will do --
-    which is why this reads the *first* run rather than hunting for the root.
+    Reading any run's `trace_id` does not work here, and neither does taking
+    `runs[0]`. `RunCollectorCallbackHandler` persists a run only when it has no
+    parent, so what arrives is not one tree but *several detached roots* -- a
+    session with two model turns and one tool call yields six, one per
+    LangGraph turn plus one for each `RouterChatModel`/provider pair -- and each
+    of them carries its own id as its `trace_id`. Asking LangSmith for a leaf's
+    id returns an empty trace, and the v2 endpoint reports that as 200 with no
+    runs: a trace recorded as `null` with nothing to say why.
 
-    `project_id` is the same field LangSmith calls `session_id`. It is required
-    by `traces.list_runs`, and having it here saves a lookup; None is fine, and
-    agent/deep/trace.py resolves the project by name instead.
+    The session's own root is the one that started first; everything else
+    begins inside it. `start_time` says so directly, and the collector's own
+    order does not, because it appends in *completion* order and so puts the
+    innermost LLM call first and the root last.
+
+    `project_id` is the same field LangSmith calls `session_id`. The collector
+    leaves it unset, so this is normally None and agent/deep/trace.py resolves
+    the project by name instead.
     """
     if not runs:
         return None, None
-    first = runs[0]
-    trace_id = getattr(first, "trace_id", None) or first.id
-    project_id = getattr(first, "session_id", None)
+    root = min(runs, key=lambda run: run.start_time)
+    trace_id = getattr(root, "trace_id", None) or root.id
+    project_id = getattr(root, "session_id", None)
     return str(trace_id), str(project_id) if project_id else None
 
 
@@ -159,6 +167,9 @@ def run_session(model, task: str, workdir: Path, config=None,
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
 
     trace_id, project_id = _trace_locator(collected.traced_runs)
+    # Resolve here rather than inside the fetch, so the record names the
+    # project the request actually queried.
+    project_id = run_trace.resolve_project_id(project_id)
 
     written = None
     if trace_path is not None:
