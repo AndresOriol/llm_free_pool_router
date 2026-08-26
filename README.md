@@ -33,10 +33,23 @@ unattended on its own branch, and keeps going through free-tier limits by
 switching model mid-task:
 
 ```bash
-echo "Read NOTES.md and do what the newest feedback asks for" | python -m agent.harness ../my-project
+echo "Read NOTES.md and do what the newest feedback asks for" | python -m agent.deep ../my-project
 ```
 
 See [docs/06-agent.md](docs/06-agent.md).
+
+## Web explorer
+
+The other half: an agent that researches the web and writes what it finds into
+the project as Markdown, so the coding agent can read it later. Same pool, same
+jail, no shell.
+
+```bash
+echo "What are the current Gemini free-tier rate limits?" | python -m agent.explore ../my-project
+```
+
+It writes `/research/*.md` with a source URL beside every claim. See
+[docs/15-explorer.md](docs/15-explorer.md).
 
 ## Docs
 

@@ -17,18 +17,19 @@ writes an account a human reviews instead of the code. The daily cycle and what
 it requires are argued in
 [docs/design/long-run-harness.md](docs/design/long-run-harness.md).
 
-**The agent is no longer assumed to be bespoke.** There are two harnesses and
-the point is to decide between them by measurement, not to keep both:
+**The agent is not bespoke.** There is one coding agent, [agent/deep](agent/deep/):
+a conversation configured the way LangChain's `deepagents-code` configures one,
+with the pool as its model. The narrow-role harness it replaced is deleted.
 
-- [agent/harness](agent/harness/) — narrow roles over a shared log, built here.
-- [agent/deep](agent/deep/) — a conversation, configured the way LangChain's
-  `deepagents-code` configures one, with the pool as its model.
+The constraint that produced the narrow-role design has been lifted for coding
+work: a session now routes only to members holding at least 128,000 input
+tokens, so splitting work to fit an 8,000-token member is no longer a
+requirement to design around. Groq stays in the pool for work that fits it.
 
-The second exists because the constraint that produced the first has been
-lifted for coding work: a session now routes only to members holding at least
-128,000 input tokens, so splitting work to fit an 8,000-token member is no
-longer a requirement to design around ([6. The coding agent](docs/06-agent.md)).
-Groq stays in the pool for work that fits it.
+**This was a maintenance decision, not a measurement.** The deleted arm won the
+last cost comparison 39× over, on inputs that no longer hold and that nobody
+re-ran. `input_tokens` per run is the number that says whether that was a
+mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
 
 ## Non-goals
 
@@ -56,19 +57,21 @@ Groq stays in the pool for work that fits it.
   failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
   `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
   nothing about sessions.
-- [agent/harness](agent/harness/) — the narrow-role arm: a LangGraph state
-  machine of narrow nodes over one shared log ([log.py](agent/harness/log.py)),
-  each node reading only the kinds of entry it declares. One file per node in
-  [nodes/](agent/harness/nodes/); the edges and the vetoes in
-  [graph.py](agent/harness/graph.py); what a session leaves behind in
-  [record/](agent/harness/record/).
-- [agent/deep](agent/deep/) — the conversational arm: `create_deep_agent` over
-  the same jailed backend, with the coding-agent configuration ported from
-  `deepagents-code` ([prompt.py](agent/deep/prompt.py),
-  [context.py](agent/deep/context.py), [shell.py](agent/deep/shell.py)). Its
-  record is one LangSmith run tree ([trace.py](agent/deep/trace.py)).
-- [evals](evals/) — the harness that decides whether a change to either of the
-  above helped. Scenarios live in the separate `agent_evals` repo.
+- [agent/deep](agent/deep/) — the coding agent: `create_deep_agent` over that
+  jailed backend, with the configuration ported from `deepagents-code`
+  ([prompt.py](agent/deep/prompt.py), [context.py](agent/deep/context.py),
+  [shell.py](agent/deep/shell.py)). Its record is one LangSmith run tree
+  ([trace.py](agent/deep/trace.py)) plus the `EVAL_TRACE_FILE` JSONL every
+  metric is summed over.
+- [agent/explore](agent/explore/) — the web explorer: the same loop and jail
+  with its tools pointed outward. `web_search` and `read_url` are grounded calls
+  through the pool's own Gemini-platform members, and the two tools are granted
+  **separately** — Gemma can search and cannot open a URL, which is probed
+  rather than assumed ([search.py](agent/explore/search.py)). It runs no
+  programs at all, and hands off to the coding agent by writing `/research/*.md`
+  ([15. The web explorer](docs/15-explorer.md)).
+- [evals](evals/) — the harness that decides whether a change to the above
+  helped. Scenarios live in the separate `agent_evals` repo.
 - Providers today: Groq, Gemini. Expect more free-tier providers (Cerebras,
   OpenRouter free models, Mistral free tier, HuggingFace Inference, etc.) as
   they're evaluated — the provider list is meant to grow, not stay fixed.
@@ -89,7 +92,7 @@ Quick pointers: [4. Failover](docs/04-failover.md) for how the router works,
 [14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
 [5. Providers](docs/05-providers.md) for accounts and limits,
 [12. Development harness](docs/12-development-harness.md) for which model tier
-does what, [13. Roadmap and scope](docs/13-roadmap.md) for what's next and
+does what, [15. The web explorer](docs/15-explorer.md) for web research, [13. Roadmap and scope](docs/13-roadmap.md) for what's next and
 what's already settled.
 
 ## Coding standards

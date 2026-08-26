@@ -45,7 +45,7 @@ The repo is three layers, each usable on its own, stacked:
 | Layer | What it owns | Read |
 | --- | --- | --- |
 | **The pool** (`llm_router/`) | Which free account/model should serve the next request, and which ones are currently benched. Selection only — it never makes a call. | [3](03-pool-model.md), [4](04-failover.md), [5](05-providers.md) |
-| **The agent** (`agent/`) | Two harnesses over one jail, whose single model is the pool: narrow roles over a shared log, and a conversation configured like `deepagents-code`. Either reads and edits a jailed working directory, runs its own tests, and commits to its own branch. | [6](06-agent.md), [7](07-observability.md) |
+| **The agent** (`agent/`) | Two agents over one jail, whose single model is the pool: a coding agent that reads and edits a jailed working directory, runs its own tests and commits to its own branch, and a web explorer that researches and writes notes for it. | [6](06-agent.md), [7](07-observability.md), [15](15-explorer.md) |
 | **The evaluation** (`evals/`) | Deciding whether a change to either of the above actually helped, by running scenarios and comparing distributions — not by argument. | [8](08-evaluation-method.md), [9](09-scenarios.md), [10](10-metrics.md), [11](11-eval-status.md) |
 
 The layering is one-directional: `evals` drives `agent`, `agent` uses
@@ -84,10 +84,11 @@ Honest summary, as of the last update to [11. Evaluation status](11-eval-status.
 - **There are five scenarios now**, three at L1/L2, but nothing has been run
   past n=2 and the original L0 is *exhausted as an instrument*: seven
   configurations were run against it and none was distinguishable from another.
-- **The blocking item is now the harness comparison**, not scenario authoring:
-  two arms exist, neither has been measured against the other, and until that
-  happens the choice between them is back to argument
-  ([13.2](13-roadmap.md#132-what-to-do-next)).
+- **There is one coding agent now**: the narrow-role arm was deleted rather
+  than out-measured, so the cost gap it won on is an accepted risk rather than a
+  closed question ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). The
+  blocking item is running the survivor against the scenarios that still
+  discriminate ([13.2](13-roadmap.md#132-what-to-do-next)).
 - Two Groq models are decommissioned and return `404 model_not_found`, which is
   not in the transient set, so it kills a run
   ([4.6](04-failover.md#46-known-gaps)). Evals work around it with a trimmed
