@@ -29,7 +29,16 @@ def _execute(config, workdir: Path, prompt: str, trace_path: Path,
              timeout_s: int) -> dict:
     """Launch the agent one-shot with the prompt on stdin."""
     cmd = [part.format(workdir=str(workdir)) for part in config.agent_cmd]
-    env = {**os.environ, **config.secrets, **config.env,
+    env = {**os.environ,
+           # The pool's ledger, not the throwaway worktree's. A free tier is
+           # metered per account, so what a run spends is spent against the same
+           # budget every other run draws on -- but `llm_router/usage.py` locates
+           # `.usage/` beside its own package, which inside a worktree is the
+           # worktree's copy. Runs were writing their usage into
+           # `evals/.worktrees/<name>-<sha>/` and the quota panel never saw a
+           # single one of them.
+           "LLM_ROUTER_USAGE_DIR": str((config.repo / "llm_router" / ".usage").resolve()),
+           **config.secrets, **config.env,
            "EVAL_TRACE_FILE": str(trace_path)}
     if config.router_config:
         # Read by the agent's loader; lets a configuration swap the model pool,
