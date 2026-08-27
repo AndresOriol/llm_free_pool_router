@@ -49,6 +49,7 @@ import os
 import shlex
 import subprocess
 import uuid
+from pathlib import Path
 
 from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.backends.protocol import ExecuteResponse, SandboxBackendProtocol
@@ -72,7 +73,14 @@ GIT_ALLOWED_SUBCOMMANDS = ("status", "diff", "log", "add", "commit", "branch",
 # Refused wholesale rather than conditionally. `reset` and `clean` exist to
 # throw work away, and a flag-by-flag allowlist is one parsing bug away from
 # permitting the thing it was written to forbid.
-_GIT_DENIED_FLAGS = ("--force", "-f", "--hard", "--delete", "-D")
+#
+# `-d` sits here because it was missing and an agent used it: a recorded run
+# created `topic/test-branch`, thought better of it, and ran
+# `git branch -d topic/test-branch`. `--delete` and `-D` were both denied and
+# the short safe form was not, so the one spelling an agent reaches for first
+# was the one that worked. Deleting a merged branch is mild; the list claiming
+# to forbid deletion while permitting it is not.
+_GIT_DENIED_FLAGS = ("--force", "-f", "--hard", "--delete", "-d", "-D")
 
 
 def _child_env() -> dict:
@@ -83,6 +91,21 @@ def _child_env() -> dict:
         k: v for k, v in os.environ.items()
         if not any(marker in k.upper() for marker in _SECRET_MARKERS)
     }
+
+
+def _unprefixed(path: Path) -> Path:
+    """A Windows path without its `\\\\?\\` extended-length prefix.
+
+    `\\\\?\\UNC\\server\\share` is the network form and maps back to
+    `\\\\server\\share`; everything else drops the four leading characters.
+    A no-op on POSIX, where the prefix cannot occur.
+    """
+    text = str(path)
+    if text.startswith("\\\\?\\UNC\\"):
+        return Path("\\\\" + text[8:])
+    if text.startswith("\\\\?\\"):
+        return Path(text[4:])
+    return path
 
 
 class RestrictedShellBackend(FilesystemBackend, SandboxBackendProtocol):
@@ -98,6 +121,41 @@ class RestrictedShellBackend(FilesystemBackend, SandboxBackendProtocol):
         self._allow_shell = allow_shell
         self._timeout = timeout
         self._sandbox_id = f"restricted-{uuid.uuid4().hex[:8]}"
+
+    def _resolve_path(self, key):
+        """`FilesystemBackend._resolve_path`, made deterministic on Windows.
+
+        Upstream resolves both sides and asks `full.relative_to(self.cwd)`.
+        That is right on POSIX and *intermittently* wrong on Windows:
+        `Path.resolve()` normally strips the `\\\\?\\` extended-length prefix,
+        and cannot when another process holds the file open -- an indexer, an
+        antivirus scan -- in which case `os.path.realpath` hands back the
+        prefixed form verbatim. `self.cwd` was resolved once at startup and
+        almost never carries it, so the check compares a prefixed path against
+        an unprefixed root and refuses a write that is *inside* the jail.
+
+        Observed: a run wrote three files into a new directory and had the
+        fourth refused with `outside root directory`, which reads as an escape
+        attempt and was a transient file lock. It killed the session.
+
+        Stripping the prefix cannot loosen the jail -- the two spellings name
+        the same file, and containment is still what decides.
+        """
+        if not getattr(self, "virtual_mode", False):
+            return super()._resolve_path(key)
+
+        vpath = key if key.startswith("/") else "/" + key
+        if ".." in vpath or vpath.startswith("~"):
+            raise ValueError("Path traversal not allowed")
+
+        full = _unprefixed((self.cwd / vpath.lstrip("/")).resolve())
+        root = _unprefixed(self.cwd)
+        try:
+            full.relative_to(root)
+        except ValueError:
+            raise ValueError(
+                f"Path:{full} outside root directory: {root}") from None
+        return full
 
     def _refusal(self, argv) -> str:
         """Why this command is not allowed to run, or '' if it may.
