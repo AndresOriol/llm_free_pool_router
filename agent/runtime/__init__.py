@@ -1,9 +1,9 @@
-"""The substrate a harness runs on: the model, the jail, the tools, the trace.
+"""The substrate an agent runs on: the model, the jail, the tools, the trace.
 
 Nothing here knows what a session is. `RouterChatModel` fronts the pool,
-`RestrictedShellBackend` is the filesystem/exec jail a node is confined to,
+`RestrictedShellBackend` is the filesystem/exec jail an agent is confined to,
 `make_tools` is that backend's model-facing face, and `JsonlTracer` records
-what every call cost. The harness (agent/harness/) is one consumer; the
+what every call cost. `agent/code` and `agent/explore` are its consumers; the
 router's own smoke test is another.
 """
 

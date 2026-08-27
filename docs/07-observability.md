@@ -2,23 +2,36 @@
 
 # 7. Observability
 
-*Two traces, deliberately. One to watch a run, one to score it later.*
+*What a run leaves behind, and why the answer is changing.*
 
 ## 7.1 Why two
 
-They answer different questions and have different lifetimes.
+Watching a run and scoring it later are different questions with different
+lifetimes.
 
-| | LangSmith | Local JSONL trace |
+| | LangSmith | The durable record |
 | --- | --- | --- |
 | Answers | *What is this run doing right now?* | *What exactly happened in this run, forever?* |
 | Lifetime | Expires | On disk, for as long as the run directory is kept |
 | Cost | A hosted dependency | None |
 | Used by | A human eyeballing a live run | Every automatic metric in [10. Metrics](10-metrics.md) |
 
-The rule that follows: **LangSmith is for watching, never for the record.** A
-verdict must rest entirely on files on disk. This is not a preference — hosted
-traces expiring would silently invalidate old comparisons, which is exactly the
-failure mode an evaluation system exists to prevent.
+The rule that followed was **LangSmith is for watching, never for the record** —
+a verdict must rest entirely on files on disk, because hosted traces expiring
+would silently invalidate old comparisons.
+
+**The requirement stands; the rule that implemented it was too strong.** What
+expiry actually forbids is *depending on the hosted copy at scoring time*. It
+does not forbid asking LangSmith for the tree once, while it still exists, and
+writing it down. That distinction is what [7.6](#76-the-record-one-run-tree)
+takes, and it is the difference between snapshotting a structure that already
+exists and rebuilding it by hand from callbacks.
+
+So a run leaves **two** records, and both are load-bearing. The flat JSONL
+([7.3](#73-the-local-trace)) is what every automatic metric is summed over and
+is written whether or not LangSmith is reachable; the fetched tree
+([7.6](#76-the-record-one-run-tree)) is what a human or a post-mortem agent
+actually reads.
 
 ## 7.2 LangSmith
 
@@ -50,7 +63,7 @@ is attached explicitly by the router's failure handler
 Set `EVAL_TRACE_FILE` and the agent appends one JSON object per LLM/tool event:
 
 ```bash
-EVAL_TRACE_FILE=run.jsonl python -m agent.harness workdir < brief.md
+EVAL_TRACE_FILE=run.jsonl python -m agent.code workdir < brief.md
 ```
 
 Unset, nothing is attached and the agent behaves exactly as before. Zero cost
@@ -112,34 +125,139 @@ Llama3_70b_groq_1 has finished its cooldown and is available again.
 Everything else is quieted deliberately, because these five lines are the ones
 that explain a run's behaviour.
 
-## 7.6 What a session records about itself
+## 7.6 The record: one run tree
 
-The trace answers *what happened*. A session harness run also has to answer
-*what each role was given*, and that is a different file.
+The narrow-role arm wrote four files about itself, three of which recorded
+handoffs *between roles*. A conversation has no handoffs, so when that arm was
+deleted ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)) the only record left
+was a flat event log that a reader has to re-assemble into the tree it came
+from.
 
-| Under the workdir's `.harness/` | One line/file per | Holds |
+The JSONL in [7.3](#73-the-local-trace) is still written, and still has to be:
+every automatic metric is a sum over it ([10. Metrics](10-metrics.md)), and it
+lands on disk whether or not LangSmith is reachable. What it does not do is
+*read* well. So the two coexist and answer different questions — the flat file
+is what gets counted, the tree below is what gets read.
+
+So that arm records the tree instead, at
+[agent/code/trace.py](../agent/code/trace.py): one nested JSON object per run,
+built from the tree LangSmith already assembled and then condensed down to the
+turns, the tool calls and what each one cost ([7.7](#77-what-goes-to-disk-the-condensed-run)).
+
+```bash
+AGENT_TRACE_FILE=run-tree.json python -m agent.code workdir < brief.md
+```
+
+**Ask for the trace, not for a run.** `collect_runs()` learns locally which runs
+happened, so no network call is needed during the run. But it appends in
+**completion order**, so its first entry is the innermost LLM call — and under
+the old v1 fetch, asking LangSmith for a leaf returned a perfectly valid
+*one-span* tree that looked like a working trace until you counted the spans. It
+was recorded that way twice before the count was checked. Every run carries the
+root's id as `trace_id`, and the v2 endpoint is keyed on exactly that, so the
+question is now unaskable: any span the collector saw names the whole trace.
+
+**The v1 run endpoints are gone on 2027-01-31.** `Client.read_run` (`GET
+/runs/{run_id}`) and the `load_child_runs=True` flag behind it (`POST
+/runs/query`) are replaced by `Client.traces.list_runs`, which is why
+`requirements.txt` pins `langsmith>=0.11.1` — the `traces` resource does not
+exist before it. Two consequences worth knowing when reading the code: the
+project id is now a **required** argument, taken off the collector's `RunTree`
+as `session_id` so the common path still costs no extra round trip; and the
+response is **flat**, so the nesting is rebuilt locally from each run's
+`parent_run_ids`. A span whose parent is missing is re-attached to the root
+rather than dropped, because silently losing a span is the failure this whole
+file exists to avoid.
+
+**Everything the vendor returns is fetched** — which under v2 means asking for
+it, since the endpoint returns bare ids unless the fields are named, so the
+fetch names all of them. What is *written* is smaller, and deliberately: see
+[7.8](#77-what-goes-to-disk-the-condensed-run).
+
+**Children are sorted by `start_time`.** `traces.list_runs` returns the batch
+newest-first, so appending in arrival order built every tree backwards — turn
+17 first, turn 1 last. That reads as a plausible run right up until you notice
+the context shrinking from one turn to the next instead of growing.
+
+**It needs `LANGSMITH_TRACING=1` and a key.** Without them the run is unaffected
+and the record says `"run": null` — which is the right failure, because losing
+a record is bad and losing the *run* because recording it failed is worse.
+
+## 7.7 What goes to disk: the condensed run
+
+The fetched tree is faithful and unreadable. The first real one measured **22 MB
+across 255 spans** for a 17-turn run, and **88% of that was `inputs`** — because
+every level of the six-deep middleware tower carries its own copy of the whole
+message history, and the history is replayed in full on every turn. The
+conversation underneath is a few dozen KB. The rest is the same text written
+back down a hundred-odd times.
+
+So `condense()` keeps the run and drops the recording apparatus. Three moves:
+
+| Move | What goes | Why it is safe |
 | --- | --- | --- |
-| `journal.jsonl` | completed step | The brief (`goal`, `context`, `done_when`), the resulting `status` and `finding`, and the commands run with their exit codes |
-| `steps/NN-<role>.md` | model turn | The brief, the prompt as rendered, the raw reply before parsing, and the tool calls with their outputs |
-| `reports/session-*.md` | session | The rationale, built from the journal — the artefact a human reviews instead of the code |
+| **Only spans that did something survive** | the 195 `chain` spans — middleware wrappers, the graph's `model` and `tools` nodes | their inputs and outputs are their child's; an `llm` span is a turn and a `tool` span is a tool call, and between them they hold everything |
+| **Tools group under the turn that asked for them**, matched by `tool_call_id` | the graph's sibling arrangement, where a tool call hangs off the root next to the model call rather than under it | a turn becomes what it actually is: the model spoke, then these tools ran and returned this |
+| **One copy of the history per call, not eight** | the same messages recopied at every level of the middleware tower | the tower's copies are all the same list; the call's own `input` is the one that matters |
 
-The split is a cost decision. The journal is the crash-resume substrate
-([6.12](06-agent.md#61-what-it-is)),
-re-read line by line every time a killed session resumes, so the bulk stays out
-of it. The transcript runs to a few kilobytes per turn and is only opened when a
-step needs explaining.
+Also lifted out and written once: the **system prompt** and the **task**, which
+are constant and large; and the **tool schemas**, of which only the names
+survive — hundreds of KB repeated on every model span, and the schemas are in
+the code. Inside each turn's `input` the system prompt is stood in for by a
+marker rather than repeated, because 15 KB × 17 turns is a quarter of a
+megabyte of the same text. A system message that *differs* from the hoisted one
+is written in full, because then it is news.
 
-**Why the transcript exists.** A recorded run's journal said a writer was
-blocked for want of the contents of a file, and nothing on disk said what the
-writer had been handed. The orchestrator curating context downward is the whole
-mechanism of the session design
-([design note §8.1](design/long-run-harness.md#81-the-handoff-envelope)), and it
-was the one variable not being logged. Naming a failure and diagnosing it are
-different things, and only the second changes anything.
+The result on that same run is **248 KB, 1.1% of the original**, with nothing a
+turn did truncated: prompts, replies, tool arguments, tool output and errors are
+kept whole. It is the duplication that goes, not the content.
 
-The eval runner copies all three into the run's results directory, before it
-prunes the workdir. They are what the per-run post-mortem reads
-([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
+### The shape of a turn
+
+Each turn answers "what entered the model here, and what came back":
+
+| Field | What it holds |
+| --- | --- |
+| `input` | **the whole conversation as that call received it** — every message in order, each with its role, text, `tool_call_id` and the tool calls it carried |
+| `output` | what the model returned: `text` when it spoke, `tool_calls` with their arguments, `finish_reason`, and `error` if the call failed |
+| `tool_results` | what running those calls produced — linked back by `tool_call_id`, with status, duration and full output. Kept apart from `output` because these did not come out of the model, and without repeating the arguments already recorded there |
+| `model`, `provider`, `tokens`, `seconds` | which member of the pool served this turn and what it cost |
+
+Storing the history per call is redundant on purpose — turn N's `input` is
+mostly turn N-1's — and it is the redundancy worth paying for, because the
+question this file exists to answer is *what did the model actually see at the
+moment it went wrong*. At 17 turns it costs about 200 KB. The duplication that
+was removed was the other kind: the same list copied eight times **within a
+single turn** by the middleware tower, which answers nothing.
+
+### What the condense refuses to lose
+
+Two things are worth spending bytes on, because nothing else in the record holds
+them:
+
+- **`attempts`** — the provider calls the router made for one turn. Omitted when
+  a single attempt succeeded, since that only restates the turn; present the
+  moment the pool had to work for the answer. This is the failover
+  ([4. Failover](04-failover.md)) and it is invisible in every other artefact.
+  `run.provider_failures` counts them.
+- **`context_rewritten`** — a flag on any turn whose history is not the previous
+  turn's extended, which from outside is what summarization looks like. `input`
+  holds what the model saw either way; the flag is what says *this* turn is
+  where to look, without diffing seventeen histories to find it. `context_messages`
+  is the cheap version to scan: read down the column, it should climb, and a
+  drop dates the summarization. A post-mortem asking "was that fact still in the
+  context?" ([9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem))
+  is asking about precisely this event.
+
+The header also keeps `langsmith_url`, so the untouched tree is one click away
+until it expires — which is the whole reason a local snapshot exists
+([7.1](#71-why-two)), and the reason the condense can afford to be aggressive.
+
+**The root span is usually still `pending` when the fetch runs.** It closes last
+and the tracer flushes asynchronously, so its own end time and latency are
+typically absent; the wall time is taken from the last span to finish instead.
+For the same reason the final turn's text is sometimes missing from the tree —
+`stdout.log` holds the agent's closing message, and is the place to read it.
 
 ---
 

@@ -21,15 +21,31 @@ from evals import verify as verify_mod
 
 
 def _run_id(scenario, task, config, rep) -> str:
+    """Timestamp first, description after.
+
+    The scenario used to lead, which sorted the results directory by task and
+    left "which run is the newest" to be answered by reading every name in it.
+    A fixed-width UTC stamp in front makes a plain listing chronological, and
+    makes `--since` a prefix comparison.
+    """
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return f"{scenario.id}_{task.id}_{config.name}_r{rep}_{stamp}"
+    return f"{stamp}_{scenario.id}_{task.id}_{config.name}_r{rep}"
 
 
 def _execute(config, workdir: Path, prompt: str, trace_path: Path,
              timeout_s: int) -> dict:
     """Launch the agent one-shot with the prompt on stdin."""
     cmd = [part.format(workdir=str(workdir)) for part in config.agent_cmd]
-    env = {**os.environ, **config.secrets, **config.env,
+    env = {**os.environ,
+           # The pool's ledger, not the throwaway worktree's. A free tier is
+           # metered per account, so what a run spends is spent against the same
+           # budget every other run draws on -- but `llm_router/usage.py` locates
+           # `.usage/` beside its own package, which inside a worktree is the
+           # worktree's copy. Runs were writing their usage into the throwaway
+           # checkout, which is deleted at the end of the batch, and the quota
+           # panel never saw a single one of them.
+           "LLM_ROUTER_USAGE_DIR": str((config.repo / "llm_router" / ".usage").resolve()),
+           **config.secrets, **config.env,
            "EVAL_TRACE_FILE": str(trace_path)}
     if config.router_config:
         # Read by the agent's loader; lets a configuration swap the model pool,
@@ -79,23 +95,6 @@ def _kill_tree(process) -> None:
         pass
 
 
-def _collect_session_artifacts(workdir: Path, out_dir: Path) -> None:
-    """Keep what a session wrote about itself. No-op for a task-shaped agent."""
-    state = workdir / ".harness"
-    journal = state / "journal.jsonl"
-    if journal.is_file():
-        shutil.copyfile(journal, out_dir / "journal.jsonl")
-    reports = sorted((state / "reports").glob("session-*.md"))
-    if reports:
-        shutil.copyfile(reports[-1], out_dir / "rationale.md")
-    # The per-turn transcript: prompt in, reply out. It is the only artifact
-    # that says what a role was given, so a post-mortem that loses it can
-    # report where a run went wrong but not why.
-    steps = state / "steps"
-    if steps.is_dir():
-        shutil.copytree(steps, out_dir / "steps", dirs_exist_ok=True)
-
-
 def _outcome(execution: dict, verification: dict, tampered: list) -> str:
     if tampered:
         return "tampered"
@@ -117,6 +116,11 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
     results_dir = Path(results_dir).resolve()
     out_dir = results_dir / "runs" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Copied now rather than at the end, so a run that dies mid-flight still
+    # says what it was. With `config_sha` in run.json this is the whole recipe
+    # for rebuilding the configuration: `git worktree add --detach <sha>` plus
+    # the overrides in this file. Nothing else about the checkout is kept.
+    shutil.copyfile(config.path, out_dir / "config.yaml")
 
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
@@ -138,11 +142,6 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
                              out_dir / "trace.jsonl", scenario.timeout_s)
 
         tampered = verify_mod.check_integrity(before, workdir)
-        # Before pruning: a session writes its rationale and journal into the
-        # workdir's .harness/, which prune_artifacts deletes. Those two files
-        # are the deliverable under a review model where nobody reads the code,
-        # so losing them would leave the judge grading the diff alone.
-        _collect_session_artifacts(workdir, out_dir)
         verify_mod.prune_artifacts(workdir)
         patch = verify_mod.make_diff(seed, workdir)
         verification = verify_mod.verify(repo, scenario, workdir, base / "verified")

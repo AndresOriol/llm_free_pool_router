@@ -2,37 +2,63 @@
 
 # 6. The coding agent
 
-*One architecture: a graph of narrow roles, each seeing a slice of shared state.
-What it can do, what it is not allowed to do, how context reaches each step, and
-where every branch is decided.*
+*One architecture over one pool and one jail, the comparison that ended with the
+other one deleted, and what the survivor can and cannot do.*
 
-## 6.1 What it is
+## 6.1 One conversation, on the pool
 
-A **session**: one long unattended run over one project, driven by a LangGraph
-state machine whose every model call routes through the pool
-([4. Failover](04-failover.md)). An orchestrator picks the next worker and
-writes its brief; the worker acts; the result is folded into shared state and
-appended to a journal; repeat.
+[agent/code/](../agent/code/). A **session**: one long unattended run over one
+project, task on stdin, process exits at EOF, every model call routed through the
+pool ([4. Failover](04-failover.md)).
 
 ```bash
-python -m agent.harness workdir < brief.md
+python -m agent.code ../my-project < brief.md
 ```
 
 `workdir` is the project. The task arrives on stdin and the process exits at
 EOF, which is what makes it drivable from a script or from an orchestrating
-agent ([12.5](12-development-harness.md#125-driving-the-free-agents)).
+agent ([12.5](12-development-harness.md#125-driving-the-free-agents)). Its
+counterpart, `python -m agent.explore`, takes the same shape and researches the
+web instead ([15. The web explorer](15-explorer.md)).
 
-**Why not one conversational agent.** The obvious design — one loop, all the
-tools, the whole history in every call — was built first, on
-[deepagents](https://github.com/langchain-ai/deepagents), and measured against
-this one. Its fixed overhead was ~6,100 tokens *before the task text*, of which
-91% was tool schemas; more than two members of this pool can accept at all. On
-the same task it spent 226,854 input tokens against this harness's 5,756, on
-every rep of every batch ([6.8.1](#681-the-cost-result-is-the-one-that-replicated)).
-That comparison is settled and the loser is deleted; `git log` has it.
+A call holds the conversation, compacted by the SDK when it grows, and the
+session runs only on pool members holding at least **128,000 input tokens** —
+declared as a hard floor, not a preference ([6.6.1](#651-the-pool-drops-in-with-no-adapter)).
 
-So the trade here is **more turns, each small enough that the whole pool can
-serve it.** Everything else on this page follows from that.
+### 6.1.1 The arm that was deleted
+
+Until recently there were two. `agent/harness/` split every task into narrow
+roles over a shared log so that each call fitted the pool's **narrowest** member,
+8,000 tokens. It is gone; `git log` has it.
+
+**Why it existed.** A call had to fit a Groq member, so work was split until it
+did. That constraint was lifted for coding work: a Groq account holds 100,000
+tokens *per day*, so one wide request would spend a whole day's budget — those
+members can never serve a conversation, and pretending they might is what forced
+the splitting. Groq stays in the pool for work that fits it.
+
+**What the measurements said, honestly.** The narrow-role design won on cost and
+won decisively: **226,854 input tokens through a conversational loop against
+5,756 through narrow roles**, replicated on every rep of every batch
+([6.7.1](#641-the-cost-result-is-the-one-that-replicated)). That result was never
+overturned. It was taken before the SDK shipped summarization, message eviction
+and tool-output offloading, and against a pool whose floor for this work was
+6,000 tokens rather than 128,000 — so its inputs no longer hold — but nobody has
+re-run it to a conclusion.
+
+**So this was a decision, not a finding.** Two architectures cost roughly twice
+the maintenance of one, every change had to be made and evaluated in both, and
+the conversational arm is the one whose loop, compaction and tooling come from a
+maintained SDK rather than from this repo. The cost gap is the standing risk that
+choice accepts, and `input_tokens` per run is the metric to watch for it
+([10.2](10-metrics.md#102-automatic-metrics)).
+
+**What left with it.** The narrow-role session read a project's `NOTES.md`,
+appended its own account to it, journalled every step so a crash could resume,
+and committed incrementally on its own branch. The conversational agent commits
+(it holds `git`) but does **none** of the rest. The standing-maintainer loop the
+North Star describes therefore has a hole in it until that is rebuilt on this arm
+([13.2](13-roadmap.md#132-what-to-do-next)).
 
 ## 6.2 The blast radius
 
@@ -59,148 +85,7 @@ This is a **small blast radius, not a sandbox**. `python` is arbitrary code
 execution. For real isolation, run the whole thing inside a container — which
 becomes a prerequisite the day sessions run unattended overnight.
 
-## 6.3 The agent's instructions
-
-The session reads the project's `NOTES.md` and appends it to the task, so the
-unit of work is a project's feedback file rather than a task string. Notes in,
-notes out: the session appends its own account to the same file
-([design note §1](design/long-run-harness.md#1-what-is-actually-being-built)).
-
-Whether a codebase ships curated context at all is itself a variable worth
-measuring, which is why scenarios record it as `context_mode`
-([9.4](09-scenarios.md#94-scenarioyaml)).
-
-## 6.4 The graph
-
-[agent/harness/graph.py](../agent/harness/graph.py). One node per role, plus the
-orchestrator. This diagram is printed by `graph.mermaid()` from the compiled
-graph and pinned by a test, so it cannot drift from the code:
-
-```mermaid
-graph TD;
-	__start__([__start__]):::first
-	orchestrate(orchestrate)
-	explore(explore)
-	write(write)
-	execute(execute)
-	document(document)
-	review(review)
-	__end__([__end__]):::last
-	__start__ --> orchestrate;
-	document --> orchestrate;
-	execute --> orchestrate;
-	explore --> orchestrate;
-	orchestrate -.-> __end__;
-	orchestrate -.-> document;
-	orchestrate -.-> execute;
-	orchestrate -.-> explore;
-	orchestrate -.-> review;
-	orchestrate -.-> write;
-	review --> orchestrate;
-	write -.-> execute;
-	write -.-> orchestrate;
-```
-
-Every worker returns to the hub, so the orchestrator decides every step. The one
-exception is the direct `write → execute` edge.
-
-**The orchestrator proposes; the code vetoes.** Each deterministic branch is
-both a model call not spent on a decision with one right answer, and a way the
-run cannot go wrong. All of them are in `_veto` or an edge function:
-
-| Refusal | Why |
-| --- | --- |
-| `DONE` with nothing executed becomes `EXECUTE` | An unverified "done" is the `stopping` failure wearing a confident face |
-| `DONE` with nothing reviewed becomes `REVIEW` | Nobody else is going to look |
-| A third consecutive `EXPLORE` becomes `WRITE` | Observed: nine of twelve steps were `explore`, re-reading the same four files. Reading is the move an orchestrator can always justify |
-| An unparseable action becomes `EXPLORE` | The read-only worker is the safe default, never one that writes |
-| An applied edit goes straight to `EXECUTE` | "Check what you just changed" has one right answer |
-
-**What is graph state and what is not.** The state holds only what an edge
-reads: the next worker, its brief, whether a review passed, the step count. The
-log, the journal, the transcript and git are collaborators the nodes
-close over. That is also why a session that exhausts its budget still writes its
-rationale — everything it learned is already on disk, not in a state object that
-died with the graph.
-
-**The budget counts journal steps**, checked in the orchestrate node.
-LangGraph's `recursion_limit` counts supersteps and is only a backstop; the
-number that matters is the one the scenario timeout and the cost figures are
-reasoned about in.
-
-## 6.5 What each role sees
-
-Everything the session knows is one ordered log of entries, each tagged with a
-*kind* and the node that wrote it ([log.py](../agent/harness/log.py)). A node
-declares the kinds it reads ([nodes/](../agent/harness/nodes/)) and is handed
-those entries as messages — the last few of each kind, and nothing else.
-
-This is the mechanism, and the one table worth memorising:
-
-| role | task | files | notes | edits | exec | diff | steps | tier |
-| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | --- |
-| **orchestrate** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | wide |
-| explore | ✓ | | | | | | | any |
-| **write** | ✓ | ✓ | | | | | | any |
-| execute | ✓ | | | ✓ | | | | any |
-| document | ✓ | | | ✓ | | ✓ | | wide |
-| review | ✓ | | ✓ | | ✓ | ✓ | | wide |
-
-Read the `write` row. It sees the task and a list of candidate files, and
-nothing else — not the diff, not the notes, not what the last command returned.
-**Everything else has to arrive copied into the `CONTEXT` field of its brief.**
-
-That is the design, not an oversight: **context is pushed down by the one role
-routed to a wide-context member, never pulled up by roles that cannot afford
-it** ([design note §8.1](design/long-run-harness.md#81-the-handoff-envelope)). A
-small model told to "go read the notes for background" mostly will not, and will
-act on what it has; pushing removes the failure instead of instructing against
-it. The cost is that the orchestrator becomes a single point of failure for
-every role's quality, which is why a worker can answer
-`INSUFFICIENT_CONTEXT` rather than guess.
-
-**`tier`** is a claim about the job, not the request. A role whose work is
-judgement over a wide view declares a floor and the router honours it
-([4.2](04-failover.md#42-size-aware-selection)). Splitting work to fit the
-narrowest pool member is what makes this cheap; doing it to a role that needs
-breadth is what makes it stupid.
-
-## 6.6 One role call
-
-[`run_node`](../agent/harness/nodes/base.py) is the inside of every node, and it
-is three lines of idea:
-
-```python
-messages = [SystemMessage(node.prompt), *log.view(node.reads), HumanMessage(ask)]
-# ... up to node.max_rounds of tool calls ...
-return NodeResult(text=..., outputs=..., calls=..., prompt=...)
-```
-
-`ask` is the orchestrator's brief. Then **the message list is discarded.** Only
-the `NodeResult` escapes, and only what the graph appends to the log survives
-into the next step. No role ever sees another role's conversation.
-
-That is what bounds a prompt by the role's declaration rather than by how long
-the run has been going — step 40 costs what step 1 cost — and it is why this is
-hand-written rather than a prebuilt LangGraph agent. `create_react_agent`
-accumulates the conversation, which is precisely the cost this exists to avoid;
-and `max_rounds` and `force_summary` both come from observed failures and have
-no prebuilt equivalent.
-
-**`force_summary`** spends the final round with no tools bound. Without it a
-role that used every round on tool calls ends holding a tool-calling response,
-whose text is empty — it does all the work and reports nothing. It is applied
-only to roles whose value is what they *say*; forcing it on an acting role
-steals the round it needed to act.
-
-**Acting roles are judged by their tool effects, never by their summary.** An
-`execute` that says "tests pass" about a failing run must not be able to end a
-session, and under a review model where nobody reads the code it would end it
-convincingly. Observed, verbatim, from an `explore` role holding no edit tool
-and no shell: *"Implemented support for spelled-out units… All tests pass (4
-passed)."*
-
-## 6.7 What failover looks like in practice
+## 6.3 What failover looks like in practice
 
 Expect a single step to walk several small-TPM Groq members before a
 higher-capacity account accepts the request. That is the design working — but it
@@ -218,12 +103,12 @@ only routed to if a request is small enough to pass the size filter, so
 shrinking requests reaches *further* into the pool. Audit the pool before
 reading any efficiency result.
 
-## 6.8 Why it is shaped this way
+## 6.4 Why it is shaped this way
 
 Three findings from the runs that produced this architecture. The configurations
 themselves are in `git log`; these are what they showed, and they still hold.
 
-### 6.8.1 The cost result is the one that replicated
+### 6.4.1 The cost result is the one that replicated
 
 Same task, same pool, interleaved: **226,854 input tokens** through a
 conversational loop against **5,756** through narrow roles, stable across every
@@ -231,7 +116,7 @@ rep and every batch, with between-configuration spread far exceeding
 within-configuration variance. Provider calls and failover bounces moved the
 same way. This is the result the architecture rests on.
 
-### 6.8.2 The pass column is noise
+### 6.4.2 The pass column is noise
 
 One configuration scored **3/3 in one batch and 1/3 in the next**, unchanged,
 hours apart. The noise floor is around 15 points at ten times these sample sizes
@@ -239,7 +124,7 @@ hours apart. The noise floor is around 15 points at ten times these sample sizes
 pass rates do not. Any ranking read off a pass column at n<10 is invented, and
 this project has had to retract one.
 
-### 6.8.3 Every failure is `reasoning`
+### 6.4.3 Every failure is `reasoning`
 
 **12 of 13 recorded failures**, with zero `retrieval` and zero `tooling`. Every
 configuration found the file, edited it, and ran the tests — and was
@@ -251,7 +136,7 @@ A taxonomy where one class holds 92% of the mass is a rename of "failed", not a
 diagnosis. Subdividing it is the standing job of the batch analysis
 ([design note §6.3](design/long-run-harness.md#63-why-the-existing-taxonomy-needs-subdividing-urgently)).
 
-### 6.8.4 Closing the loop is not the same as being right
+### 6.4.4 Closing the loop is not the same as being right
 
 The textbook instance, from a run whose own tests passed:
 
@@ -265,6 +150,74 @@ satisfy the test it could see; the hidden set, which checks other casings,
 failed it. This is what the withheld-test design exists to catch
 ([9.3](09-scenarios.md#93-anatomy)), and it is not a token-budget problem. **A
 cheaper agent reaches this failure mode sooner, not later.**
+
+## 6.5 What makes it a coding agent
+
+[agent/code/](../agent/code/). Almost none of this is agent design.
+`create_deep_agent` already assembles the todo list, the filesystem tools, the
+subagent `task` tool and summarization, and the `execute` tool switches itself
+on because `RestrictedShellBackend` satisfies `SandboxBackendProtocol`. Two
+things are worth knowing.
+
+### 6.5.1 The pool drops in with no adapter
+
+`resolve_model` returns a `BaseChatModel` unchanged, and `RouterChatModel` is
+one. So the pool is passed where a model id would go, and every failover
+guarantee on [4. Failover](04-failover.md) holds inside a harness this repo did
+not write. That is the whole integration.
+
+The floor is enforced, not preferred. `for_context(128_000, strict=True)` makes
+the router *refuse* to route below it and wait for a wide member to leave
+cooldown, rather than falling back to a narrow one
+([4.2](04-failover.md#42-size-aware-selection)). Selection and the cooldown wait
+have to be asked the same question — a wait computed over the whole pool reports
+"someone is free" because a Groq member is warm, and the run dies with a wide
+member seconds from returning.
+
+### 6.5.2 The configuration, ported from dcode
+
+The configuration is ported from `deepagents-code`'s `create_cli_agent` (MIT):
+the generated system prompt, the project overview put in front of the model, and
+a shell allowlist that refuses a command **as a tool message** rather than as an
+exception, so the model reads the reason and corrects itself instead of retrying.
+
+| Ported | Where |
+| --- | --- |
+| System prompt: understand → build → test → verify; match the spec exactly; parallel tool calls; paginated reads; git safety; root-cause debugging; stop after three identical failures | [system_prompt.md](../agent/code/system_prompt.md) |
+| Prompt assembly and its interpolated sections | [prompt.py](../agent/code/prompt.py) |
+| `LocalContextMiddleware` — git branch, status, a depth-limited tree | [context.py](../agent/code/context.py) |
+| `ShellAllowListMiddleware` | [shell.py](../agent/code/shell.py) |
+
+Three parts are **adapted rather than copied**, and each adaptation is a fact
+about this pool rather than a preference:
+
+- **Identity is a pool, not a model.** dcode writes *"You are running as model
+  X, your context window is N tokens"* because a run has one model. Here the
+  router picks per call and a session is routinely served by four or five
+  models, so naming one is false by the second step. The prompt states the
+  *floor* every eligible member clears, which is the part that stays true.
+- **Headless always.** dcode defaults to an interactive TUI where the agent may
+  ask and wait. Nobody is watching a session here, so `ask_user` is never
+  installed and the prompt takes the branch that says assume and proceed
+  ([design note §3, R3](design/long-run-harness.md#3-what-helpful-requires-draft--v3)).
+- **Paths root at the jail.** dcode runs `virtual_mode=False` and tells the
+  model to build absolute host paths. This backend's `/` *is* the workdir
+  ([6.2](#62-the-blast-radius)), so copying that instruction verbatim would fail
+  every tool call.
+
+Not carried over: human-in-the-loop approval, auto mode, cost tracking, MCP, the
+code interpreter, the TUI. Worth revisiting: skills, memory — dcode's `AGENTS.md`
+convention is the same idea as the `NOTES.md` loop that left with the other arm
+([6.1.1](#611-the-arm-that-was-deleted)) — and the rubric self-grader, which
+belongs to the evaluation question rather than this one.
+
+**The context section earns its place.** Without it the first thing any agent
+does is spend two or three calls discovering the shape of the project, and those
+are the most expensive calls in a run because nothing has been compacted yet.
+Adding it took a measured run from 21 model calls to 14 and removed every `glob`
+call. Unlike dcode it is built once into the prompt rather than injected per
+call: the tree barely moves inside a run, and on a pool where each step spends a
+request against a daily quota, re-sending it buys nothing.
 
 ---
 

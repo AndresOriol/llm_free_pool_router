@@ -5,6 +5,14 @@ anything is built, and it is expected to change every session. The settled parts
 graduate into [6. The coding agent](../06-agent.md) and
 [13. Roadmap](../13-roadmap.md); everything here is provisional until it does.*
 
+> **Read this as history from §3 onward.** The narrow-role harness this note
+> argues for — the orchestrator, the briefed roles, the shared log, the journal,
+> `record/` — was **deleted**. `agent/code/` is the only coding agent
+> ([6.1.1](../06-agent.md#611-the-arm-that-was-deleted)). What survives is the
+> *requirement* set: §1's daily cycle, §2's constraints and §3's R-numbers still
+> describe what a standing maintainer has to do, and most of it is not built on
+> the surviving arm. The mechanisms proposed for meeting them are gone.
+
 **How we work on it.** Andrés sets direction and reviews conclusions; the code is
 delegated. ❓ marks an open question. Nothing gets built from a section until it
 is recorded in [§5 Settled](#5-settled).
@@ -38,7 +46,7 @@ Three consequences, and they are the design:
 2. **The unit of work is a project's notes file, not a task string.**
 3. **The harness is project-agnostic** — configured by the repo it is pointed at,
    which is already how the agent's prompt works
-   ([6.3](../06-agent.md#63-the-agents-instructions)).
+   ([6.3](../06-agent.md#611-the-arm-that-was-deleted)).
 
 Wall-clock time and token count are explicitly not costs to minimise. The bet
 underneath: **many attempts by a weak model can substitute for one attempt by a
@@ -47,11 +55,51 @@ make many attempts affordable.
 
 ## 2. Constraints (facts, not preferences)
 
+> **C1 was retired for coding work on 2026-08-25.** It is the constraint the
+> whole narrow-role design answers, so read [§2.1](#21-why-c1-stopped-applying)
+> before treating anything below as current.
+
 **C1 — Per-call size is capped, and the cap differs by pool member.** Groq's
 cheapest members top out at 6,000 input tokens; Gemini's run to six figures. The
 router excludes any provider whose ceiling the request does not fit
 ([4.2](../04-failover.md#42-size-aware-selection)). No amount of patience buys a
 bigger single call from a small member.
+
+### 2.1 Why C1 stopped applying
+
+C1 is true about the pool and was *misapplied* to the session. It says a call
+must fit the member that serves it. It was read as: every call must fit the
+**narrowest** member, therefore split the work until it does.
+
+That reading only holds if narrow members can usefully serve a coding session,
+and they cannot. A Groq account carries **100,000 tokens per day**, so one wide
+request would spend an account's entire daily budget. Those members were never
+going to carry a conversation — the choice was between a session that fits them
+and a session that never routes to them, not between a cheap session and an
+expensive one.
+
+So a coding session now declares a **hard** floor of 128,000 input tokens and the
+router refuses to route below it, waiting for a wide member rather than settling
+for a narrow one ([4.2](../04-failover.md#42-size-aware-selection)). Fourteen of
+seventeen pool members clear it; Groq keeps serving everything else.
+
+**What this does to the rest of this document.** C2's tiering argument survives
+intact — breadth still has to be spent where judgement lives, and the pool is
+still request-scarce exactly where it is context-rich. What weakens is the
+*inference* from C1 to the handoff envelope ([§8.1](#81-the-handoff-envelope)):
+pushing context down in a labelled brief exists because a role could not be
+trusted to hold the conversation, and above the floor it can. The envelope may
+still be the better design; it is no longer the only one available. It is also no
+longer built: the narrow-role arm and its envelope were deleted in favour of the
+conversation ([6.1.1](../06-agent.md#611-the-arm-that-was-deleted)), before the
+measurement this section calls for was ever taken.
+
+**The cost of being wrong is asymmetric, which is why this is measured rather
+than switched.** The narrow-role harness ran this class of task on 5,756 input
+tokens; the coding agent's first two runs took 134,000–162,000. If that gap
+holds under the runner, "the constraint was lifted" will have been true and
+irrelevant — a session that costs 25× more is not better for having been
+permitted.
 
 **C2 — Context is scarce per tier, not globally, and that is a lever.** Splitting
 work into small pieces so it fits Groq can starve a role of the breadth it needs
@@ -65,7 +113,7 @@ roles that would have fit anywhere.
 
 **C3 — The measured bottleneck is judgement, and only execution can check it.**
 12 of 13 recorded failures were `reasoning`; zero `retrieval`, zero `tooling`
-([6.14.2](../06-agent.md#683-every-failure-is-reasoning)).
+([6.14.2](../06-agent.md#643-every-failure-is-reasoning)).
 Every variant found the file, edited it, ran the tests — and was conceptually
 wrong, usually the same way. So more attempts help only if something *tells them
 apart*, and that discriminator has to be stronger than what it judges. Inside a
@@ -79,7 +127,7 @@ R6 exist to answer this.
 
 **C5 — The current measuring instrument cannot see any of this.** One L0
 single-file bugfix, exhausted as a discriminator
-([6.14.1](../06-agent.md#682-the-pass-column-is-noise)).
+([6.14.1](../06-agent.md#642-the-pass-column-is-noise)).
 
 ## 3. What "helpful" requires (draft — v3)
 
@@ -143,7 +191,7 @@ convenience — and the honest response is the one that page already names:
 prerequisite the day sessions run unattended overnight, not a nicety.
 
 Two rules survive from what the variants already taught
-([6.14.5](../06-agent.md#64-the-graph)):
+([6.14.5](../06-agent.md#611-the-arm-that-was-deleted)):
 
 - **Verdicts come from exit codes, not from the Executor's summary of them.** A
   model reporting "everything passes" about a failing run would otherwise end a
@@ -273,7 +321,7 @@ properties matter more than any structure:
   becoming a list of plausible ideas.
 - **What the evidence cannot support gets said out loud.** The claims J2 wanted
   to make and couldn't. Without this, an automated analysis drifts into confident
-  storytelling — and the pass-rate story that [6.14.1](../06-agent.md#682-the-pass-column-is-noise)
+  storytelling — and the pass-rate story that [6.14.1](../06-agent.md#642-the-pass-column-is-noise)
   had to retract is the local proof that it happens here.
 
 The one mechanical part is the **verdict** — promote / draw / reject, computed
@@ -305,7 +353,7 @@ run is short and either works or doesn't. Three additions follow from §1:
   to an end-state pass/fail.
 - **Spec-gaming gap** — visible tests passing while hidden tests fail. This
   project has already produced a textbook instance
-  ([6.13.1](../06-agent.md#684-closing-the-loop-is-not-the-same-as-being-right)), and
+  ([6.13.1](../06-agent.md#644-closing-the-loop-is-not-the-same-as-being-right)), and
   under a prose-only review model it acquires a second face: a rationale that
   reads better than the diff deserves. J1's `faithful` verdict is the probe for
   it.
@@ -359,8 +407,9 @@ most and is the least defined.
 
 ## 8. The roles
 
-**Built**, and now the only architecture
-([graph.py](../../agent/harness/graph.py), [nodes/](../../agent/harness/nodes/)).
+**Was built, then deleted** — `agent/harness/graph.py` and `agent/harness/nodes/`
+are in `git log` and nowhere else
+([6.1.1](../06-agent.md#611-the-arm-that-was-deleted)).
 
 | Role | Job | Tools | Tier (C2) |
 | --- | --- | --- | --- |
@@ -378,7 +427,7 @@ is refused**. Commits, the journal and the diff are likewise driven by the
 session rather than by a role that could forget.
 
 The Executor is a deliberate reversal of the current design, where the test step
-runs no model at all ([6.12.1](../06-agent.md#64-the-graph)).
+runs no model at all ([6.12.1](../06-agent.md#611-the-arm-that-was-deleted)).
 That was right when the only check was a fixed test command. It is wrong once
 verification means *deciding what would convince you* — which is a judgement, and
 the one place a model earns its call.
@@ -411,7 +460,7 @@ and every field earns its place by naming a failure already seen:
 | `inputs` | Concrete pointers: paths, symbols, prior findings | Re-deriving what an earlier role already found |
 | `constraints` | What not to touch | Scope creep, which J1 scores as `in_scope` |
 | `done_when` | The check that ends this step — for the Executor, a command and its expected exit | "Done" meaning "I stopped" |
-| `report_back` | What the Orchestrator expects returned, and in what shape | A role that works and reports nothing — an observed bug ([6.14.4](../06-agent.md#66-one-role-call)) |
+| `report_back` | What the Orchestrator expects returned, and in what shape | A role that works and reports nothing — an observed bug ([6.14.4](../06-agent.md#611-the-arm-that-was-deleted)) |
 
 And the return path, which matters as much as the outbound one:
 
@@ -426,14 +475,14 @@ And the return path, which matters as much as the outbound one:
 Orchestrator a single point of failure for every role's quality — curate badly
 and the role is blind. Today a blind role *guesses*, and there is a recorded run
 where `inspect` returned no finding and `edit` then applied nothing, burning a
-whole cycle ([6.13.1](../06-agent.md#684-closing-the-loop-is-not-the-same-as-being-right)).
+whole cycle ([6.13.1](../06-agent.md#644-closing-the-loop-is-not-the-same-as-being-right)).
 A role must be able to say "you didn't give me enough, and here is what is
 missing" — that turns a wasted cycle into a cheap, informative one.
 
 **Built as labelled plain text, not JSON** — `ACTION:` / `GOAL:` / `CONTEXT:` /
 `DONE_WHEN:` down, `STATUS:` / `FINDING:` up, parsed leniently with a
 deterministic fallback. JSON is checkable, but the `write_todos` lesson
-([6.5](../06-agent.md#61-what-it-is)) is that
+([6.1](../06-agent.md#61-one-conversation-on-the-pool)) is that
 small models fumble structure, and a session must not end because a model wrote
 a sentence where a word was asked for.
 
@@ -534,9 +583,9 @@ Three additions, none of which touches a decision the harness makes:
 - **`.harness/steps/NN-<role>.md`, one file per model turn** — the brief it was
   given, the prompt it received, its raw reply, and its tool calls with their
   outputs. The orchestrator's own turns are included: its reply *is* the brief,
-  so the decision and its inputs sit in one file. Written by `Transcript` in
-  [record/journal.py](../../agent/harness/record/journal.py); a resumed session continues the
-  numbering rather than overwriting the turns that preceded the crash.
+  so the decision and its inputs sit in one file. Was written by `Transcript` in
+  `agent/harness/record/journal.py`, which is deleted; a resumed session
+  continued the numbering rather than overwriting the turns before the crash.
 - **`journal.jsonl` carries the whole brief** — `context` and `done_when`
   alongside `goal`, so the cheap artifact stays sufficient for counting and the
   expensive one is only opened when a step needs explaining.

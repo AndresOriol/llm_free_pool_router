@@ -41,6 +41,26 @@ priority sort:
 
 A provider with no declared ceiling is never filtered out.
 
+**A caller may also declare a floor**, which is a claim about the *job* rather
+than the request's size: `min_context` says "this work needs a member at least
+this wide, even if today's message happens to fit a narrow one". By default the
+floor is a **preference** — prefer a wide member, settle for a narrow one rather
+than stall an unattended run behind a busy account.
+
+`strict_context` makes it a **hard filter**, and the conversational harness needs
+that ([6.5.1](06-agent.md#651-the-pool-drops-in-with-no-adapter)). Falling
+through to an 8,000-token member there is not a degraded answer but a failed
+call, and Groq's 100,000-tokens-per-day ceiling means those members could never
+have served the request anyway. When nothing wide is free, selection returns
+nothing and the caller waits — the right move when time is free and the
+alternative could not have worked.
+
+**Selection and the wait must be asked the same question.**
+`seconds_until_available()` takes the same floor, because without it the two
+disagree: selection refuses a narrow member while the wait reports "someone is
+already available" — that same warm narrow member — so the loop stops waiting
+and the run dies with a wide account seconds from returning.
+
 **Why this exists.** A request structurally larger than a model's
 tokens-per-minute limit will *never* fit that model. Benching it and retrying
 later is futile. Before size-awareness, a large request would be rejected with

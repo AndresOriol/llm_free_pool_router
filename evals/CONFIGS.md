@@ -11,11 +11,17 @@ rate improves beyond interval overlap, or success rate holds flat while a
 secondary metric improves materially. Anything else is a draw, and a draw keeps
 the simpler configuration.
 
-> **The configurations in this table no longer exist as files.** The harness was
-> reduced to one architecture — `evals/configs/session.yaml` — and the deep-agents
-> baseline and seven variants were deleted. These rows stay because a ledger of
-> what was tried and what it showed is the point of the file; `git log` has the
-> code behind each name.
+> **The configurations in this table no longer exist as files, and neither does
+> the architecture most of them were variants of.** The narrow-role harness —
+> every `harness-v*` row, `adhoc-harness`, `session` and `context-and-gate` —
+> was deleted, leaving `evals/configs/code.yaml` as the only agent
+> configuration ([6.1.1](../docs/06-agent.md#611-the-arm-that-was-deleted)).
+> These rows stay because a ledger of what was tried and what it showed is the
+> point of the file; `git log` has the code behind each name.
+>
+> **Read the cost column before concluding anything from this.** The deleted
+> family holds every cheap result here. Retiring it was a decision about what to
+> maintain, taken against the measurements rather than because of them.
 
 | Config | Ref / SHA | Change | Suite | Result | Verdict |
 | --- | --- | --- | --- | --- | --- |
@@ -27,6 +33,28 @@ the simpler configuration.
 | `harness-v2-seeded` | `harness/adhoc-router` | Glob the file list, skip `locate` | L0, n=3 | 0/3 | **dropped** |
 | `harness-v7-orchestrated` | `harness/adhoc-router` | Hub and spoke; execution as an agent | L0, n=3 | 0/3, most calls | **dropped for this task shape** |
 | `harness-v8-session` | `harness/adhoc-router` | A session: briefed roles, journal, branch, docs and rationale as deliverables | L1+L2 `session`, n=2 | 2/4 | **no verdict** — ran alone, no baseline |
+| `code` (was `deepagents`) | `harness/deepagents` | A conversation instead of narrow roles: `create_deep_agent` on the pool behind a hard 128k context floor, configured like `deepagents-code` | — | **never run** | **the only configuration left** — no eval run recorded, so no verdict |
+
+### code, before any eval run (2026-08-25)
+
+The arm exists and works; nothing about it is comparable to anything yet. Two
+ad-hoc runs outside the runner — no scenario, no hidden tests — are recorded in
+[docs/11-eval-status.md](../docs/11-eval-status.md#the-coding-agent-first-look-2026-08-25)
+because they bear on whether the comparison is worth its quota.
+
+The short version: both runs produced a correct minimal fix, and neither
+spec-gamed. But at 134k–162k input tokens against the narrow-role harness's
+5,756, **the cost gap did not close** — it is ~30% under the conversational
+baseline that was deleted for exactly this reason, not an order of magnitude.
+n=1 per task, different tasks, and short enough that summarization likely never
+fired, so this is a reason to run the comparison carefully rather than a result.
+
+**Run it interleaved against `session`, never alone** — that was
+`harness-v8-session`'s mistake and it is why that row still says no verdict:
+
+```bash
+python -m evals run --config code --reps 3
+```
 
 ### harness-v8-session, first batch (2026-08-07)
 
@@ -46,7 +74,7 @@ the journals are.
 ### The harness family, 2026-08-06
 
 Full write-up in
-[docs/06-agent.md](../docs/06-agent.md#68-why-it-is-shaped-this-way). Three
+[docs/06-agent.md](../docs/06-agent.md#64-why-it-is-shaped-this-way). Three
 things worth carrying forward:
 
 **No promotion.** Nothing beat baseline on the gating axis, and nothing is

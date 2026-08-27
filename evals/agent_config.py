@@ -4,23 +4,37 @@ A config is a pinned commit of the agent repo plus overrides. It resolves via
 `git worktree add --detach`, so a comparison runs from a clean tree while you
 keep editing the branch it came from.
 
+**The checkout is throwaway and lives only as long as the batch.** What makes a
+configuration reproducible is the resolved SHA in every `run.json` plus the
+config file copied beside it -- `git worktree add --detach <path> <sha>`
+rebuilds the tree from those two at any point later. Keeping the checkouts
+instead bought nothing and cost a directory of thirty-odd stale copies of this
+repo, one per (config, SHA) pair ever run.
+
 The recorded fingerprint is the resolved SHA plus a hash of the effective
 overrides -- `ref: master` today and `ref: master` next month are different
 configurations, and the results must say so rather than silently comparing
 two different things.
 """
 
+import contextlib
 import hashlib
 import json
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
-# What actually launches the agent. Overridable so the pipeline can be tested
-# against a stub without spending free-tier quota on the real pool.
-DEFAULT_AGENT_CMD = ["python", "-m", "agent.harness", "{workdir}"]
+# What actually launches the agent. Overridable because there is more than one
+# thing to launch: `evals/fake_agent.py` exercises the runner's own paths
+# without spending quota, and `agent.explore` takes the same arguments as
+# `agent.code` on purpose, so an arm that researches instead of codes is a
+# config line rather than a second runner.
+DEFAULT_AGENT_CMD = ["python", "-m", "agent.code", "{workdir}"]
 
 
 def read_env_file(path: Path) -> dict:
@@ -46,14 +60,39 @@ def read_env_file(path: Path) -> dict:
 @dataclass
 class AgentConfig:
     name: str
+    path: Path          # the yaml this was read from; copied into every run dir
     repo: Path
     ref: str
     sha: str
-    worktree: Path
     agent_cmd: list
     env: dict = field(default_factory=dict)
     secrets: dict = field(default_factory=dict)
     router_config: str = ""
+    # Set only while `checkout()` is open. Nothing outside a batch has a tree.
+    worktree: Optional[Path] = None
+
+    @contextlib.contextmanager
+    def checkout(self):
+        """Materialize the pinned commit, and take it away again afterwards.
+
+        `--force` on removal: the agent runs with cwd set here, so the tree is
+        never clean by the end -- `__pycache__` at least, and whatever else it
+        wrote outside the scenario workdir. There is nothing here to save; the
+        commit is in the repo and the run's evidence is in the results dir.
+        """
+        # mkdtemp gives an absolute path, which matters: `git -C <repo>
+        # worktree add` resolves a relative one against the *agent* repo, and
+        # would put the worktree inside the thing under test.
+        path = Path(tempfile.mkdtemp(prefix=f"eval-{self.name}-"))
+        _git(self.repo, "worktree", "add", "--detach", str(path), self.sha)
+        self.worktree = path
+        try:
+            yield path
+        finally:
+            self.worktree = None
+            subprocess.run(["git", "-C", str(self.repo), "worktree", "remove",
+                            "--force", str(path)], capture_output=True)
+            shutil.rmtree(path, ignore_errors=True)
 
     @property
     def fingerprint(self) -> str:
@@ -75,27 +114,22 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def load(path: Path, worktree_root: Path) -> AgentConfig:
+def load(path: Path) -> AgentConfig:
+    """Read a config and resolve its ref. No tree is created here -- `ref` is
+    resolved to a SHA now so a batch cannot silently straddle a commit that
+    moved under it, and `checkout()` builds the tree when the batch starts."""
     spec = yaml.safe_load(path.read_text(encoding="utf-8"))
     repo = (path.parent / spec["repo"]).resolve()
     ref = spec.get("ref", "master")
     sha = _git(repo, "rev-parse", ref)
 
     overrides = spec.get("overrides") or {}
-    # Must be absolute: `git -C <repo> worktree add` resolves a relative path
-    # against the *agent* repo, which would create the worktree inside the
-    # thing under test.
-    worktree = (worktree_root / f"{spec['name']}-{sha[:8]}").resolve()
-    if not worktree.exists():
-        worktree.parent.mkdir(parents=True, exist_ok=True)
-        _git(repo, "worktree", "add", "--detach", str(worktree), sha)
-
     return AgentConfig(
         name=spec["name"],
+        path=path.resolve(),
         repo=repo,
         ref=ref,
         sha=sha,
-        worktree=worktree,
         agent_cmd=spec.get("agent_cmd", DEFAULT_AGENT_CMD),
         env={str(k): str(v) for k, v in (overrides.get("env") or {}).items()},
         secrets=(read_env_file((path.parent / spec["env_file"]).resolve())

@@ -10,6 +10,7 @@ sibling of this one); point elsewhere with --scenarios or EVAL_SCENARIOS.
 """
 
 import argparse
+import contextlib
 import os
 import sys
 from collections import defaultdict
@@ -21,7 +22,6 @@ from evals import (agent_config, bundle as bundle_mod, run as run_mod,
 REPO = Path(__file__).resolve().parents[1]
 CONFIGS = REPO / "evals" / "configs"
 RESULTS = REPO / "evals" / "results"
-WORKTREES = REPO / "evals" / ".worktrees"
 DEFAULT_SCENARIOS = REPO.parent / "agent_evals"
 
 
@@ -71,7 +71,7 @@ def cmd_validate(args) -> int:
 
 def cmd_run(args) -> int:
     repo = _scenario_repo(args)
-    configs = [agent_config.load(CONFIGS / f"{name}.yaml", WORKTREES)
+    configs = [agent_config.load(CONFIGS / f"{name}.yaml")
                for name in args.config]
     tasks = _selected_tasks(_scenarios(repo, args), args.suite, args.tags or [])
     if not tasks:
@@ -89,13 +89,21 @@ def cmd_run(args) -> int:
     print(f"{len(plan)} run(s): {len(configs)} config(s) x {len(tasks)} task(s) "
           f"x {args.reps} rep(s), interleaved, serial.\n")
 
-    for index, (config, scenario, task, rep) in enumerate(plan, 1):
-        print(f"[{index}/{len(plan)}] {scenario.topic}/{scenario.id}/{task.id} "
-              f"{config.name} rep{rep} ... ", end="", flush=True)
-        record = run_mod.execute_run(repo, scenario, task, config, rep, results)
-        detail = record["failure_class"] or ""
-        print(f"{record['outcome']}{' (' + detail + ')' if detail else ''} "
-              f"[{record['wall_time_s']}s, {record['provider_calls']} calls]")
+    # One checkout per configuration, held open for the whole batch and removed
+    # when it ends. Per-run checkouts would be correct too and cost a `git
+    # worktree add` per run; per-batch is the same isolation for one add per
+    # arm, because a run never writes to the tree it is launched from.
+    with contextlib.ExitStack() as trees:
+        for config in configs:
+            trees.enter_context(config.checkout())
+
+        for index, (config, scenario, task, rep) in enumerate(plan, 1):
+            print(f"[{index}/{len(plan)}] {scenario.topic}/{scenario.id}/{task.id} "
+                  f"{config.name} rep{rep} ... ", end="", flush=True)
+            record = run_mod.execute_run(repo, scenario, task, config, rep, results)
+            detail = record["failure_class"] or ""
+            print(f"{record['outcome']}{' (' + detail + ')' if detail else ''} "
+                  f"[{record['wall_time_s']}s, {record['provider_calls']} calls]")
     return 0
 
 
@@ -130,7 +138,8 @@ def cmd_bundle(args) -> int:
     if args.config:
         rows = [r for r in rows if r["config"] in args.config]
     if args.since:
-        rows = [r for r in rows if r["run_id"][-17:] >= args.since]
+        # The run id leads with its stamp, so this is a prefix comparison.
+        rows = [r for r in rows if r["run_id"][:len(args.since)] >= args.since]
     if not rows:
         sys.exit("No matching runs.")
     text = bundle_mod.build(Path(args.results), rows)

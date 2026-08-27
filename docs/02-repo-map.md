@@ -39,19 +39,30 @@ what a session is.
 | [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
 | [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
 
-`agent/harness/` is the agent itself: a LangGraph state machine of narrow nodes
-over one shared log. See [6.4](06-agent.md#64-the-graph).
+`agent/code/` is the **coding agent**: `create_deep_agent` over that backend,
+configured the way `deepagents-code` configures one. See
+[6.5](06-agent.md#65-what-makes-it-a-coding-agent). It is mostly configuration —
+the loop, the tools and the compaction come from the SDK.
 
 | File | The question it answers |
 | --- | --- |
-| [nodes/](../agent/harness/nodes/) | *Who does what, with which tools, and how is it judged?* — one file per node, each declaring its prompt, its tools, the log entries it reads, and how its result is read |
-| [nodes/base.py](../agent/harness/nodes/base.py) | *What is a node, and what does one call look like?* — the `Node` fields, then build the prompt, a few tool rounds, throw the conversation away |
-| [graph.py](../agent/harness/graph.py) | *What happens when, and what is the model not allowed to decide?* — the edges between nodes and every deterministic veto |
-| [log.py](../agent/harness/log.py) | *What does a node get to see?* — everything the session knows, as one ordered log, and the per-kind caps that **are** the context budget |
-| [protocol.py](../agent/harness/protocol.py) | *How does context get from the orchestrator to a node?* — the brief down, the report back |
-| [record/](../agent/harness/record/) | *What does a session leave behind?* — git, the journal, the per-turn transcript, the rationale, the notes file |
-| [session.py](../agent/harness/session.py) | *What is one run, start to finish?* — wiring, the step budget, resume, and the account it writes |
-| [`__main__.py`](../agent/harness/__main__.py) | CLI: workdir as an argument, task on stdin |
+| [session.py](../agent/code/session.py) | *What turns a generic deep agent into this coding agent?* — backend, middleware, prompt, subagent, and the context floor check that fails before the run rather than during it |
+| [prompt.py](../agent/code/prompt.py) + [system_prompt.md](../agent/code/system_prompt.md) | *What is the agent told?* — the ported prompt, and the three sections only the running configuration can fill |
+| [context.py](../agent/code/context.py) | *What does it know before its first tool call?* — git branch, status and a depth-limited tree, so orientation isn't bought with model calls |
+| [shell.py](../agent/code/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
+| [trace.py](../agent/code/trace.py) | *What happened during a run, durably?* — the LangSmith run tree, fetched and written down ([7.6](07-observability.md#76-the-record-one-run-tree)) |
+| [`__main__.py`](../agent/code/__main__.py) | CLI: workdir as an argument, task on stdin |
+
+`agent/explore/` is the **web explorer**: the same loop and the same jail, with
+its tools pointed outward and no shell at all. See
+[15. The web explorer](15-explorer.md).
+
+| File | The question it answers |
+| --- | --- |
+| [search.py](../agent/explore/search.py) | *How does an agent on a free tier reach the web?* — `web_search` and `read_url` as grounded calls on the pool's Gemini-platform members, two pools because the two tools are granted separately, with the citation redirects resolved |
+| [session.py](../agent/explore/session.py) | *How does it differ from the coding agent?* — the web tools in, every program out, `/research/` created before the first write |
+| [prompt.py](../agent/explore/prompt.py) + [system_prompt.md](../agent/explore/system_prompt.md) | *What is it told?* — cite everything, say what you could not find, the files are the deliverable |
+| [`__main__.py`](../agent/explore/__main__.py) | CLI: same shape as the coding agent, and it lists the notes it wrote |
 
 ## 2.4 `evals/` — the measurement harness
 
@@ -62,7 +73,7 @@ Code lives with the code it measures; scenario *data* does not (see
 | --- | --- |
 | [`__main__.py`](../evals/__main__.py) | CLI: `validate`, `run`, `show` |
 | [`scenario.py`](../evals/scenario.py) | Load and materialize a scenario from the scenario repo |
-| [`agent_config.py`](../evals/agent_config.py) | Resolve a configuration to a git worktree + overrides |
+| [`agent_config.py`](../evals/agent_config.py) | Resolve a configuration to a pinned SHA + overrides, and check it out for the batch |
 | [`run.py`](../evals/run.py) | Execute one run: materialize → run → capture |
 | [`verify.py`](../evals/verify.py) | The `fail_to_pass`/`pass_to_pass` gate and scenario validation |
 | [`metrics.py`](../evals/metrics.py) | Derive every automatic metric from `trace.jsonl` and the diff |
@@ -70,7 +81,6 @@ Code lives with the code it measures; scenario *data* does not (see
 | [`configs/*.yaml`](../evals/configs/) | One file per agent configuration under test |
 | [`CONFIGS.md`](../evals/CONFIGS.md) | The ledger: every configuration tried, its verdict, and why |
 | `results/runs/<run_id>/` | One self-contained directory per run — durable evidence, on disk only. Gitignored: an artifact, never committed. Cite a run by its id |
-| `.worktrees/` | Scratch checkouts of configurations under test (gitignored) |
 
 ## 2.5 Everything else
 
@@ -80,7 +90,7 @@ Code lives with the code it measures; scenario *data* does not (see
 | [README.md](../README.md) | Human entry point: quick start and links out. Also short on purpose. |
 | `docs/` | This wiki. The place to understand the system without reading source. |
 | [.claude/settings.json](../.claude/settings.json) | The `Stop` hook that keeps this wiki from drifting ([12.4](12-development-harness.md#124-how-the-docs-stay-current)) |
-| [.claude/reports/](../.claude/reports/) | Deep one-off investigations, kept verbatim. |
+| `.claude/reports/` | Deep one-off investigations, kept verbatim. |
 | `tests/` | `llm_router/` and `agent/` unit tests, plus `smoke_test.py` — a single real prompt through the pool to check keys and config are wired |
 
 ## 2.6 Related repos
@@ -112,7 +122,6 @@ Worth knowing before debugging something that "should work":
 - `llm_router/.usage/` — this machine's usage ledger and pool snapshot.
   Gitignored, rebuilt as the router runs; deleting it only loses history
   ([14.3](14-quota-panel.md#143-two-files-under-llm_routerusage)).
-- `evals/.worktrees/` — throwaway checkouts, safe to delete.
 - LangSmith runs — useful for watching, but they expire, which is precisely why
   the local trace exists ([7. Observability](07-observability.md)).
 

@@ -5,26 +5,28 @@
 *The running state. This is the one page in the wiki expected to change often —
 everything else describes design; this describes today.*
 
-**Last updated: 2026-08-20.** Update it when a phase lands, a scenario is added,
+**Last updated: 2026-08-25.** Update it when a phase lands, a scenario is added,
 or a comparison is decided. A status page nobody updates is worse than none.
 
 ## 11.1 One-paragraph summary
 
-The pipeline works end to end. The measurement is no longer bottlenecked on
-having a single L0 scenario: there are now **five scenarios across four
-topics**, three of them L1 or L2, including the set's first `trap`. Pass rates
-are still noise at the sample sizes affordable here, so the instrument being
-built out is the *diagnostic* one — a per-turn transcript of what every role was
-given, and a per-run post-mortem that reads it
-([design note §9](design/long-run-harness.md#9-reading-one-session-back-the-post-mortem)).
-The next move is a batch at n=5 over the new scenarios, with a second Gemini
-account making that affordable.
+The pipeline works end to end, and there are now **five scenarios across four
+topics**, three of them L1 or L2, including the set's first `trap`. What changed
+this week is that there is now **one coding agent instead of two**: the
+narrow-role graph was deleted and `agent/code/` is what ships
+([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). It runs end to end but
+**has never been run as an eval configuration**, so the comparison that would
+have justified the choice never happened, and the cost gap it was losing on is
+an open risk rather than a closed question; measuring it is now the top of
+[13.2](13-roadmap.md#132-what-to-do-next). Pass rates
+remain noise at affordable sample sizes, so the instrument still being invested
+in is the *diagnostic* one.
 
 ## 11.2 What's built
 
 | Phase | State | What it covers |
 | --- | --- | --- |
-| **P0** trace capture | **done** | `EVAL_TRACE_FILE` makes the agent append one JSON object per LLM/tool event ([trace.py](../agent/runtime/trace.py)). Every automatic metric is a sum over that file. A session also writes a per-turn transcript of what each role was handed ([7.6](07-observability.md#76-what-a-session-records-about-itself)). |
+| **P0** trace capture | **done** | `EVAL_TRACE_FILE` makes the agent append one JSON object per LLM/tool event ([trace.py](../agent/runtime/trace.py)). Every automatic metric is a sum over that file. The agent also fetches its LangSmith run tree and writes that down beside it ([7.6](07-observability.md#76-the-record-one-run-tree)). |
 | **P1** runner | **done** | [evals/](../evals/): materialize → run → verify → integrity → record, plus `validate` and `show`. Metrics automatic, including the failure taxonomy. |
 | **P2** judge | not started | `claude -p` with a pinned rubric and diff-hash cache. Quality scoring is manual until then. |
 | **P3** compare/report | not started | Leaderboard and written comparisons. `show` covers the basics today. |
@@ -49,8 +51,39 @@ configuration has been run against those more than n=2.
 
 Raw evidence in `evals/results/runs/` — on the machine that ran it, not in
 git; the ledger is in
-[evals/CONFIGS.md](../evals/CONFIGS.md); the architecture is
-[6.1](06-agent.md#61-what-it-is).
+[evals/CONFIGS.md](../evals/CONFIGS.md); the architectures are
+[6.1](06-agent.md#61-one-conversation-on-the-pool).
+
+### The coding agent, first look (2026-08-25)
+
+**Not eval data.** Two ad-hoc runs on throwaway projects, outside the runner, no
+scenario and no hidden tests — recorded because they bear on whether the
+comparison is worth its quota, not because they measure anything.
+
+| | task 1 | task 2 |
+| --- | --- | --- |
+| outcome | correct, minimal | correct, minimal |
+| model calls | 21 | 14 |
+| tool calls | 10 | 7 |
+| `tokens_in` | 162,286 | 134,156 |
+
+Three things worth carrying forward:
+
+1. **The cost gap did not close.** Against the narrow-role harness's 5,756
+   input tokens, this is 23–28×, and only ~30% under the conversational baseline
+   that was deleted for exactly this. Different tasks, n=1 each, and short
+   enough that summarization probably never triggered — but if the expectation
+   was that the SDK's context management would erase a 39× gap, the first look
+   says it does not.
+2. **The project-context section pays for itself.** Task 2 added it and spent
+   seven fewer model calls and three fewer tool calls, with no `glob` at all:
+   the file tree arrived with the prompt instead of being discovered
+   ([6.9.2](06-agent.md#652-the-configuration-ported-from-dcode)).
+3. **No spec-gaming in either.** Both wrote the general fix rather than the one
+   that satisfies the visible assertion, which is the failure
+   [6.4.4](06-agent.md#644-closing-the-loop-is-not-the-same-as-being-right)
+   records for the arm that has since been deleted. Two runs prove nothing; it
+   is the first thing to check when this arm is finally priced.
 
 **None of these configurations still exists.** They collapsed into one when the
 harness was reduced to a single architecture; the rows stay because the
@@ -65,14 +98,14 @@ Four observations:
 2. **The pass column is noise, demonstrably.** `harness-v3-merged` scored 3/3 in
    one batch and 1/3 in the next on an identical configuration, hours apart. Any
    ranking read off these rates would be invented — see
-   [6.14.1](06-agent.md#682-the-pass-column-is-noise).
+   [6.14.1](06-agent.md#642-the-pass-column-is-noise).
 3. **The cost result is real and replicated.** 5,756 against 226,854 input
    tokens for the same task, stable across every rep and batch, with
    between-configuration spread far exceeding within-configuration variance.
 4. **Every failure is `reasoning`** — 12 of 13, with zero `retrieval` and zero
    `tooling`. Every configuration found the file, edited it and ran the tests,
    then got the fix conceptually wrong. No change of topology can move that
-   ([6.14.2](06-agent.md#683-every-failure-is-reasoning)).
+   ([6.14.2](06-agent.md#643-every-failure-is-reasoning)).
 
 ## 11.4 Blockers
 
@@ -80,15 +113,19 @@ Four observations:
 | --- | --- | --- |
 | Five scenarios, none run more than n=2 | No longer *the* blocker, but nothing here has enough reps to compare configurations. `retry-after-case` (L0) is exhausted as an instrument ([9.7](09-scenarios.md#97-the-difficulty-ladder)) | P4 |
 | Five of the eight scenario categories are still unwritten | `feature`, `tests`, `refactor`, `long-context` and `ambiguous` have never been run, so nothing probes size-based routing or multi-file construction ([9.6](09-scenarios.md#96-categories-to-cover)) | P4 |
-| `404 model_not_found` still propagates and kills a run | Worked around for evals via `llm_router/config.eval.yaml`, not fixed. Any run on the default pool still dies on it | [13.2](13-roadmap.md#132-what-to-do-next) |
-| `agent_evals` local history has diverged from its GitHub remote after the restructure | Scenarios aren't backed up | Needs a force-push decision |
+| A model retired upstream costs an attempt on every run | No longer a crash: the router retires the member and carries on, which is what retired the trimmed eval pool. The retirement lasts one process, so each fresh run rediscovers it | [13.2](13-roadmap.md#132-what-to-do-next) |
+| **Four of five scenario tags, and three of four topic branches, are local only** | `origin` has `topic/alerts` and a stale `scenario/retry-after-case`; everything else exists on one machine. Tags are not pushed by default, so this is silent. The scenario set is unrecoverable if the disk goes | [13.2](13-roadmap.md#132-what-to-do-next), item 2 |
+| **The shipping agent has never run under the runner** | Its config exists (`evals/configs/code.yaml`) and it works, but no eval run has been recorded — and the arm it replaced is deleted, so there is nothing left to compare it against except its own history | [13.2](13-roadmap.md#132-what-to-do-next), item 1 |
 
 ## 11.5 What to do next
 
-1. **Run a batch at n=5** over the four non-exhausted scenarios. The second
-   Gemini account roughly doubles the affordable reps, and enough *varied
-   failures to read* is what the diagnostic loop is short of — not more
-   architecture.
+1. **Run `code` over the four non-exhausted scenarios** and establish
+   what it actually costs. The interleaved comparison is no longer possible —
+   the other arm is deleted — so the standard it is held to is its own recorded
+   `input_tokens` against the 5,756 the deleted arm managed
+   ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). Start at n=3 and check
+   the quota arithmetic first: at ~20 calls a run, the flash tier funds about
+   nine runs a day.
 2. **Post-mortem every run in it**, then J2 over the batch. The per-run reviewer
    is built and has never been run against a real session.
 3. **Keep authoring scenarios** — `long-context` next, since size-based routing

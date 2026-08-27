@@ -63,16 +63,42 @@ name: baseline
 repo: ../free_coding_agent
 ref: master                 # branch, tag or SHA
 overrides:
-  router_config: null       # or a path to an alternative config.yaml (ROUTER_CONFIG)
+  router_config: null       # a pool config, resolved in the repo (ROUTER_CONFIG)
   env:
     RECURSION_LIMIT: "150"
 ```
 
 Resolution is `git worktree add --detach`, so a configuration runs from a clean
 tree without disturbing your working copy — you can keep editing `master` while
-a comparison runs. The runner records the resolved **SHA** plus a hash of the
-effective overrides as the fingerprint: `ref: master` today and `ref: master`
-next week are different configurations, and the records say so.
+a comparison runs. `router_config` is the one path resolved against the repo
+rather than the worktree, which is why every configuration sets it to
+`llm_router/config.yaml`: one pool, shared by every arm, instead of each arm
+drawing from whatever its own commit pinned
+([5.2](05-providers.md#52-config-schema)). The runner records the resolved
+**SHA** plus a hash of the effective overrides as the fingerprint: `ref:
+master` today and `ref: master` next week are different configurations, and the
+records say so.
+
+**The checkout does not outlive the batch.** One worktree per arm is created
+when the batch starts and removed when it ends, because keeping them is a cost
+with no return: what makes a run reproducible is the `config_sha` in its
+`run.json` and the `config.yaml` copied next to it, and
+
+```bash
+git worktree add --detach /tmp/rebuild <config_sha>
+```
+
+rebuilds the tree from those at any point later. Keeping them instead meant a
+directory holding one full copy of the repo per (config, SHA) pair ever run —
+33 of them, 47 MB, none of it information the run records did not already
+carry.
+
+`agent_cmd` stays overridable even though there is one shipping agent, because
+there is more than one thing to launch from a config: `evals/fake_agent.py`
+exercises the runner's own paths without spending quota, and `agent.explore`
+([15](15-explorer.md)) deliberately takes the same arguments as `agent.code`,
+so pointing an arm at the explorer is a config line rather than a second
+runner. A config that omits it gets `python -m agent.code <workdir>`.
 
 A configuration may also **pin a single model**, bypassing failover. That isn't
 how the agent ships, but it's the lowest-variance way to attribute a change to
@@ -87,7 +113,7 @@ others — destroying comparability.
 
 1. **Materialize** — `git archive` the scenario tag into a scratch workdir.
    Hash every file in the scenario's `immutable` manifest.
-2. **Run** — `python -m agent.harness <workdir> < prompt` from the
+2. **Run** — `python -m agent.code <workdir> < prompt` from the
    configuration's worktree, with `EVAL_TRACE_FILE` set. Kill at `timeout_s`.
 3. **Capture** — stdout/stderr, wall time, exit status, `trace.jsonl`, and
    `diff.patch` (workdir vs untouched code, caches pruned).
@@ -102,7 +128,10 @@ others — destroying comparability.
 7. **Record** — write `evals/results/runs/<run_id>/`, one self-contained
    directory.
 
-`run_id` is `<scenario>_<task>_<config>_r<rep>_<UTC timestamp>`.
+`run_id` is `<UTC timestamp>_<scenario>_<task>_<config>_r<rep>`. The stamp
+leads so that a plain listing of `results/runs/` is chronological and the newest
+batch is the last thing on screen — and so `bundle --since` is a prefix
+comparison rather than a slice off the end of a variable-length name.
 
 ## 8.6 Fair comparison
 
