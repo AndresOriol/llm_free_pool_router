@@ -16,11 +16,15 @@ things to debug rather than one.
    (system_prompt.md), because the reader is the next agent to open this
    directory rather than whoever launched this one.
 
-The handoff between the two is the filesystem and nothing else. The explorer
-writes `/research/*.md` into a workdir; the coding agent, pointed at that same
-workdir, reads them like any other file. There is no shared state, no message
-bus and no protocol to keep in step -- which is the only reason it is safe to
-run them hours apart.
+The *deliverable* passes through the filesystem and only the filesystem. The
+explorer writes `/research/*.md` into a workdir; the coding agent, pointed at
+that same workdir, reads them like any other file, today or next week -- which
+is why it is safe to run them hours apart.
+
+What no longer passes through a human is the *request*. The coding agent can ask
+for a report directly (agent/protocol/, docs/16-agent-protocol.md); that carries
+the question and the task's status, never the note. `agent/explore/a2a.py` is
+this session's server side and changes nothing below it.
 """
 
 from __future__ import annotations

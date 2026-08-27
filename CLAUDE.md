@@ -70,6 +70,14 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   rather than assumed ([search.py](agent/explore/search.py)). It runs no
   programs at all, and hands off to the coding agent by writing `/research/*.md`
   ([15. The web explorer](docs/15-explorer.md)).
+- [agent/protocol](agent/protocol/) — how one agent asks another for work. The
+  vocabulary is [A2A](https://a2a-protocol.org)'s — `AgentCard`, `Task`,
+  `Message`, `Artifact` — and must not drift from it; the transport is a local
+  Python call, so a delegate shares its caller's cooldown and trace. The coding
+  agent gets one `delegate` tool and a directory of cards in its prompt; the
+  deliverable is still a file on disk that the protocol only points at
+  ([16. The agent protocol](docs/16-agent-protocol.md)). **Unmeasured** — it is
+  a configuration, and `AGENT_PEERS=` turns it off for the A/B.
 - [evals](evals/) — the harness that decides whether a change to the above
   helped. Scenarios live in the separate `agent_evals` repo.
 - Providers today: Groq, Gemini. Expect more free-tier providers (Cerebras,
@@ -90,7 +98,8 @@ short and link into the wiki rather than growing inline.
 
 Quick pointers: [4. Failover](docs/04-failover.md) for how the router works,
 [14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
-[5. Providers](docs/05-providers.md) for accounts and limits,
+[16. The agent protocol](docs/16-agent-protocol.md) for agent-to-agent
+delegation, [5. Providers](docs/05-providers.md) for accounts and limits,
 [12. Development harness](docs/12-development-harness.md) for which model tier
 does what, [15. The web explorer](docs/15-explorer.md) for web research, [13. Roadmap and scope](docs/13-roadmap.md) for what's next and
 what's already settled.

@@ -62,7 +62,20 @@ its tools pointed outward and no shell at all. See
 | [search.py](../agent/explore/search.py) | *How does an agent on a free tier reach the web?* — `web_search` and `read_url` as grounded calls on the pool's Gemini-platform members, two pools because the two tools are granted separately, with the citation redirects resolved |
 | [session.py](../agent/explore/session.py) | *How does it differ from the coding agent?* — the web tools in, every program out, `/research/` created before the first write |
 | [prompt.py](../agent/explore/prompt.py) + [system_prompt.md](../agent/explore/system_prompt.md) | *What is it told?* — cite everything, say what you could not find, the files are the deliverable |
+| [a2a.py](../agent/explore/a2a.py) | *How does another agent ask it for a report?* — its `AgentCard` and the handler behind it; the notes it wrote become `Artifact`s pointing at paths ([16](16-agent-protocol.md)) |
 | [`__main__.py`](../agent/explore/__main__.py) | CLI: same shape as the coding agent, and it lists the notes it wrote |
+
+`agent/protocol/` is **how one agent asks another for work**. The vocabulary is
+[A2A](https://a2a-protocol.org)'s and is not ours to change; the transport is a
+local Python call. See [16. The agent protocol](16-agent-protocol.md).
+
+| File | The question it answers |
+| --- | --- |
+| [types.py](../agent/protocol/types.py) | *What are the nouns?* — `AgentCard`, `Task`, `Message`/`Part`, `Artifact`, serialized to the spec's own JSON |
+| [registry.py](../agent/protocol/registry.py) | *Who is reachable, and how is the caller told?* — the cards, rendered into the system prompt rather than into a second tool |
+| [local.py](../agent/protocol/local.py) | *What happens on a delegation?* — `message/send` and `tasks/get` with the network taken out, plus the task record on disk |
+| [tools.py](../agent/protocol/tools.py) | *What does the calling agent see?* — one `delegate` tool, whose description admits what a call costs |
+| [peers.py](../agent/protocol/peers.py) | *Which agents exist in this process?* — the only module that knows about both, and it registers `explore` only if the pool can really search |
 
 ## 2.4 `evals/` — the measurement harness
 

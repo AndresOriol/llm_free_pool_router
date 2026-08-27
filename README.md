@@ -51,6 +51,14 @@ echo "What are the current Gemini free-tier rate limits?" | python -m agent.expl
 It writes `/research/*.md` with a source URL beside every claim. See
 [docs/15-explorer.md](docs/15-explorer.md).
 
+You can also let the coding agent ask for that itself, mid-task, instead of
+running the two by hand: it gets one `delegate` tool, the explorer answers with
+the notes it wrote, and the vocabulary on the wire is
+[A2A](https://a2a-protocol.org)'s rather than something invented here. A
+delegation costs a whole explorer session, so it is worth knowing it is on —
+`AGENT_PEERS=` turns it off. See
+[docs/16-agent-protocol.md](docs/16-agent-protocol.md).
+
 ## Docs
 
 Everything beyond the quick start lives in the wiki — start at
@@ -58,6 +66,7 @@ Everything beyond the quick start lives in the wiki — start at
 
 - **New provider account, or want to add a provider?** →
   [5. Providers and limits](docs/05-providers.md)
+- **Have one agent ask another for work?** → [16. The agent protocol](docs/16-agent-protocol.md)
 - **Run the coding agent on the pool?** → [6. The coding agent](docs/06-agent.md)
 - **How does the router actually work, and why?** →
   [4. Failover](docs/04-failover.md)
