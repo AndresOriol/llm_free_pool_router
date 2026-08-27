@@ -24,10 +24,13 @@ else on this page is design and changes rarely; this block is state.*
   inputs that no longer hold and that nobody has re-run
   ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). Watch `input_tokens`.
 - **A second agent researches the web.** `agent/explore/` shares the loop, the
-  pool and the jail, swaps the shell for `web_search`/`read_url` grounded on the
-  pool's Gemini-platform members, and hands off to the coding agent by writing
-  files ([15](15-explorer.md)). The two tools are granted separately — Gemma
-  searches but cannot open a URL ([15.2.1](15-explorer.md#1521-the-two-tools-are-granted-separately)).
+  pool and the jail, swaps the shell for `tavily_search`/`think_tool`, and hands
+  off to the coding agent by writing files ([15](15-explorer.md)). It runs
+  LangChain's deep-research workflow rather than a method written here, and its
+  search returns the **page** rather than a summary of it — which is the fix for
+  a run that searched 13 times and opened nothing
+  ([15.8](15-explorer.md#158-the-deep-research-port)). Needs a Tavily key; the
+  pool holds one.
 - **The coding agent can now ask the explorer for research mid-task**, over
   A2A's data model on a local transport ([16](16-agent-protocol.md)). It is on
   by default and a delegation costs a whole explorer session, so a run's
@@ -122,12 +125,14 @@ else on this page is design and changes rarely; this block is state.*
 **[15. The web explorer](15-explorer.md)** — the agent that reads the web and writes notes the coding agent can use
 &nbsp;&nbsp;&nbsp;&nbsp;[15.1](15-explorer.md#151-what-it-is-for) What it is for ·
 [15.2](15-explorer.md#152-the-web-on-a-free-tier) The web on a free tier ·
-[15.2.1](15-explorer.md#1521-the-two-tools-are-granted-separately) Two tools, granted separately ·
-[15.3](15-explorer.md#153-why-searching-is-a-tool-call) Why searching is a tool call ·
-[15.4](15-explorer.md#154-which-member-serves-a-search) Which member serves a search ·
+[15.2.1](15-explorer.md#1521-a-capability-is-a-fact-to-probe-not-to-infer) A capability is a fact to probe ·
+[15.3](15-explorer.md#153-why-the-search-tool-fetches-the-page) Why the search tool fetches the page ·
+[15.4](15-explorer.md#154-which-account-serves-a-search) Which account serves a search ·
 [15.5](15-explorer.md#155-what-it-is-allowed-to-do) What it is allowed to do ·
 [15.6](15-explorer.md#156-what-it-costs-a-run) What it costs a run ·
-[15.7](15-explorer.md#157-measured-against-a-reference-research-agent) Measured against a reference research agent
+[15.7](15-explorer.md#157-measured-against-a-reference-research-agent) Measured against a reference research agent ·
+[15.8](15-explorer.md#158-the-deep-research-port) The deep-research port ·
+[15.9](15-explorer.md#159-what-the-grounded-gemini-search-was) What the grounded-Gemini search was
 
 **[16. The agent protocol](16-agent-protocol.md)** — how one agent asks another for work, in the standard's vocabulary
 &nbsp;&nbsp;&nbsp;&nbsp;[16.1](16-agent-protocol.md#161-the-problem-the-human-was-the-message-bus) The human was the message bus ·

@@ -44,141 +44,95 @@ there.
 
 ## 15.2 The web, on a free tier
 
-Google's Gemini API grounds a call in Google Search (`google_search`) and in
-named pages (`url_context`). Both are reachable with the keys this project
-already pools — no scraping, no search-API signup, no new secret, nothing that
-strains anyone's terms of service.
+Search is [Tavily](https://tavily.com): a search API built for agents, whose free
+tier is **1,000 credits a month** on a key you get by signing up. One
+`tavily_search` spends one credit for the URL discovery; fetching the pages costs
+nothing but the HTTP round trips, because the tool does that itself
+([research_tools.py](../agent/explore/research_tools.py)).
 
-| | Allowance | Notes |
-| --- | --- | --- |
-| `google_search` | **5,000 grounded searches/month**, free, shared across the Gemini 3.x family | $14/1,000 after that on a paid key; a free key simply stops |
-| `url_context` | **free**, no per-call fee | the fetched page is charged as ordinary input tokens |
-| `url_context` limits | 20 URLs/request, 34 MB/URL | public pages only: no paywalls, no YouTube, no Workspace docs, no private hosts |
+Held against everything else here, that budget is comfortable and genuinely
+scarce at the same time. Comfortable next to the *model* pool — twenty requests
+a day per flash model per account
+([5.4](05-providers.md#54-current-free-tier-limits)) — so searching is not what a
+research run exhausts first. Scarce in that credits do not refill until the month
+turns, and there is no cooldown to wait through: an exhausted key is exhausted.
 
-Measured against everything else in this pool that is a generous budget: 5,000
-searches a month against Gemini flash members that allow twenty *requests a day*
-([5. Providers](05-providers.md)). The scarce resource is the model call that
-wraps the search, not the search.
+**So the pool pattern applies to search too.** `TavilyPoolRouter` holds one
+account per key and fails over on rate limits and errors, exactly as the model
+router does for providers ([3. The pool model](03-pool-model.md)). Keys are
+`TAVILY_API_KEY_1`, `_2`, ... in `llm_router/.env` and are picked up without
+touching config.
 
-### 15.2.1 The two tools are granted separately
+**Today the pool holds one account**, which means failover has nowhere to go. A
+run says so once at startup rather than letting you find out at the wall
+([check_pool](../agent/explore/research_tools.py)).
 
-Groq cannot do either — grounding is a Gemini API feature. The interesting line
-is inside the Gemini platform, and it is **not** where the model families are.
-Probed against the live API on 2026-08-26:
+### 15.2.1 A capability is a fact to probe, not to infer
 
-| Member | `google_search` | `url_context` |
-| --- | :-: | :-: |
-| `gemini-*` | ✓ | ✓ |
-| `gemma-*` | ✓ | ✗ `400 INVALID_ARGUMENT` |
-| Groq | ✗ | ✗ |
+The lesson worth keeping from the search this replaced
+([15.9](#159-what-the-grounded-gemini-search-was)), because it generalises past
+the code that taught it.
 
-Gemma searches perfectly well — six citations on the probe — and refuses
-`url_context` outright with *"Url Context as tool is not enabled for this
-model"*. So there are **two pools, not one**, and each tool asks its own
-question ([search.py](../agent/explore/search.py)).
+That search ran inside the Gemini API, and which pool members could use it was
+**not** predictable from the model family. Probed against the live API: every
+`gemini-*` could both search and open a URL; every `gemma-*` searched perfectly
+well and refused `url_context` with a `400`. Reasoning from the name — *Gemma is
+not a Gemini, so assume no built-in tools* — excluded Gemma from searching and
+threw away most of the pool's real search capacity, because Gemma carries 1,500
+requests a day against the flash tier's twenty.
 
-**This is worth getting right, and it was got wrong first.** The original filter
-reasoned from the model family — Gemma is not a Gemini, so assume no built-in
-tools — and excluded Gemma from searching. That threw away most of the pool's
-real search capacity: Gemma carries **1,500 requests a day** against the flash
-tier's twenty ([5.4](05-providers.md#54-current-free-tier-limits)). On this pool
-the correction took the search side from 16 members to 20, and moved the
-*primary* search member from a flash-lite to a Gemma.
+Re-probe before widening any capability list. The failure mode is a member that
+`400`s every call and cools down an account that was never at fault.
 
-The lesson generalises: a vendor's capability grant is a fact to probe, not to
-infer from a model's name. Re-probe before widening either list — it can change
-without notice, and the failure mode is a member that 400s every call and cools
-down an account that was never at fault.
+## 15.3 Why the search tool fetches the page
 
-A pool that cannot search at all is refused **before the run**, not during it;
-the alternative is an agent spending its whole budget writing a research note
-about having no research. A pool that can search but cannot read a URL — nothing
-but Gemma — is a warning, not an error: `read_url` explains why it cannot open a
-page and `web_search` carries on.
+`tavily_search` does not return search results. It asks Tavily for URLs, fetches
+each one over HTTP, converts it to markdown, and returns **that**. The model
+reads the page.
 
-## 15.3 Why searching is a tool call
+This is the whole reason the search was replaced, and the argument is measured
+rather than aesthetic. The previous tool returned a *summary* of what a search
+had found, and opening the real page was a second tool the agent could choose to
+call. It never chose to: a recorded run made 13 searches and 0 reads, and wrote a
+report full of exact figures — instance counts, percentages, version numbers —
+not one of which had been traced to a source
+([15.7](#157-measured-against-a-reference-research-agent)).
 
-Gemini 3 will run `google_search` alongside ordinary function calling, so the
-obvious design is to bind it to the explorer's own model and let searching
-happen inside a step already being paid for. It costs nothing extra and it was
-rejected anyway.
+**The fix is not a firmer instruction.** It is a tool that does not offer the
+failure. There is no longer a read step to skip.
 
-**The citations are not in the conversation.** They come back in
-`response_metadata["grounding_metadata"]`, which the model cannot see. Bound
-directly, the agent searches, answers from what it found, and has no URLs to
-write down — and a research note whose sources cannot be checked is precisely
-the failure this agent exists to avoid.
+### 15.3.1 What that costs, and the two guards on it
 
-Routing the search through a tool puts the source list in a `ToolMessage`, as
-text the model can copy verbatim into a file. The cost is one extra request per
-search, paid to make the answer auditable.
+A page is large. Returning them whole is what upstream does and it is not safe
+here, because the conversation carrying them is routed against a 128,000-token
+floor and one unlucky documentation page can displace everything the agent had
+already learned.
 
-### 15.3.1 Citations have to be un-redirected
+- **Each page is cut at 20,000 characters** (~5,000 tokens), and the cut says so
+  — a truncated source that announces itself is very different from one that
+  appears to end mid-sentence.
+- **The orchestrator never searches.** Pages land in the researcher sub-agent's
+  context, and what comes back to the orchestrator is its findings rather than
+  its raw fetches ([15.8](#158-the-deep-research-port)). That is what makes
+  fetching whole pages affordable at all.
 
-Every `uri` in `grounding_metadata` is a
-`vertexaisearch.cloud.google.com/grounding-api-redirect/…` link rather than the
-source, and the human-readable `title` is usually just a bare domain. Written
-into a note unresolved it is worthless twice over: a reader cannot see where the
-claim came from without following it, and `read_url` cannot open it.
+A fetch that fails — a 403, a timeout, a paywall — comes back as readable text
+naming the error, with the URL and title intact. The agent can act on "this page
+will not open"; it cannot act on a traceback.
 
-One `HEAD` request per citation turns it back into
-`https://ai.google.dev/gemini-api/docs/pricing`. They are resolved in parallel —
-a dozen independent waits on other people's servers, in sequence, is a minute of
-a metered run spent on HTTP round trips — and best-effort: a redirect that will
-not resolve is reported as-is, which is worse than the real URL and much better
-than a dropped source.
+## 15.4 Which account serves a search
 
-### 15.3.2 What a search comes back as
+`TavilyPoolRouter` walks its accounts in order and returns the first one not in
+cooldown. A failure benches that account with exponential backoff capped at five
+minutes — sixty seconds for anything that looks like a rate limit or a quota,
+thirty for everything else — and the search retries on the next account rather
+than failing the run.
 
-```
-The free-tier monthly allowance for Grounding with Google Search is 5,000
-prompts per month for Gemini 3.x models. After that the cost is $14 per 1,000.
-
-Searched for: Gemini API grounding free tier allowance and pricing
-
-Sources:
-[1] google.dev - https://ai.google.dev/gemini-api/docs/pricing
-[2] cloudzero.com - https://www.cloudzero.com/blog/gemini-pricing/
-```
-
-Three parts, and each is there because its absence caused a specific problem:
-
-- **The answer.** If it is empty the `finish_reason` is named, so the agent
-  retries a narrower question instead of concluding the web is silent. Observed:
-  a grounded call that searched, returned citations, and wrote nothing.
-- **The queries Google actually ran**, which are rarely the words asked for.
-- **The sources — or an explicit warning that there are none.** No sources means
-  the model answered from memory. The agent has to be told, or it launders a
-  recollection into a cited fact.
-
-## 15.4 Which member serves a search
-
-`SearchRouter` holds the **same provider objects** as the main pool rather than
-copies. Cooldown lives on the provider, so a search that exhausts an account is
-immediately visible to the conversation routing through that same account, and
-vice versa. Two routers over one set of members is the honest model of one free
-tier being spent two ways.
-
-**It reaches for the cheapest capable member first**, which is the reverse of
-what `AutonomousLLMRouter` does everywhere else
-([3.4](03-pool-model.md#34-priority-tiers)). Searching is not judgement: the
-grounded call retrieves and summarizes, and the thinking happens afterwards, in
-the explorer's own conversation on whichever member the main pool picked. Left
-in priority order, every search would spend one of the reasoning tier's
-twenty-a-day requests on retrieval. So the comparison is inverted, and it climbs
-the tiers only as each cheap member exhausts itself.
-
-Inverting it turns the pool's *last resort* into the search tier's *first
-choice*, and that is exactly right. Gemma sits at priority 31–32 because it is
-the weakest judgement in the pool; it also holds 1,500 requests a day, which
-makes it the best retrieval budget by two orders of magnitude. A recorded search
-routed to `gemma-4-26b-a4b-it` on the first attempt and answered with sources.
-
-Everything else is the ordinary failover loop
-([4.5](04-failover.md#45-the-failover-loop)): a search built on
-`RouterChatModel` inherits it, so an account rate-limited mid-research costs one
-reroute rather than the run. A recorded run walked five members in eleven
-seconds and finished.
+That is deliberately simpler than the model router, which sorts by a
+hand-assigned priority and filters by context size
+([4. Failover](04-failover.md)). Neither applies here: Tavily accounts are
+interchangeable, there is nothing to prefer between two keys, and a search has no
+context window. Ordering that carries no information is ordering to maintain.
 
 ## 15.5 What it is allowed to do
 
@@ -190,7 +144,7 @@ Same jail as the coding agent, rooted at `workdir`, with one difference:
 | read / write / edit files | ✓ | ✓ |
 | `python`, `pytest` | ✓ | — |
 | `git` (by subcommand) | ✓ | — |
-| `web_search`, `read_url` | — | ✓ |
+| `tavily_search`, `think_tool` | — | ✓ |
 
 The coding agent needs a shell to close its own loop — write a test, run it,
 react to the result. A researcher has no loop to close, so the allowlist is
@@ -205,17 +159,21 @@ in two places is worse than one that exists in one.
 
 ## 15.6 What it costs a run
 
-Per `web_search` or `read_url` call:
+Per `tavily_search` call:
 
-- **one Gemini-platform request** against the pool, from the cheapest capable
-  member — in practice a Gemma one, which is the budget you can most afford;
-- **one grounded search** against the 5,000/month, for `web_search` only;
-- **up to twelve `HEAD` requests** to resolve citations, in parallel, off the
-  pool entirely.
+- **one Tavily credit** against the 1,000/month, for the URL discovery;
+- **one HTTP fetch per result** (two by default), off any metered budget — it is
+  someone else's server, not a pool account;
+- **one model call** in the sub-agent that asked, against the pool's daily
+  request budget. This is the scarce one.
 
-The prompt is explicit that this is metered and that a seventh confirming source
-costs the same as a first source on the next question. On a free tier the
-discipline of stopping when the answer stops moving is not a nicety.
+`think_tool` costs a model call and nothing else. A whole run costs an
+orchestrator conversation plus one sub-agent conversation per topic, which is the
+trade [15.8.3](#1583-what-it-costs-and-what-was-given-up) is about and which
+nothing has measured yet.
+
+The scarce resource is still the model call that wraps the search rather than the
+search itself — the same shape as before, for a different reason.
 
 ## 15.7 Measured against a reference research agent
 
@@ -258,20 +216,136 @@ to make them checkable rather than to add new ones:
   offered `"gemini api google_search tool request format"` as the good example.
   All thirteen queries were keyword strings. The example was the bug.
 
-### 15.7.2 The one difference not copied
+### 15.7.2 The one difference that was not copied, and then was
 
-**Their search tool reads the page; ours returns a summary and hopes.** That is
-the structural version of the first row, and copying it would fold `read_url`
-into `web_search` so that grounding is not optional. It was not done, because on
-this pool every fetch is a model call against a daily request budget
-([15.6](#156-what-it-costs-a-run)) and making every search cost two would halve
-the questions a run can ask. So the prompt carries the rule and
-[research_trajectory](../evals/research_trajectory.py) checks whether it was
-followed. **If the check keeps failing, the prompt is the wrong instrument and
-the tool is the right one.**
+**Their search tool reads the page; ours returned a summary and hoped.** Copying
+it was rejected first, on the grounds that every fetch here is a model call
+against a daily request budget and making each search cost two would halve the
+questions a run could ask. The prompt would carry the rule instead, and
+[research_trajectory](../evals/research_trajectory.py) would check whether it was
+followed — with the note that *if the check keeps failing, the prompt is the
+wrong instrument and the tool is the right one*.
 
-Per-topic sub-agents were also not copied: on this harness a sub-agent is a
-whole session, and four topics would be four sessions against a free tier.
+**It was copied.** Two things changed the arithmetic. Tavily arrived, so the
+fetch is an HTTP request rather than a model call and the doubling never
+happens. And the sub-agent split means the pages land somewhere that is thrown
+away, so paying for them in context is bounded
+([15.3.1](#1531-what-that-costs-and-the-two-guards-on-it)).
+
+Per-topic sub-agents were also rejected here and adopted in
+[15.8](#158-the-deep-research-port), for a reason that reads backwards until you
+see it: a sub-agent looked like pure added cost, and it is what makes fetching
+whole pages affordable.
+
+## 15.8 The deep-research port
+
+*Branch `harness/deep-research`. [15.7](#157-measured-against-a-reference-research-agent)
+argued the explorer's method lost to LangChain's reference agent on every axis a
+run could measure. This is the branch that stops arguing and runs theirs.*
+
+The port is close to verbatim — `RESEARCH_WORKFLOW_INSTRUCTIONS`,
+`SUBAGENT_DELEGATION_INSTRUCTIONS` and `RESEARCHER_INSTRUCTIONS` from
+`langchain-ai/deepagents-quickstarts` (MIT), plus `tavily_search` and
+`think_tool` ([deep_prompts.py](../agent/explore/deep_prompts.py),
+[research_tools.py](../agent/explore/research_tools.py)). This repo already
+ports `deepagents-code`'s prompt for the coding agent; this is the same move on
+the research side.
+
+### 15.8.1 The three changes that matter
+
+| | Before | Now |
+| --- | --- | --- |
+| Search | `web_search` returns a Gemini model's **summary**; `read_url` opens the page and is optional | `tavily_search`: Tavily finds URLs, httpx fetches each, markdownify converts — **the page is what reaches the model** |
+| Reflection | none | `think_tool` after every search: what did I find, what is missing, do I stop |
+| Shape | one agent, one conversation, all topics | orchestrator + `research-agent` sub-agent; the orchestrator plans, delegates, consolidates citations and writes the report, and never searches |
+
+**The first is the one this branch exists for.** A recorded run made 13 searches
+and 0 `read_url` calls, and wrote a report of exact figures none of which had
+been traced to a page. The fix is not a firmer instruction; it is a tool that
+does not offer the failure. Verified live: one search returned 29,477 characters
+across two results, both fetched, no summary in between.
+
+The third has a second benefit that is specific to this pool: the sub-agent's
+raw page dumps stay in the sub-agent's context. Fetching whole pages is only
+affordable because the orchestrator never sees them.
+
+### 15.8.2 What this pool forced us to change
+
+Four deviations, each marked `ADAPTED` in the ported prompt so the next reader
+can diff against the source rather than guess:
+
+1. **`/research/` rather than the workdir root.** Upstream writes
+   `/research_request.md` and `/final_report.md` at the root. Here the workdir is
+   a project a coding agent then works in, and a report at the root lands in the
+   diff it produces. The A2A handler collects `/research/*.md` as artifacts, so
+   this is also what makes a delegated report come back as one
+   ([16.4](16-agent-protocol.md#164-what-maps-onto-what)).
+2. **A pool, not a client.** Upstream builds one `TavilyClient`. Search here goes
+   through `TavilyPoolRouter`, so an account at its monthly credit wall fails
+   over instead of ending the run — the argument the model pool already rests on.
+   **Today the pool holds one account**, so there is nothing to fail over to; the
+   run warns about that once rather than discovering it at the wall.
+3. **Pages are clipped at 20,000 characters.** Upstream returns them whole. One
+   documentation page can outweigh everything the agent had learned, and the
+   conversation carrying it is routed against a 128,000-token floor. The cut says
+   it is a cut.
+4. **The report is named against collision.** Upstream is single-shot; this
+   explorer answers repeated delegations into one workdir, so a second question
+   would overwrite the first's `final_report.md`.
+
+### 15.8.3 What it costs, and what was given up
+
+A research task is now an orchestrator conversation **plus** a sub-agent
+conversation, where it used to be one. Against that, the sub-agent's context
+holds the pages and the orchestrator's does not, so the totals are not
+obviously worse — and nothing has measured them yet. `search_accounts` and the
+per-run trace are in the record; the number to read first is `tokens_in`.
+
+**One thing was given up.** The old prompt told the agent to write files as it
+went, so a run that died halfway left half its findings. The orchestrator
+synthesizes *after* its sub-agents return, so the report is necessarily the last
+thing written and a crash before it leaves only `research_request.md`. That is
+upstream's design rather than drift, so
+[research_trajectory](../evals/research_trajectory.py) records it instead of
+failing the run for it — but it is a real regression in crash-resilience for an
+agent meant to run unattended, and it is the first thing to revisit if a long
+run dies late.
+
+## 15.9 What the grounded-Gemini search was
+
+*Deleted, and recorded here because the reasoning outlived the code and one of
+the lessons generalises.*
+
+Before Tavily, searching went through the Gemini API's own grounding: a pool
+member was asked a question with the `google_search` tool bound, and it searched
+and answered. `read_url` did the same with `url_context` for one named page. It
+cost **no third-party credits at all** — 5,000 grounded searches a month, free,
+on keys this project already held — which is why it was built and why deleting it
+was not obvious.
+
+Three things it got right, and they are why the replacement had to keep them:
+
+- **Citations come back out of band.** Grounding metadata is not in the
+  conversation, so a model that searches with the tool *bound* has no URLs to
+  write down. Routing the search through a tool call put the source list into a
+  `ToolMessage`, as text the model could copy. Every source in a note existed
+  because of that decision.
+- **The citations are redirect links** (`vertexaisearch.cloud.google.com/...`),
+  useless to a reader and unopenable, so each was resolved with a `HEAD`
+  request — in parallel, and best-effort, because a dozen serial waits on other
+  people's servers is a minute of a metered run.
+- **A search with no sources was labelled as such**, because a grounded call that
+  answered from memory and one that looked something up are indistinguishable
+  otherwise.
+
+**What it got wrong is the one thing that mattered.** What reached the model was
+a summary, and reading the real page was optional. The agent never took the
+option ([15.3](#153-why-the-search-tool-fetches-the-page)).
+
+It was kept for one commit as a fallback against Tavily's free tier running out,
+and then deleted: a fallback nobody should fall back to is a second prompt and a
+second tool set to keep true, in exchange for restoring a failure mode already
+measured once. `git log` has it.
 
 ---
 

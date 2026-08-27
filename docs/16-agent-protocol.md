@@ -95,7 +95,7 @@ laziness:
    caller, so quota a delegated search burns is immediately visible to the
    conversation that asked for it. "Two routers over one free tier" is already
    the honest model of this pool
-   ([15.4](15-explorer.md#154-which-member-serves-a-search)), and it only holds
+   ([15.4](15-explorer.md#154-which-account-serves-a-search)), and it only holds
    inside one process.
 2. **The delegate's calls land in the caller's trace.** One run, one record, one
    `input_tokens` total — the number the whole evaluation rests on
@@ -152,7 +152,7 @@ protocol adds exactly **one** tool.
 coding agent          delegate(agent="explore", request="…")
   └─ LocalTransport   Task(id, contextId) → submitted → working
        └─ registry    explore's handler, closed over the same router
-            └─ explore session   web_search / read_url, writes /research/*.md
+            └─ explore session   tavily_search / think_tool, writes /research/*.md
        ← Task          completed, artifacts=[research/cerebras-limits.md]
   ← tool result        the state, the closing line, the paths
 ```
@@ -255,7 +255,7 @@ that knows about both. A third agent is:
    than a declaration — the explorer is registered only if the pool can actually
    search, because an agent advertised and then unreachable costs the caller a
    delegation to discover
-   ([15.2.1](15-explorer.md#1521-the-two-tools-are-granted-separately)).
+   ([15.2.1](15-explorer.md#1521-a-capability-is-a-fact-to-probe-not-to-infer)).
 
 The calling agent changes not at all: it has one `delegate` tool and a directory
 of cards, and knows nothing about what is behind them.

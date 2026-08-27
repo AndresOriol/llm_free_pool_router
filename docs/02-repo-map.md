@@ -59,9 +59,10 @@ its tools pointed outward and no shell at all. See
 
 | File | The question it answers |
 | --- | --- |
-| [search.py](../agent/explore/search.py) | *How does an agent on a free tier reach the web?* — `web_search` and `read_url` as grounded calls on the pool's Gemini-platform members, two pools because the two tools are granted separately, with the citation redirects resolved |
-| [session.py](../agent/explore/session.py) | *How does it differ from the coding agent?* — the web tools in, every program out, `/research/` created before the first write |
-| [prompt.py](../agent/explore/prompt.py) + [system_prompt.md](../agent/explore/system_prompt.md) | *What is it told?* — cite everything, say what you could not find, the files are the deliverable |
+| [research_tools.py](../agent/explore/research_tools.py) | *How does an agent reach the web?* — `tavily_search` (Tavily finds URLs, httpx fetches, markdownify converts, so the **page** reaches the model) and `think_tool`, over the Tavily account pool |
+| [deep_prompts.py](../agent/explore/deep_prompts.py) | *Whose method is this?* — LangChain's deep-research prompts, ported close to verbatim, with every deviation marked `ADAPTED` ([15.8](15-explorer.md#158-the-deep-research-port)) |
+| [session.py](../agent/explore/session.py) | *How does it differ from the coding agent?* — an orchestrator over a `research-agent` sub-agent, the web tools in, every program out, `/research/` created before the first write |
+| [prompt.py](../agent/explore/prompt.py) + [system_prompt.md](../agent/explore/system_prompt.md) | *What does it know that upstream cannot?* — which pool serves a call, where the jail's `/` is, that nobody is watching. The method comes from `deep_prompts.py` |
 | [a2a.py](../agent/explore/a2a.py) | *How does another agent ask it for a report?* — its `AgentCard` and the handler behind it; the notes it wrote become `Artifact`s pointing at paths ([16](16-agent-protocol.md)) |
 | [`__main__.py`](../agent/explore/__main__.py) | CLI: same shape as the coding agent, and it lists the notes it wrote |
 

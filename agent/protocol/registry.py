@@ -10,7 +10,7 @@ swapping this for a fetch does not change a line of the calling agent.
 registered only when the pool can actually search the web, on the same principle
 that decides which member serves a search: a vendor's capability grant is a fact
 to probe, not to infer
-([15.2.1](../../docs/15-explorer.md#1521-the-two-tools-are-granted-separately)).
+([15.2.1](../../docs/15-explorer.md#1521-a-capability-is-a-fact-to-probe-not-to-infer)).
 An agent listed but unreachable is worse than one absent -- the caller spends a
 delegation, and its budget, discovering the gap.
 """

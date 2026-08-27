@@ -1,35 +1,44 @@
 """One exploration over one workdir: the web in, files out.
 
-The same machinery as the coding agent (agent/code) with three deliberate
-differences, and nothing else changed -- the loop, the compaction, the jail and
-the failover are shared, because two agents diverging on those would be two
-things to debug rather than one.
+**This branch runs LangChain's deep-research agent, not our own prose.** The
+explorer's own prompt lost to it on every axis a recorded run could measure --
+13 searches, 0 sources opened, one file written at the end, every query phrased
+as keywords ([15.7](../../docs/15-explorer.md#157-measured-against-a-reference-research-agent))
+-- so the shape here is upstream's and the deviations are the ones this pool
+forces ([deep_prompts.py](deep_prompts.py), [research_tools.py](research_tools.py)).
 
-1. **It can reach the web.** `web_search` and `read_url`, grounded through the
-   pool's own Gemini members (agent/explore/search.py).
-2. **It cannot run the project.** The coding agent needs `python`/`pytest`/`git`
-   to close its own loop -- write a test, run it, react. A researcher has no
-   loop to close, so the allowlist is empty and `execute` refuses everything.
-   Nothing is lost and the blast radius of an unattended run drops to the files
-   it writes.
-3. **Its deliverable is on disk.** The prompt says so at length
-   (system_prompt.md), because the reader is the next agent to open this
-   directory rather than whoever launched this one.
+The three things that changed, and what each was for:
 
-The *deliverable* passes through the filesystem and only the filesystem. The
-explorer writes `/research/*.md` into a workdir; the coding agent, pointed at
-that same workdir, reads them like any other file, today or next week -- which
-is why it is safe to run them hours apart.
+1. **An orchestrator over a researcher sub-agent.** The orchestrator plans,
+   delegates, consolidates citations and writes the report; it never searches.
+   The sub-agent's raw page dumps stay in the sub-agent's context, which is
+   what makes fetching whole pages affordable at all.
+2. **`tavily_search` returns the page, not a summary of it.** The old
+   `web_search`/`read_url` pair made reading optional and the agent always
+   declined. This tool has no such affordance.
+3. **`think_tool` after every search.** A forced pause between retrieving and
+   deciding to retrieve again. The failure it addresses is thirteen searches
+   that never asked whether the twelfth had added anything.
 
-What no longer passes through a human is the *request*. The coding agent can ask
-for a report directly (agent/protocol/, docs/16-agent-protocol.md); that carries
-the question and the task's status, never the note. `agent/explore/a2a.py` is
-this session's server side and changes nothing below it.
+What did *not* change: the loop, the jail, the pool, the failover, and the fact
+that the deliverable is a file on disk that outlives the run. The A2A handler
+above it ([a2a.py](a2a.py)) is untouched -- it still collects `/research/*.md`
+and reports them as artifacts, which is why the report is written there rather
+than at the workdir root the way upstream does.
+
+The grounded-Gemini search this replaced (`web_search`/`read_url`, a Gemini
+model searching on the agent's behalf and returning its summary) is deleted
+rather than kept as a fallback. It cost no third-party credits, which was the
+argument for keeping it, and it is also the thing that produced a run of 13
+searches and 0 opened sources -- a fallback nobody should fall back to is just
+a second prompt to keep true. `git log` has it
+([15.9](../../docs/15-explorer.md#159-what-the-grounded-gemini-search-was)).
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import date
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -39,7 +48,8 @@ from langchain_core.tracers.context import collect_runs
 from agent.code import context
 from agent.code import trace as run_trace
 from agent.code.session import CONTEXT_FLOOR, RECURSION_LIMIT, _trace_locator
-from agent.explore import prompt, search
+from agent.explore import deep_prompts, prompt, research_tools
+from agent.explore.research_tools import NoSearchPool, check_pool  # noqa: F401
 from agent.runtime.trace import tracer_from_env
 
 logger = logging.getLogger("harness.explore")
@@ -49,80 +59,83 @@ logger = logging.getLogger("harness.explore")
 # first write spends a step discovering that, and sometimes writes to `/` instead.
 RESEARCH_DIR = "research"
 
+# Upstream's numbers, kept. The defaults bias to one sub-agent anyway, and
+# lowering a documented limit before observing it spend anything would be
+# guessing at a budget rather than measuring one.
+MAX_CONCURRENT_RESEARCH_UNITS = 3
+MAX_RESEARCHER_ITERATIONS = 3
+MAX_SEARCHES_PER_SUBAGENT = 5
 
-class NoSearchPool(SystemExit):
-    """Raised before the run when nothing in the pool can reach the web."""
+
+def orchestrator_prompt() -> str:
+    """Upstream's two orchestrator sections, joined the way upstream joins them."""
+    return (
+        deep_prompts.RESEARCH_WORKFLOW_INSTRUCTIONS
+        + "\n\n" + "=" * 80 + "\n\n"
+        + deep_prompts.SUBAGENT_DELEGATION_INSTRUCTIONS.format(
+            max_concurrent_research_units=MAX_CONCURRENT_RESEARCH_UNITS,
+            max_researcher_iterations=MAX_RESEARCHER_ITERATIONS,
+            max_searches_per_subagent=MAX_SEARCHES_PER_SUBAGENT,
+        )
+    )
 
 
-def build_agent(workdir: Path, model, web, *,
+def researcher_subagent(tools: list) -> dict:
+    """The `research-agent` sub-agent, as upstream declares it."""
+    return {
+        "name": "research-agent",
+        "description": ("Delegate research to the sub-agent researcher. Only "
+                        "give this researcher one topic at a time."),
+        "system_prompt": deep_prompts.RESEARCHER_INSTRUCTIONS.format(
+            date=date.today().isoformat(),
+            max_searches=MAX_SEARCHES_PER_SUBAGENT),
+        "tools": tools,
+    }
+
+
+def build_agent(workdir: Path, model, pool, *,
                 floor: int = CONTEXT_FLOOR, members: int = 0,
                 extra_middleware: Optional[Sequence] = None):
-    """The compiled explorer over a jailed backend and the web pools.
-
-    `web` is the `(search_pool, read_pool)` pair from `check_search`.
-    """
+    """The compiled research orchestrator over a jailed backend and the pool."""
     from deepagents import create_deep_agent
-    from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 
     from agent.runtime.backend import RestrictedShellBackend
 
     workdir = Path(workdir)
     (workdir / RESEARCH_DIR).mkdir(parents=True, exist_ok=True)
 
-    # No programs at all. `execute` is still installed -- the backend satisfies
-    # SandboxBackendProtocol either way, and the SDK reads that, not the
-    # allowlist -- but every command comes back refused with the backend's own
-    # explanation, which is a readable tool result rather than an exception. So
-    # the coding agent's ShellAllowListMiddleware buys nothing here: there is no
-    # allowlist for it to mirror.
+    # No programs at all, unchanged. `execute` is still installed -- the backend
+    # satisfies SandboxBackendProtocol either way -- but every command comes back
+    # refused with the backend's own explanation.
     backend = RestrictedShellBackend(root_dir=str(workdir), allowed_programs=(),
                                      allow_git=False, allow_shell=False)
 
-    project = context.section(workdir)
-    system_prompt = prompt.build(floor, members=members,
-                                 extra_sections=[project] if project else None)
+    tools = list(research_tools.make_research_tools(pool).values())
 
-    tools = list(search.make_search_tools(*web).values())
+    # This project's own preamble first, then upstream's workflow. The preamble
+    # carries facts about *this* system that upstream cannot know -- which pool
+    # is serving the call, where the jail's `/` is, that nobody is watching --
+    # and the workflow carries the method.
+    project = context.section(workdir)
+    system_prompt = prompt.build(
+        floor, members=members,
+        extra_sections=[s for s in (project, orchestrator_prompt()) if s])
 
     return create_deep_agent(
         model=model,
+        # The orchestrator holds the same tools upstream gives it, and is told
+        # never to use them for research. Kept rather than removed because
+        # upstream keeps them, and a checked fact about a run that ignores that
+        # instruction is worth more than a run that could not have disobeyed.
         tools=tools,
         system_prompt=system_prompt,
         backend=backend,
         middleware=list(extra_middleware or []),
-        subagents=[GENERAL_PURPOSE_SUBAGENT],
+        subagents=[researcher_subagent(tools)],
     )
 
 
-def check_search(router) -> tuple:
-    """Fail before the run rather than during it. Returns `(search, read)`.
-
-    Only the *search* pool is required. Without one, every `web_search` would
-    come back an error and the agent would spend its whole budget writing a
-    research note about having no research -- a failure that reads like a bad
-    model rather than a misconfigured pool.
-
-    An empty *read* pool is survivable: the agent can still search, and
-    `read_url` says why it cannot open a page. It is worth a warning, because a
-    pool of nothing but Gemma searches perfectly well and can never follow a
-    citation.
-    """
-    searching, reading = search.pools(router)
-    if searching is None:
-        raise NoSearchPool(
-            "No member of the pool can search the web. Grounding with Google "
-            "Search is a Gemini API feature, so this agent needs at least one "
-            "`gemini-*` or `gemma-*` model on a `gemini` account in "
-            "llm_router/config.yaml.")
-    if reading is None:
-        logger.warning(
-            "No member of the pool can open a URL (that needs a `gemini-*` "
-            "model; Gemma refuses `url_context`). The agent can search but "
-            "cannot follow a citation to its source.")
-    return searching, reading
-
-
-def run_session(model, task: str, workdir: Path, web, config=None,
+def run_session(model, task: str, workdir: Path, pool, config=None,
                 floor: int = CONTEXT_FLOOR, members: int = 0,
                 trace_path: Optional[Path] = None) -> tuple:
     """Run one exploration. Returns (final_state, trace_written)."""
@@ -134,7 +147,7 @@ def run_session(model, task: str, workdir: Path, web, config=None,
     if jsonl is not None:
         config["callbacks"] = list(config.get("callbacks") or []) + [jsonl]
 
-    agent = build_agent(workdir, model, web, floor=floor, members=members)
+    agent = build_agent(workdir, model, pool, floor=floor, members=members)
 
     with collect_runs() as collected:
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
@@ -152,8 +165,7 @@ def run_session(model, task: str, workdir: Path, web, config=None,
             "harness": "explore",
             "context_floor": floor,
             "eligible_providers": members,
-            "search_providers": len(web[0].providers) if web[0] else 0,
-            "read_providers": len(web[1].providers) if web[1] else 0,
+            "search_accounts": len(getattr(pool, "accounts", []) or []),
             "tracing_enabled": run_trace.tracing_enabled(),
         })
         if written:

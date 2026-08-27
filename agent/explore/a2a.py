@@ -28,9 +28,9 @@ logger = logging.getLogger("harness.explore")
 CARD = AgentCard(
     name="explore",
     version="0.1.0",
-    description=("Researches the open web and writes what it found to "
-                 "`/research/*.md`, with the source URL for every claim. It "
-                 "reads pages; it cannot run, read or change this project."),
+    description=("Researches the open web and writes a cited report to "
+                 "`/research/final_report.md`. It reads whole pages, not "
+                 "search snippets; it cannot run or change this project."),
     skills=[
         AgentSkill(
             id="web_research",
@@ -60,7 +60,7 @@ def _notes(research_dir: Path) -> dict:
     return {p: p.stat().st_size for p in sorted(research_dir.rglob("*.md"))}
 
 
-def make_handler(model, workdir: Path, web, *, floor: int, members: int,
+def make_handler(model, workdir: Path, pool, *, floor: int, members: int,
                  recursion_limit: int):
     """The handler the registry serves for `explore`.
 
@@ -99,7 +99,7 @@ def make_handler(model, workdir: Path, web, *, floor: int, members: int,
         # comparison rests on.
         config = {"recursion_limit": recursion_limit}
 
-        agent = build_agent(workdir, model, web, floor=floor, members=members)
+        agent = build_agent(workdir, model, pool, floor=floor, members=members)
         final = agent.invoke({"messages": [HumanMessage(request)]}, config)
 
         after = _notes(research_dir)

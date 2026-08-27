@@ -34,9 +34,22 @@ the simpler configuration.
 | `harness-v7-orchestrated` | `harness/adhoc-router` | Hub and spoke; execution as an agent | L0, n=3 | 0/3, most calls | **dropped for this task shape** |
 | `harness-v8-session` | `harness/adhoc-router` | A session: briefed roles, journal, branch, docs and rationale as deliverables | L1+L2 `session`, n=2 | 2/4 | **no verdict** — ran alone, no baseline |
 | `code` (was `deepagents`) | `harness/deepagents` | A conversation instead of narrow roles: `create_deep_agent` on the pool behind a hard 128k context floor, configured like `deepagents-code` | — | **never run** | **the only configuration left** — no eval run recorded, so no verdict |
-| `code-peers` | `harness/agent-protocol` | `code` plus one `delegate` tool: it can ask the web explorer for a report mid-task, over A2A on a local transport ([16](../docs/16-agent-protocol.md)) | — | **never run** | no verdict — read `input_tokens` and `delegated_tasks` first, and interleave against `code` |
+| `code-peers` | `harness/agent-protocol` | `code` plus one `delegate` tool: it can ask the web explorer for a report mid-task, over A2A on a local transport ([16](../docs/16-agent-protocol.md)). The explorer is LangChain's deep-research agent, ported ([15.8](../docs/15-explorer.md#158-the-deep-research-port)) | — | **never run** | no verdict — read `input_tokens` and `delegated_tasks` first, and interleave against `code` |
+
 
 ### code-peers, before any eval run (2026-08-27)
+
+**It was two configurations for one commit and is now one.** `code-peers-deep`
+held the deep-research explorer while `code-peers` held the grounded-Gemini one;
+the latter is deleted, so the two would be the same run. The pre-deep arm is at
+`89181a2` if it is ever worth pricing what the replacement cost.
+
+Do not read that as a measured win. The replacement was chosen on a recorded
+*trajectory* — 13 searches, 0 sources opened, one file written at the end, every
+query keyword-shaped — against a reference implementation that forbids each of
+those by construction. Nothing has compared the two on cost or on the quality of
+what they wrote, and the deep arm plausibly costs more: it is two conversations
+where the other was one.
 
 The pair is a clean A/B by construction: with `AGENT_PEERS=` empty this branch's
 agent has exactly the tools `code` has, so the only difference measured is the
