@@ -32,17 +32,31 @@ from langchain_core.callbacks import BaseCallbackHandler
 _ENV_VAR = "EVAL_TRACE_FILE"
 
 # Tool args and outputs carry whole files; a run would otherwise write hundreds
-# of MB. Everything the metrics need (paths, error text) sits at the front.
+# of MB.
 _MAX_FIELD = 2000
+# ...but not everything the metrics need sits at the front. A `web_search`
+# result ends with its `Sources:` block, and whether a search came back with
+# sources or with the model's own recollection is the single fact that decides
+# whether a research note is grounded (agent/explore/search.py).
+#
+# Head-only clipping cost a real post-mortem: every recorded search looked
+# source-less, because 2,000 characters ran out before the citations. Keeping a
+# tail costs a few hundred bytes a call and makes the question answerable.
+_TAIL_FIELD = 600
 
 
 def _clip(value: Any) -> Optional[str]:
     if value is None:
         return None
     text = value if isinstance(value, str) else str(value)
-    if len(text) <= _MAX_FIELD:
+    if len(text) <= _MAX_FIELD + _TAIL_FIELD:
         return text
-    return text[:_MAX_FIELD] + f" ...[{len(text)} chars]"
+    dropped = len(text) - _MAX_FIELD - _TAIL_FIELD
+    # The total is still named, as it was when this clipped the head only: a
+    # reader has to be able to tell a 3,000-character result from a 300,000-one.
+    return (text[:_MAX_FIELD]
+            + f" ...[{len(text)} chars, {dropped} elided]... "
+            + text[-_TAIL_FIELD:])
 
 
 def _model_name(serialized, metadata, invocation_params) -> str:
