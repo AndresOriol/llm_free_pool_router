@@ -194,3 +194,88 @@ def test_the_recorded_run_is_the_baseline_and_it_fails_four_checks():
 def test_every_check_carries_a_reason_a_human_can_act_on():
     for c in rt.check(_note()):
         assert c.why and len(c.why) > 40, c.name
+
+
+# --- the deep-research vocabulary -------------------------------------------
+# A trace has to be readable long after the agent that wrote it was replaced,
+# and the two agents were given different rules. Scoring a run against rules it
+# never had is the one way these checks stop meaning anything.
+
+
+def _deep_search(query, results=1):
+    return [_tool("tavily_search", {"query": query}),
+            _tool("tavily_search", output=f"Found {results} result(s)", end=True)]
+
+
+def _think(reflection="found x, still missing y"):
+    return [_tool("think_tool", {"reflection": reflection}),
+            _tool("think_tool", output="Reflection recorded", end=True)]
+
+
+def _request(path="/research/research_request.md"):
+    return [_tool("write_file", {"content": "the question", "file_path": path}),
+            _tool("write_file", output="ok", end=True)]
+
+
+def test_the_vocabulary_is_detected_from_the_tools_used():
+    assert rt.vocabulary(_deep_search("what is x?")) == "deep"
+    assert rt.vocabulary(_search("what is x?")) == "classic"
+    assert rt.vocabulary(_note()) == "unknown"
+
+
+def test_the_deep_agent_is_not_asked_to_have_opened_a_source():
+    """`tavily_search` returns the page. There is no read_url to skip, so the
+    check that caught the classic agent has nothing to catch here."""
+    events = _request() + _deep_search("what is x?") + _think() + _note()
+    assert "opened a source" not in {c.name for c in rt.check(events)}
+
+
+def test_the_classic_agent_is_still_asked_to_have_opened_a_source():
+    events = _search("what is x?") + _note()
+    assert "opened a source" in {c.name for c in rt.check(events)}
+
+
+def test_searching_without_reflecting_fails_the_deep_agent():
+    events = _request() + [e for i in range(4)
+                           for e in _deep_search(f"what is thing {i}?")] + _note()
+    assert not _named(rt.check(events))["reflected between searches"].ok
+
+
+def test_a_search_think_loop_passes():
+    events = _request()
+    for i in range(3):
+        events += _deep_search(f"what is thing {i}?") + _think()
+    events += _note("/research/final_report.md")
+    assert _named(rt.check(events))["reflected between searches"].ok
+
+
+def test_not_saving_the_request_fails():
+    events = _deep_search("what is x?") + _think() + _note()
+    assert not _named(rt.check(events))["saved the request"].ok
+
+
+def test_the_request_file_is_not_counted_as_a_report():
+    """It records the question, not an answer. A run that saved the request and
+    wrote nothing else has still left no findings."""
+    events = _request() + _deep_search("what is x?") + _think()
+    assert rt.from_trace(events)["reports"] == 0
+    assert not _named(rt.check(events))["left a deliverable"].ok
+
+
+def test_the_orchestrator_is_not_penalised_for_writing_its_report_last():
+    """It synthesizes after its sub-agents return, so the report is necessarily
+    the last thing written. That is upstream's design, not drift -- and it is a
+    real loss of crash-resilience, recorded in docs rather than as a FAIL."""
+    events = _request()
+    for i in range(5):
+        events += _deep_search(f"what is thing {i}?") + _think()
+    events += _note("/research/final_report.md")
+    assert _named(rt.check(events))["wrote as it went"].ok
+
+
+def test_a_well_behaved_deep_run_fails_nothing():
+    events = _request()
+    for i in range(3):
+        events += _deep_search(f"What is thing {i} used for?") + _think()
+    events += _note("/research/final_report.md")
+    assert rt.failures(events) == [], [str(c) for c in rt.failures(events)]

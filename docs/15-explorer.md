@@ -273,6 +273,84 @@ the tool is the right one.**
 Per-topic sub-agents were also not copied: on this harness a sub-agent is a
 whole session, and four topics would be four sessions against a free tier.
 
+## 15.8 The deep-research port
+
+*Branch `harness/deep-research`. [15.7](#157-measured-against-a-reference-research-agent)
+argued the explorer's method lost to LangChain's reference agent on every axis a
+run could measure. This is the branch that stops arguing and runs theirs.*
+
+The port is close to verbatim — `RESEARCH_WORKFLOW_INSTRUCTIONS`,
+`SUBAGENT_DELEGATION_INSTRUCTIONS` and `RESEARCHER_INSTRUCTIONS` from
+`langchain-ai/deepagents-quickstarts` (MIT), plus `tavily_search` and
+`think_tool` ([deep_prompts.py](../agent/explore/deep_prompts.py),
+[research_tools.py](../agent/explore/research_tools.py)). This repo already
+ports `deepagents-code`'s prompt for the coding agent; this is the same move on
+the research side.
+
+### 15.8.1 The three changes that matter
+
+| | Before | Now |
+| --- | --- | --- |
+| Search | `web_search` returns a Gemini model's **summary**; `read_url` opens the page and is optional | `tavily_search`: Tavily finds URLs, httpx fetches each, markdownify converts — **the page is what reaches the model** |
+| Reflection | none | `think_tool` after every search: what did I find, what is missing, do I stop |
+| Shape | one agent, one conversation, all topics | orchestrator + `research-agent` sub-agent; the orchestrator plans, delegates, consolidates citations and writes the report, and never searches |
+
+**The first is the one this branch exists for.** A recorded run made 13 searches
+and 0 `read_url` calls, and wrote a report of exact figures none of which had
+been traced to a page. The fix is not a firmer instruction; it is a tool that
+does not offer the failure. Verified live: one search returned 29,477 characters
+across two results, both fetched, no summary in between.
+
+The third has a second benefit that is specific to this pool: the sub-agent's
+raw page dumps stay in the sub-agent's context. Fetching whole pages is only
+affordable because the orchestrator never sees them.
+
+### 15.8.2 What this pool forced us to change
+
+Four deviations, each marked `ADAPTED` in the ported prompt so the next reader
+can diff against the source rather than guess:
+
+1. **`/research/` rather than the workdir root.** Upstream writes
+   `/research_request.md` and `/final_report.md` at the root. Here the workdir is
+   a project a coding agent then works in, and a report at the root lands in the
+   diff it produces. The A2A handler collects `/research/*.md` as artifacts, so
+   this is also what makes a delegated report come back as one
+   ([16.4](16-agent-protocol.md#164-what-maps-onto-what)).
+2. **A pool, not a client.** Upstream builds one `TavilyClient`. Search here goes
+   through `TavilyPoolRouter`, so an account at its monthly credit wall fails
+   over instead of ending the run — the argument the model pool already rests on.
+   **Today the pool holds one account**, so there is nothing to fail over to; the
+   run warns about that once rather than discovering it at the wall.
+3. **Pages are clipped at 20,000 characters.** Upstream returns them whole. One
+   documentation page can outweigh everything the agent had learned, and the
+   conversation carrying it is routed against a 128,000-token floor. The cut says
+   it is a cut.
+4. **The report is named against collision.** Upstream is single-shot; this
+   explorer answers repeated delegations into one workdir, so a second question
+   would overwrite the first's `final_report.md`.
+
+### 15.8.3 What it costs, and what was given up
+
+A research task is now an orchestrator conversation **plus** a sub-agent
+conversation, where it used to be one. Against that, the sub-agent's context
+holds the pages and the orchestrator's does not, so the totals are not
+obviously worse — and nothing has measured them yet. `search_accounts` and the
+per-run trace are in the record; the number to read first is `tokens_in`.
+
+**One thing was given up.** The old prompt told the agent to write files as it
+went, so a run that died halfway left half its findings. The orchestrator
+synthesizes *after* its sub-agents return, so the report is necessarily the last
+thing written and a crash before it leaves only `research_request.md`. That is
+upstream's design rather than drift, so
+[research_trajectory](../evals/research_trajectory.py) records it instead of
+failing the run for it — but it is a real regression in crash-resilience for an
+agent meant to run unattended, and it is the first thing to revisit if a long
+run dies late.
+
+`agent/explore/search.py` is still in the tree and no longer wired in. It is the
+fallback if Tavily's free tier proves too small, and it is the only search this
+project has that costs no third-party credits.
+
 ---
 
 **Previous:** [← 14. Quota panel](14-quota-panel.md) · **Next:** [16. The agent protocol →](16-agent-protocol.md)

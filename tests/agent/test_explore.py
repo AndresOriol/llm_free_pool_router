@@ -126,23 +126,41 @@ def test_search_reaches_for_the_cheapest_member_first():
     assert pool.get_best_provider() is None
 
 
-def test_a_pool_that_cannot_search_is_refused_before_the_run():
+def test_a_groq_only_pool_cannot_ground_a_search():
+    """Still true, and no longer what gates a run: the grounded-Gemini path is
+    unwired on this branch and searching goes through Tavily instead
+    (docs/15-explorer.md#158)."""
     router = AutonomousLLMRouter([_Provider("openai/gpt-oss-120b",
                                             platform="groq")])
     assert search.search_pool(router) is None
+
+
+def test_a_run_with_no_tavily_account_is_refused_before_it_starts():
+    class _EmptyPool:
+        accounts = []
+
     try:
-        session.check_search(router)
+        session.check_pool(_EmptyPool())
     except session.NoSearchPool as exc:
-        assert "gemini" in str(exc).lower()
+        assert "TAVILY_API_KEY_1" in str(exc)
     else:
-        raise AssertionError("a pool that cannot search must refuse up front")
+        raise AssertionError("a run with no way to search must refuse up front")
+
+
+def test_one_tavily_account_works_and_is_warned_about():
+    """It searches; it has nothing to fail over to. That is worth saying once,
+    because the failure mode is every search dying at the monthly wall."""
+    class _OnePool:
+        accounts = [object()]
+
+    assert session.check_pool(_OnePool()) == 1
 
 
 def test_a_gemma_only_pool_searches_and_says_why_it_cannot_read():
     # Survivable, not fatal: searching still works, and `read_url` has to
     # explain itself rather than 400 on every call.
     router = AutonomousLLMRouter([_Provider("gemma-4-31b-it")])
-    searching, reading = session.check_search(router)
+    searching, reading = search.pools(router)
     assert searching is not None and reading is None
 
     tools = search.make_search_tools(searching, reading)
@@ -256,7 +274,7 @@ def _handler(monkeypatch, root: Path, notes: dict, reply: str = "done"):
 
     monkeypatch.setattr(session, "build_agent",
                         lambda *a, **kw: _FakeSession(root, notes, reply))
-    return a2a.make_handler(model=None, workdir=root, web=(None, None),
+    return a2a.make_handler(model=None, workdir=root, pool=None,
                             floor=128_000, members=1, recursion_limit=10)
 
 

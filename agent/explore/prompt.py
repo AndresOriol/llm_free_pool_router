@@ -27,13 +27,30 @@ from agent.code.prompt import (FS_TOOL_GUIDANCE, HEADLESS_AMBIGUITY,
 logger = logging.getLogger("harness.explore")
 
 _TEMPLATE = Path(__file__).with_name("system_prompt.md")
+DEEP_TEMPLATE = Path(__file__).with_name("deep_system_prompt.md")
 
 
 def build(floor: int, members: int = 0,
-          extra_sections: Optional[Sequence[str]] = None) -> str:
-    """The full system prompt for one exploration."""
+          extra_sections: Optional[Sequence[str]] = None,
+          template: Optional[Path] = None) -> str:
+    """The full system prompt for one exploration.
+
+    `template` selects the body. The default is this project's own
+    ([system_prompt.md](system_prompt.md)), which describes the grounded-Gemini
+    `web_search`/`read_url` pair and a method written here. The deep-research
+    session passes [deep_system_prompt.md](deep_system_prompt.md) instead: a body
+    carrying only the facts about *this* system -- which pool serves a call,
+    where the jail's `/` is, that nobody is watching -- with the research method
+    supplied by upstream's workflow sections as an `extra_section`
+    ([session.orchestrator_prompt](session.py)).
+
+    Two templates rather than one with a flag, because the difference is not a
+    setting: the tools named in each body do not both exist in a given run, and
+    a prompt describing a tool the agent does not have is a measured cause of
+    failed calls ([6.5](../../docs/06-agent.md)).
+    """
     result = (
-        _TEMPLATE.read_text(encoding="utf-8")
+        (template or _TEMPLATE).read_text(encoding="utf-8")
         .replace("{interactive_preamble}", HEADLESS_PREAMBLE)
         .replace("{ambiguity_guidance}", HEADLESS_AMBIGUITY)
         .replace("{filesystem_tool_guidance}", FS_TOOL_GUIDANCE)

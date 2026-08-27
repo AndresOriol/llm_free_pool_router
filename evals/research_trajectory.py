@@ -26,9 +26,18 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-SEARCH_TOOLS = {"web_search"}
+# Two vocabularies, because there are two research agents and a trace has to be
+# readable long after the one that wrote it was replaced. `web_search`/`read_url`
+# is the grounded-Gemini pair; `tavily_search`/`think_tool` is the deep-research
+# port (docs/15-explorer.md#158). Which checks apply depends on which the run
+# used, and guessing wrong scores an agent against rules it was never given.
+CLASSIC_SEARCH = "web_search"
+DEEP_SEARCH = "tavily_search"
+SEARCH_TOOLS = {CLASSIC_SEARCH, DEEP_SEARCH}
 READ_TOOLS = {"read_url"}
+REFLECT_TOOLS = {"think_tool"}
 WRITE_TOOLS = {"write_file", "edit_file"}
+REQUEST_NOTE = "research_request.md"
 
 # A note is a research deliverable; anything else the agent writes is scratch.
 _NOTE = re.compile(r"/research/.+\.md$", re.IGNORECASE)
@@ -144,15 +153,29 @@ def from_trace(events: list) -> dict:
     queries = [str(_args(e).get("query") or "") for e in searches]
 
     return {
+        "vocabulary": vocabulary(events),
         "searches": len(searches),
         "source_reads": len(reads),
+        "reflections": len(_calls(events, REFLECT_TOOLS)),
         "ungrounded_searches": ungrounded,
         "notes_written": len(notes),
         "distinct_notes": len(set(notes)),
+        "reports": len([n for n in set(notes) if REQUEST_NOTE not in n]),
+        "saved_the_request": any(REQUEST_NOTE in n for n in notes),
         "searches_before_first_note": searches_before_first_note,
         "question_shaped_queries": sum(1 for q in queries
                                        if _looks_like_a_question(q)),
     }
+
+
+def vocabulary(events: list) -> str:
+    """Which research agent wrote this trace: `deep`, `classic`, or `unknown`."""
+    tools = {e.get("tool") for e in events if e.get("event") == "tool_start"}
+    if DEEP_SEARCH in tools or REFLECT_TOOLS & tools:
+        return "deep"
+    if CLASSIC_SEARCH in tools:
+        return "classic"
+    return "unknown"
 
 
 @dataclass
@@ -190,12 +213,20 @@ def check(events: list, *, budget: int = SEARCH_BUDGET) -> list:
     def add(name, ok, detail, why):
         out.append(Check(name, ok, detail, why))
 
-    add("opened a source",
-        m["source_reads"] > 0 or m["searches"] == 0,
-        f"{m['source_reads']} read_url call(s) for {m['searches']} search(es)",
-        "The prompt says to open the source with `read_url` before writing a "
-        "version, a limit or a price down as fact. A run that never reads a "
-        "page has taken every number from a summary of a summary.")
+    deep = m["vocabulary"] == "deep"
+
+    if not deep:
+        # Only the classic agent can fail this: its `web_search` returns a
+        # summary and opening the page is a separate tool. `tavily_search`
+        # returns the page, so on the deep agent the check has nothing to
+        # catch -- it is satisfied by the shape of the tool, which is the whole
+        # reason the tool changed.
+        add("opened a source",
+            m["source_reads"] > 0 or m["searches"] == 0,
+            f"{m['source_reads']} read_url call(s) for {m['searches']} search(es)",
+            "The prompt says to open the source with `read_url` before writing "
+            "a version, a limit or a price down as fact. A run that never reads "
+            "a page has taken every number from a summary of a summary.")
 
     add("stayed inside the search budget",
         m["searches"] <= budget,
@@ -204,23 +235,48 @@ def check(events: list, *, budget: int = SEARCH_BUDGET) -> list:
         "first source on the next question costs.")
 
     add("wrote as it went",
-        m["searches_before_first_note"] <= max(3, budget // 2),
+        deep or m["searches_before_first_note"] <= max(3, budget // 2),
         f"{m['searches_before_first_note']} search(es) before the first note",
         "A run that dies holding everything in its head leaves nothing. The "
         "prompt asks for a file early and updates after.")
 
+    # `reports`, not `distinct_notes`: research_request.md records the question
+    # and answers nothing, so a run that saved it and stopped has left the next
+    # reader exactly as uninformed as one that wrote nothing.
     add("left a deliverable",
-        m["distinct_notes"] > 0,
-        f"{m['distinct_notes']} note(s) under /research",
+        m["reports"] > 0,
+        f"{m['reports']} report(s) under /research",
         "The closing message is not the deliverable and nobody reads it. No "
         "file means the run spent its quota talking to itself.")
 
     add("marked its ungrounded answers",
-        m["ungrounded_searches"] == 0 or m["source_reads"] > 0,
+        deep or m["ungrounded_searches"] == 0 or m["source_reads"] > 0,
         f"{m['ungrounded_searches']} search(es) came back with no sources",
         "A grounded call that returns no citations answered from memory. The "
         "prompt forbids laundering that into a cited fact, so at least one "
         "page has to be opened before those claims are written down.")
+
+    if deep:
+        # The reference enforces a search -> think loop: reflect after every
+        # search, before deciding to search again
+        # (https://docs.langchain.com/oss/python/deepagents/deep-research).
+        # A run that searches five times without once asking what it now knows
+        # is the shape the loop exists to prevent.
+        add("reflected between searches",
+            m["searches"] == 0 or m["reflections"] >= m["searches"] - 1,
+            f"{m['reflections']} think_tool call(s) for {m['searches']} "
+            f"search(es)",
+            "think_tool is a forced pause between retrieving and deciding to "
+            "retrieve again. Skipping it is how a run spends its whole budget "
+            "confirming what its second search already said.")
+
+        add("saved the request",
+            m["saved_the_request"],
+            "wrote /research/research_request.md"
+            if m["saved_the_request"] else "no research_request.md",
+            "Step 2 of the workflow. It makes the directory self-describing: "
+            "the next agent to open it can see what was asked, not only what "
+            "was answered.")
 
     add("asked questions rather than keywords",
         m["searches"] == 0

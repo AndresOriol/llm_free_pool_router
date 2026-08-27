@@ -1,0 +1,35 @@
+# `code-peers`, with the research agent replaced by the deep-research port.
+#
+# The coding agent is untouched. What changed is the agent behind `delegate`:
+# LangChain's deep-research workflow, an orchestrator over a research-agent
+# sub-agent, and a `tavily_search` that returns the page rather than a summary
+# of it (docs/15-explorer.md#158-the-deep-research-port).
+#
+# What the run is asking:
+#
+#   1. Does the report get better? No automatic metric answers this -- the
+#      trajectory checks say whether the *method* was followed, and whether the
+#      findings are right is a reader's judgement (evals/research_trajectory.py).
+#      Read the report against the recorded one from 2026-08-27, which searched
+#      13 times and opened nothing.
+#   2. What does it cost? A research task is now two conversations instead of
+#      one, against a sub-agent context that holds the fetched pages so the
+#      orchestrator's does not. `tokens_in` is the column; nothing has measured
+#      it and the direction is genuinely unknown.
+#   3. Does the search -> think loop hold? `reflected between searches` in the
+#      trajectory checks. Upstream's whole claim for think_tool is that it stops
+#      a run spending its budget confirming its second search.
+#
+# Needs TAVILY_API_KEY_1 in llm_router/.env. The pool holds one account today,
+# so a run that exhausts its monthly credits has nothing to fail over to and
+# every subsequent search fails -- check the credit balance before a batch.
+#
+# Interleaved against `code-peers`, never alone.
+name: code-peers-deep
+repo: ../..
+ref: harness/deep-research
+env_file: ../../llm_router/.env
+overrides:
+  router_config: llm_router/config.yaml
+  env:
+    AGENT_PEERS: explore

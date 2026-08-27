@@ -127,7 +127,8 @@ else on this page is design and changes rarely; this block is state.*
 [15.4](15-explorer.md#154-which-member-serves-a-search) Which member serves a search ·
 [15.5](15-explorer.md#155-what-it-is-allowed-to-do) What it is allowed to do ·
 [15.6](15-explorer.md#156-what-it-costs-a-run) What it costs a run ·
-[15.7](15-explorer.md#157-measured-against-a-reference-research-agent) Measured against a reference research agent
+[15.7](15-explorer.md#157-measured-against-a-reference-research-agent) Measured against a reference research agent ·
+[15.8](15-explorer.md#158-the-deep-research-port) The deep-research port
 
 **[16. The agent protocol](16-agent-protocol.md)** — how one agent asks another for work, in the standard's vocabulary
 &nbsp;&nbsp;&nbsp;&nbsp;[16.1](16-agent-protocol.md#161-the-problem-the-human-was-the-message-bus) The human was the message bus ·

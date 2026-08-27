@@ -71,17 +71,23 @@ def build_transport(router, model, workdir: Path, *, floor: int, members: int,
 
 def _register_explore(registry: AgentRegistry, router, model, workdir: Path, *,
                       floor: int, members: int, recursion_limit: int) -> None:
-    from agent.explore.a2a import CARD, make_handler
-    from agent.explore.session import NoSearchPool, check_search
+    from llm_router import TavilyPoolRouter
 
+    from agent.explore.a2a import CARD, make_handler
+    from agent.explore.session import NoSearchPool, check_pool
+
+    # The probe is now "is there a Tavily account", not "can a pool member
+    # ground a call": search moved to Tavily so that a search returns the page
+    # rather than a summary of it (docs/15-explorer.md#157).
+    pool = TavilyPoolRouter.from_env()
     try:
-        web = check_search(router)
+        check_pool(pool)
     except NoSearchPool as exc:
         # Not fatal. The coding agent is perfectly able to work without a
         # researcher; it just must not be told it has one.
         logger.warning(f"Not offering the `explore` agent: {exc}")
         return
 
-    registry.register(CARD, make_handler(model, workdir, web, floor=floor,
+    registry.register(CARD, make_handler(model, workdir, pool, floor=floor,
                                          members=members,
                                          recursion_limit=recursion_limit))
