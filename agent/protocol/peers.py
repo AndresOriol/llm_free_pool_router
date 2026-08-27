@@ -7,7 +7,7 @@ which is the property that lets a third agent be added by editing this file and
 no other.
 
 Registration is a probe. `explore` is offered only if the pool can actually
-reach the web, and the check is the explorer's own `check_search`, not a guess
+reach the web, and the check is the explorer's own `check_pool`, not a guess
 from the config file: an agent that is advertised and then fails costs the caller
 a delegation to discover it
 ([registry](registry.py)).

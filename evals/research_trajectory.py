@@ -196,18 +196,31 @@ class Check:
 OBSERVED = {"searches": 13, "source_reads": 0, "notes_written": 1,
             "searches_before_first_note": 13, "question_shaped_queries": 0}
 
-# Five is the reference implementation's number, not ours: LangChain's
-# deep-research agent stops at "five total search calls" and at "the last two
-# searches returned similar information"
-# (https://docs.langchain.com/oss/python/deepagents/deep-research). Doubled,
-# because that agent delegates each topic to a fresh sub-agent and ours carries
-# every topic in one conversation.
-SEARCH_BUDGET = 10
+# Two budgets, because the two agents were given two different ones and a check
+# that enforces the wrong one is measuring an opinion.
+#
+# The deep agent's is upstream's arithmetic, not ours: five searches per
+# sub-agent times three parallel sub-agents is the ceiling a run following the
+# prompt cannot exceed (agent/explore/session.py pins this).
+DEEP_SEARCH_BUDGET = 15
+# The classic agent had no number at all -- "stop when the answer stops moving"
+# -- until one was written for it after a run spent 13 searches. Kept so its
+# recorded traces still score against what it was told.
+CLASSIC_SEARCH_BUDGET = 10
+SEARCH_BUDGET = DEEP_SEARCH_BUDGET
 
 
-def check(events: list, *, budget: int = SEARCH_BUDGET) -> list:
+def budget_for(events: list) -> int:
+    """The search ceiling the run's own prompt set."""
+    return (CLASSIC_SEARCH_BUDGET if vocabulary(events) == "classic"
+            else DEEP_SEARCH_BUDGET)
+
+
+def check(events: list, *, budget: Optional[int] = None) -> list:
     """Every check over one run. A regression is a check that flips to FAIL."""
     m = from_trace(events)
+    if budget is None:
+        budget = budget_for(events)
     out = []
 
     def add(name, ok, detail, why):
@@ -289,9 +302,9 @@ def check(events: list, *, budget: int = SEARCH_BUDGET) -> list:
     return out
 
 
-def failures(events: list, *, budget: int = SEARCH_BUDGET) -> list:
+def failures(events: list, *, budget: Optional[int] = None) -> list:
     return [c for c in check(events, budget=budget) if not c.ok]
 
 
-def report(events: list, *, budget: int = SEARCH_BUDGET) -> str:
+def report(events: list, *, budget: Optional[int] = None) -> str:
     return "\n".join(str(c) for c in check(events, budget=budget))

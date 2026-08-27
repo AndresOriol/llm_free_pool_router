@@ -16,36 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from langchain_core.messages import AIMessage
 
-from agent.explore import prompt, search, session
+from agent.explore import prompt, research_tools, session
 from agent.runtime.backend import RestrictedShellBackend
-from llm_router.router import AutonomousLLMRouter
-
-
-class _Provider:
-    """The four fields the search pool reads off a pool member."""
-
-    def __init__(self, model, platform="gemini", priority=10, available=True):
-        self.model = model
-        self.platform = platform
-        self.priority = priority
-        self.name = f"{model}_acct"
-        self.max_input_tokens = 250_000
-        self.available = available
-
-    def check_availability(self):
-        return self.available
-
-
-def _grounded(text, sources=(), queries=(), finish_reason="STOP"):
-    """An AIMessage shaped like a real grounded reply, minus the network."""
-    return AIMessage(content=text, response_metadata={
-        "finish_reason": finish_reason,
-        "grounding_metadata": {
-            "web_search_queries": list(queries),
-            # Real citations are opaque redirects with the domain as the title.
-            "grounding_chunks": [{"web": {"uri": uri, "title": title}}
-                                 for title, uri in sources],
-        }})
 
 
 # -- What the model is told -------------------------------------------------
@@ -56,84 +28,17 @@ def test_prompt_leaves_no_placeholder_unreplaced():
 
 
 def test_prompt_names_the_web_tools_and_the_deliverable():
-    text = prompt.build(128_000, members=9)
-    assert "web_search" in text and "read_url" in text
+    text = prompt.build(128_000, members=9,
+                        extra_sections=[session.orchestrator_prompt()])
+    # The deleted pair must not survive in prose: a prompt describing a tool
+    # the agent does not have is a measured cause of failed calls.
+    assert "web_search" not in text and "read_url" not in text
     # The whole point of this agent: the files are the output, not the reply.
     assert "/research/" in text
     assert "128,000 input tokens" in text
 
 
-# -- Which members can actually search --------------------------------------
-
-def test_gemma_can_search_but_cannot_read_a_url():
-    # Probed against the live API: Gemma answers `google_search` with real
-    # citations and refuses `url_context` with a 400. The two grants are
-    # separate, and assuming otherwise cost the search pool its cheapest
-    # members -- Gemma carries 1,500 requests a day against flash's twenty.
-    gemma = _Provider("gemma-4-31b-it")
-    assert search.supports_google_search(gemma)
-    assert not search.supports_url_context(gemma)
-
-
-def test_gemini_models_can_do_both():
-    gemini = _Provider("gemini-3.5-flash-lite")
-    assert search.supports_google_search(gemini)
-    assert search.supports_url_context(gemini)
-
-
-def test_groq_can_do_neither():
-    groq = _Provider("openai/gpt-oss-120b", platform="groq")
-    assert not search.supports_google_search(groq)
-    assert not search.supports_url_context(groq)
-
-
-def test_the_two_pools_differ_by_exactly_gemma():
-    gemini, gemma = _Provider("gemini-3.5-flash-lite"), _Provider("gemma-4-31b-it")
-    searching, reading = search.pools(
-        AutonomousLLMRouter([gemini, gemma, _Provider("x", platform="groq")]))
-    assert searching.providers == [gemini, gemma]
-    assert reading.providers == [gemini]
-
-
-def test_search_pool_holds_the_same_objects_as_the_main_pool():
-    # Not copies: cooldown lives on the provider, so a search that exhausts an
-    # account has to be visible to the conversation sharing it.
-    gemini = _Provider("gemini-3.5-flash-lite")
-    router = AutonomousLLMRouter([gemini, _Provider("x", platform="groq")])
-    pool = search.search_pool(router)
-    assert pool.providers == [gemini]
-    assert pool.providers[0] is gemini
-
-
-def test_search_reaches_for_the_cheapest_member_first():
-    # Priority 1 is the reasoning tier at twenty requests a day. Retrieval must
-    # not spend it while a flash-lite is warm.
-    reasoning = _Provider("gemini-3.6-flash", priority=1)
-    cheap = _Provider("gemini-3.5-flash-lite", priority=22)
-    # Gemma is last-resort for judgement and *first* for retrieval: 1,500
-    # requests a day is the largest budget in the pool by two orders of scale.
-    plentiful = _Provider("gemma-4-31b-it", priority=31)
-    pool = search.search_pool(AutonomousLLMRouter([reasoning, cheap, plentiful]))
-    assert pool.get_best_provider() is plentiful
-
-    plentiful.available = False
-    assert pool.get_best_provider() is cheap
-
-    cheap.available = False
-    assert pool.get_best_provider() is reasoning
-
-    reasoning.available = False
-    assert pool.get_best_provider() is None
-
-
-def test_a_groq_only_pool_cannot_ground_a_search():
-    """Still true, and no longer what gates a run: the grounded-Gemini path is
-    unwired on this branch and searching goes through Tavily instead
-    (docs/15-explorer.md#158)."""
-    router = AutonomousLLMRouter([_Provider("openai/gpt-oss-120b",
-                                            platform="groq")])
-    assert search.search_pool(router) is None
-
+# -- Whether it can search at all ------------------------------------------
 
 def test_a_run_with_no_tavily_account_is_refused_before_it_starts():
     class _EmptyPool:
@@ -155,74 +60,6 @@ def test_one_tavily_account_works_and_is_warned_about():
 
     assert session.check_pool(_OnePool()) == 1
 
-
-def test_a_gemma_only_pool_searches_and_says_why_it_cannot_read():
-    # Survivable, not fatal: searching still works, and `read_url` has to
-    # explain itself rather than 400 on every call.
-    router = AutonomousLLMRouter([_Provider("gemma-4-31b-it")])
-    searching, reading = search.pools(router)
-    assert searching is not None and reading is None
-
-    tools = search.make_search_tools(searching, reading)
-    answer = tools["read_url"].invoke({"url": "https://example.com"})
-    assert "error" in answer and "gemini" in answer
-
-
-# -- What comes back from a search ------------------------------------------
-
-def test_sources_are_listed_and_deduplicated(monkeypatch):
-    # Resolution is a HEAD request per citation; stub it, this test is offline.
-    monkeypatch.setattr(search, "_real_url", lambda url: url.replace(
-        "https://redirect/", "https://real/"))
-    rendered = search._render(_grounded(
-        "Twenty per request.",
-        sources=[("docs.google.dev", "https://redirect/a"),
-                 ("dupe", "https://redirect/a"),
-                 ("medium.com", "https://redirect/b")],
-        queries=["gemini url_context url limit"]))
-    assert "Twenty per request." in rendered
-    assert "Searched for: gemini url_context url limit" in rendered
-    assert "[1] docs.google.dev - https://real/a" in rendered
-    assert "[2] medium.com - https://real/b" in rendered
-    assert "[3]" not in rendered
-
-
-def test_an_unresolvable_redirect_is_still_reported(monkeypatch):
-    # A citation that will not resolve is worse than a real URL and far better
-    # than a silently dropped source.
-    monkeypatch.setattr(search, "_real_url", lambda url: url)
-    rendered = search._render(_grounded("x", sources=[("a.com", "https://redirect/a")]))
-    assert "https://redirect/a" in rendered
-
-
-def test_an_ungrounded_answer_says_so():
-    # No sources means the model answered from memory. The agent must be told,
-    # or it launders a recollection into a cited fact.
-    rendered = search._render(_grounded("I believe it is twenty."))
-    assert "recollection" in rendered
-
-
-def test_an_empty_answer_carries_its_finish_reason(monkeypatch):
-    monkeypatch.setattr(search, "_real_url", lambda url: url)
-    rendered = search._render(_grounded(
-        "", sources=[("a.com", "https://redirect/a")], finish_reason="MAX_TOKENS"))
-    assert "finish_reason=MAX_TOKENS" in rendered
-    # The sources survive an empty answer: they are what makes it recoverable.
-    assert "https://redirect/a" in rendered
-
-
-def test_content_blocks_are_flattened_to_text():
-    # Gemini 3 returns blocks once thinking is involved.
-    message = AIMessage(content=[{"type": "text", "text": "first"},
-                                 {"type": "text", "text": "second"}])
-    assert search._text(message) == "first\nsecond"
-
-
-def test_an_empty_query_never_reaches_the_pool():
-    router = AutonomousLLMRouter([_Provider("gemini-3.5-flash-lite")])
-    tools = search.make_search_tools(*search.pools(router))
-    assert "error" in tools["web_search"].invoke({"query": "   "})
-    assert "error" in tools["read_url"].invoke({"url": ""})
 
 
 # -- What it is allowed to do ------------------------------------------------
@@ -344,28 +181,48 @@ def test_the_closing_message_is_clipped(monkeypatch, tmp_path):
 # start measuring an opinion, which is the one thing they must not do.
 
 
-def test_the_prompt_states_the_budget_the_checks_enforce():
-    from evals.research_trajectory import SEARCH_BUDGET
-
-    text = prompt.build(128_000, members=1)
-    spelled = {10: "ten", 5: "five", 8: "eight", 12: "twelve"}[SEARCH_BUDGET]
-    assert f"{spelled} searches" in text.lower(), \
-        f"the prompt must name the {SEARCH_BUDGET}-search budget in words"
-
-
 def _flat(text):
     """The prompt with its line wrapping removed, so an assertion can quote a
     sentence the way it reads rather than the way it happens to be folded."""
     return " ".join(text.split())
 
 
-def test_the_prompt_requires_reading_a_source_before_writing_a_figure():
-    text = _flat(prompt.build(128_000, members=1))
-    assert ("Before any specific figure goes into a note, open its source with "
-            "`read_url`") in text
-    # And it names the kinds of claim the rule is for, not just the rule.
-    for claim in ("rate limit", "price", "percentage", "version number"):
-        assert claim in text, claim
+def test_the_search_budget_the_checks_enforce_is_the_one_the_prompt_allows():
+    """Not a number of ours. The ceiling a compliant run cannot exceed is the
+    per-sub-agent budget times the parallel limit, both of them upstream's."""
+    from evals.research_trajectory import SEARCH_BUDGET
+
+    assert SEARCH_BUDGET == (session.MAX_SEARCHES_PER_SUBAGENT
+                             * session.MAX_CONCURRENT_RESEARCH_UNITS)
+
+
+def test_the_researcher_prompt_states_its_own_budget_and_stop_rule():
+    text = _flat(session.researcher_subagent([])["system_prompt"])
+    assert f"{session.MAX_SEARCHES_PER_SUBAGENT} search tool calls maximum" in text
+    assert "You have 3+ relevant examples/sources for the question" in text
+    assert "Your last 2 searches returned similar information" in text
+
+
+def test_the_orchestrator_is_told_the_delegation_limits():
+    text = _flat(session.orchestrator_prompt())
+    assert (f"at most {session.MAX_CONCURRENT_RESEARCH_UNITS} parallel "
+            f"sub-agents") in text
+    assert (f"Stop after {session.MAX_RESEARCHER_ITERATIONS} delegation rounds"
+            ) in text
+    assert "ALWAYS use sub-agents for research, never conduct research yourself"         in text
+
+
+def test_reading_the_page_is_structural_rather_than_instructed():
+    """The old prompt asked the agent to open a source and it never did. The
+    replacement removes the choice: the search tool returns the page."""
+    tools = research_tools.make_research_tools(pool=None)
+    assert set(tools) == {"tavily_search", "think_tool"}
+    assert "full text of the pages" in tools["tavily_search"].description
+
+
+def test_the_researcher_is_told_to_reflect_after_every_search():
+    text = _flat(session.researcher_subagent([])["system_prompt"])
+    assert "Use think_tool after each search" in text
 
 
 def test_the_prompt_no_longer_teaches_keyword_search():
@@ -375,8 +232,8 @@ def test_the_prompt_no_longer_teaches_keyword_search():
     of a recorded run's thirteen queries was keyword-shaped."""
     from evals.research_trajectory import _looks_like_a_question
 
-    text = _flat(prompt.build(128_000, members=1))
+    text = _flat(session.researcher_subagent([])["system_prompt"])
     assert '"gemini api google_search tool request format"' not in text
-    example = ("What request format does the Gemini API expect for the "
-               "google_search tool?")
+    example = ("What fields does a SWE-bench instance carry and what is each "
+               "for?")
     assert example in text and _looks_like_a_question(example)

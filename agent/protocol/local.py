@@ -16,7 +16,7 @@ binding would; what is missing is the socket.
    caller, so a delegated search that exhausts an account is immediately visible
    to the conversation that asked for it. Two routers over one free tier is the
    honest model, and it only works inside one process
-   ([15.4](../../docs/15-explorer.md#154-which-member-serves-a-search)).
+   ([15.4](../../docs/15-explorer.md#154-which-account-serves-a-search)).
 2. **The delegate's calls land in the caller's trace.** One run, one record, one
    `input_tokens` total -- which is the number the whole evaluation rests on
    ([10. Metrics](../../docs/10-metrics.md)). Split across processes, a

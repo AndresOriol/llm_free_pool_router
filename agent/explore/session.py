@@ -26,10 +26,13 @@ above it ([a2a.py](a2a.py)) is untouched -- it still collects `/research/*.md`
 and reports them as artifacts, which is why the report is written there rather
 than at the workdir root the way upstream does.
 
-`agent/explore/search.py` -- the grounded-Gemini search -- is still in the tree
-and no longer wired in. It is the fallback if Tavily's free tier turns out to be
-too small, and deleting it before that is known would be throwing away the only
-search this project has that costs no third-party credits.
+The grounded-Gemini search this replaced (`web_search`/`read_url`, a Gemini
+model searching on the agent's behalf and returning its summary) is deleted
+rather than kept as a fallback. It cost no third-party credits, which was the
+argument for keeping it, and it is also the thing that produced a run of 13
+searches and 0 opened sources -- a fallback nobody should fall back to is just
+a second prompt to keep true. `git log` has it
+([15.9](../../docs/15-explorer.md#159-what-the-grounded-gemini-search-was)).
 """
 
 from __future__ import annotations
@@ -115,7 +118,7 @@ def build_agent(workdir: Path, model, pool, *,
     # and the workflow carries the method.
     project = context.section(workdir)
     system_prompt = prompt.build(
-        floor, members=members, template=prompt.DEEP_TEMPLATE,
+        floor, members=members,
         extra_sections=[s for s in (project, orchestrator_prompt()) if s])
 
     return create_deep_agent(

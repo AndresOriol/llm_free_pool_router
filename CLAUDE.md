@@ -63,13 +63,15 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   [shell.py](agent/code/shell.py)). Its record is one LangSmith run tree
   ([trace.py](agent/code/trace.py)) plus the `EVAL_TRACE_FILE` JSONL every
   metric is summed over.
-- [agent/explore](agent/explore/) — the web explorer: the same loop and jail
-  with its tools pointed outward. `web_search` and `read_url` are grounded calls
-  through the pool's own Gemini-platform members, and the two tools are granted
-  **separately** — Gemma can search and cannot open a URL, which is probed
-  rather than assumed ([search.py](agent/explore/search.py)). It runs no
-  programs at all, and hands off to the coding agent by writing `/research/*.md`
-  ([15. The web explorer](docs/15-explorer.md)).
+- [agent/explore](agent/explore/) — the web researcher: LangChain's
+  deep-research agent, ported close to verbatim, on the pool. An orchestrator
+  plans and delegates to a `research-agent` sub-agent and never searches itself;
+  `tavily_search` finds URLs through a pool of Tavily accounts, fetches each page
+  and converts it, so the **page** reaches the model rather than a summary of it;
+  `think_tool` forces a pause between searches. It runs no programs at all, and
+  hands off to the coding agent by writing `/research/*.md`
+  ([15. The web explorer](docs/15-explorer.md)). Every deviation from upstream is
+  marked `ADAPTED` in [deep_prompts.py](agent/explore/deep_prompts.py).
 - [agent/protocol](agent/protocol/) — how one agent asks another for work. The
   vocabulary is [A2A](https://a2a-protocol.org)'s — `AgentCard`, `Task`,
   `Message`, `Artifact` — and must not drift from it; the transport is a local

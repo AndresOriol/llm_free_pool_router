@@ -72,20 +72,20 @@ def test_a_run_with_no_searches_is_not_penalised_for_not_reading():
 
 
 def test_going_over_the_search_budget_fails():
-    events = [e for i in range(rt.SEARCH_BUDGET + 1)
+    events = [e for i in range(rt.CLASSIC_SEARCH_BUDGET + 1)
               for e in _search(f"what is thing {i}?")]
     assert not _named(rt.check(events))["stayed inside the search budget"].ok
 
 
 def test_sitting_on_the_budget_passes():
-    events = [e for i in range(rt.SEARCH_BUDGET)
+    events = [e for i in range(rt.CLASSIC_SEARCH_BUDGET)
               for e in _search(f"what is thing {i}?")]
     assert _named(rt.check(events))["stayed inside the search budget"].ok
 
 
 def test_writing_only_at_the_end_fails():
     """The observed shape: search everything, then write once."""
-    events = [e for i in range(rt.SEARCH_BUDGET)
+    events = [e for i in range(rt.CLASSIC_SEARCH_BUDGET)
               for e in _search(f"what is thing {i}?")] + _note()
     assert not _named(rt.check(events))["wrote as it went"].ok
 
@@ -279,3 +279,16 @@ def test_a_well_behaved_deep_run_fails_nothing():
         events += _deep_search(f"What is thing {i} used for?") + _think()
     events += _note("/research/final_report.md")
     assert rt.failures(events) == [], [str(c) for c in rt.failures(events)]
+
+
+def test_each_agent_is_scored_against_the_budget_its_own_prompt_set():
+    """The classic agent was told ten; the deep agent's prompt allows five
+    searches per sub-agent across three of them. Enforcing one number on both
+    scores an agent against rules it never had."""
+    classic = [e for i in range(12) for e in _search(f"what is thing {i}?")]
+    deep = [e for i in range(12) for e in _deep_search(f"what is thing {i}?")]
+
+    assert rt.budget_for(classic) == rt.CLASSIC_SEARCH_BUDGET
+    assert rt.budget_for(deep) == rt.DEEP_SEARCH_BUDGET
+    assert not _named(rt.check(classic))["stayed inside the search budget"].ok
+    assert _named(rt.check(deep))["stayed inside the search budget"].ok

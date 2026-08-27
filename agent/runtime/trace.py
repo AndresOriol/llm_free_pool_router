@@ -37,7 +37,9 @@ _MAX_FIELD = 2000
 # ...but not everything the metrics need sits at the front. A `web_search`
 # result ends with its `Sources:` block, and whether a search came back with
 # sources or with the model's own recollection is the single fact that decides
-# whether a research note is grounded (agent/explore/search.py).
+# whether a research note is grounded. That tool is gone -- the search now
+# returns the page itself (agent/explore/research_tools.py) -- and the tail
+# still earns its place: a `write_file` carries its path after the content.
 #
 # Head-only clipping cost a real post-mortem: every recorded search looked
 # source-less, because 2,000 characters ran out before the citations. Keeping a
