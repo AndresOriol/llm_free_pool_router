@@ -28,6 +28,15 @@ else on this page is design and changes rarely; this block is state.*
   pool's Gemini-platform members, and hands off to the coding agent by writing
   files ([15](15-explorer.md)). The two tools are granted separately — Gemma
   searches but cannot open a URL ([15.2.1](15-explorer.md#1521-the-two-tools-are-granted-separately)).
+- **The coding agent can now ask the explorer for research mid-task**, over
+  A2A's data model on a local transport ([16](16-agent-protocol.md)). It is on
+  by default and a delegation costs a whole explorer session, so a run's
+  `input_tokens` may include one; the record carries `delegated_tasks` and
+  `AGENT_PEERS=` turns it off. **Unmeasured** — `code-peers` has never been run
+  against `code`.
+- **The explorer has been watched once, and it drifted.** A live run searched 13 times, opened **zero** sources, and wrote one file at the end — all against its own prompt, and none of it visible to any existing metric. The prompt now carries numeric rules and
+  [evals/research_trajectory.py](../evals/research_trajectory.py) checks them ([15.7](15-explorer.md#157-measured-against-a-reference-research-agent),
+  [16.10](16-agent-protocol.md#1610-what-the-first-live-run-showed)).
 - **The one L0 scenario is exhausted as a measuring instrument.** Seven
   configurations were run against it; none could be distinguished from another,
   and one scored 3/3 and 1/3 on consecutive batches. Re-running them will
@@ -117,7 +126,21 @@ else on this page is design and changes rarely; this block is state.*
 [15.3](15-explorer.md#153-why-searching-is-a-tool-call) Why searching is a tool call ·
 [15.4](15-explorer.md#154-which-member-serves-a-search) Which member serves a search ·
 [15.5](15-explorer.md#155-what-it-is-allowed-to-do) What it is allowed to do ·
-[15.6](15-explorer.md#156-what-it-costs-a-run) What it costs a run
+[15.6](15-explorer.md#156-what-it-costs-a-run) What it costs a run ·
+[15.7](15-explorer.md#157-measured-against-a-reference-research-agent) Measured against a reference research agent
+
+**[16. The agent protocol](16-agent-protocol.md)** — how one agent asks another for work, in the standard's vocabulary
+&nbsp;&nbsp;&nbsp;&nbsp;[16.1](16-agent-protocol.md#161-the-problem-the-human-was-the-message-bus) The human was the message bus ·
+[16.1.1](16-agent-protocol.md#1611-this-reopens-a-settled-decision-and-how-much-of-it) What it reopens ·
+[16.2](16-agent-protocol.md#162-why-a2a-and-why-not-the-alternatives) Why A2A ·
+[16.3](16-agent-protocol.md#163-why-the-transport-is-local) Why the transport is local ·
+[16.4](16-agent-protocol.md#164-what-maps-onto-what) What maps onto what ·
+[16.5](16-agent-protocol.md#165-one-delegation-end-to-end) One delegation ·
+[16.6](16-agent-protocol.md#166-what-a-delegation-costs) What it costs ·
+[16.7](16-agent-protocol.md#167-what-this-costs-and-what-is-unmeasured) What is unmeasured ·
+[16.8](16-agent-protocol.md#168-what-is-deliberately-not-built) Not built ·
+[16.9](16-agent-protocol.md#169-adding-a-third-agent) Adding a third agent ·
+[16.10](16-agent-protocol.md#1610-what-the-first-live-run-showed) What the first live run showed
 
 ### Part IV — Evaluation
 

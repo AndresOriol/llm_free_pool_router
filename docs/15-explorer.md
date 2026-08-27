@@ -22,17 +22,25 @@ python -m agent.explore ../my-project < question.md   # researches, writes /rese
 python -m agent.code    ../my-project < brief.md      # builds, reads /research
 ```
 
-**They meet on disk and nowhere else.** The explorer writes `/research/*.md`
-into a workdir; the coding agent, pointed at that same workdir, reads them like
-any other file. No shared state, no message bus, no protocol to keep in step —
-which is the only reason it is safe to run them hours apart, or to run the
-explorer once and the coding agent five times against what it found.
+**They meet on disk.** The explorer writes `/research/*.md` into a workdir; the
+coding agent, pointed at that same workdir, reads them like any other file. No
+shared state and no deliverable in flight — which is why it is safe to run them
+hours apart, or to run the explorer once and the coding agent five times against
+what it found.
 
 That constraint is also why the prompt spends most of its length on the written
 record ([system_prompt.md](../agent/explore/system_prompt.md)). The explorer's
 closing message is not the deliverable and nobody reads it. The files are the
 deliverable, because the thing that reads them next is an agent that was not
 there.
+
+> **Amended.** *"They meet on disk"* used to read *"and nowhere else… no message
+> bus, no protocol to keep in step"*, and the coding agent can now ask the explorer for a report directly
+> ([16. The agent protocol](16-agent-protocol.md)). What the protocol carries is
+> the *request* and the *status*, never the deliverable: a research note is still
+> a file on disk that outlives the exchange, so everything above still holds. A
+> human sequencing the two runs by hand still works and is still the default way
+> to use the explorer alone.
 
 ## 15.2 The web, on a free tier
 
@@ -209,6 +217,62 @@ The prompt is explicit that this is metered and that a seventh confirming source
 costs the same as a first source on the next question. On a free tier the
 discipline of stopping when the answer stops moving is not a nicety.
 
+## 15.7 Measured against a reference research agent
+
+*Written after the first live research run. It did not fail — it produced a
+27,000-word cited report that reads well — and it diverged from its own
+instructions in four measurable ways.*
+
+LangChain ships a deep-research agent on this same harness
+([docs](https://docs.langchain.com/oss/python/deepagents/deep-research)), which
+makes it the honest thing to compare against rather than a blank page.
+
+| | LangChain deep-research | This explorer, as it ran |
+| --- | --- | --- |
+| Reading a source | `tavily_search` **fetches the page and converts it to markdown** — reading is not a separate act | `web_search` returns a *summary*; `read_url` is a second, optional tool. **0 calls in 13 searches** |
+| Stopping | numeric: three sources, or the last two searches agreed, or **five searches total** | prose: "stop when the answer stops moving". **13 searches** |
+| Topic isolation | one sub-agent per topic, fresh context each | one conversation across four topics |
+| Deliverable | `/research_request.md` + `/final_report.md`, numbered `### Sources` | one note per topic — **got one note for four topics** |
+
+### 15.7.1 What the divergences cost, and what was changed
+
+Three of the four were the prompt's own rules going unfollowed, so the fix was
+to make them checkable rather than to add new ones:
+
+- **Nothing was ever opened.** Every figure in the report — 2,294 instances, 500
+  in Verified, 4.8% for Claude 2 — came from a grounded summary. The citations
+  were real (spot-checked; the arXiv ids are correct), so this is not
+  fabrication. It is a report whose numbers were never traced to a page, which
+  is a different and quieter problem. The prompt now makes opening the source a
+  precondition for writing a figure down, and names the claim types it means.
+- **No budget existed to exceed.** "Stop when the answer stops moving" is not a
+  stopping rule an agent can check itself against. It is now ten searches,
+  three agreeing sources, or two searches that said the same thing — the
+  reference's shape, with a larger number because that agent spends a fresh
+  sub-agent per topic and this one does not.
+- **Everything was written at the end**, in one file, after the last search. A
+  crash on search twelve would have left nothing. The prompt now asks for the
+  first file after two searches.
+- **The prompt taught the behaviour it forbade.** `web_search`'s description
+  says *"Ask a full question, not keywords"*; three sections below, the guidance
+  offered `"gemini api google_search tool request format"` as the good example.
+  All thirteen queries were keyword strings. The example was the bug.
+
+### 15.7.2 The one difference not copied
+
+**Their search tool reads the page; ours returns a summary and hopes.** That is
+the structural version of the first row, and copying it would fold `read_url`
+into `web_search` so that grounding is not optional. It was not done, because on
+this pool every fetch is a model call against a daily request budget
+([15.6](#156-what-it-costs-a-run)) and making every search cost two would halve
+the questions a run can ask. So the prompt carries the rule and
+[research_trajectory](../evals/research_trajectory.py) checks whether it was
+followed. **If the check keeps failing, the prompt is the wrong instrument and
+the tool is the right one.**
+
+Per-topic sub-agents were also not copied: on this harness a sub-agent is a
+whole session, and four topics would be four sessions against a free tier.
+
 ---
 
-**Previous:** [← 14. Quota panel](14-quota-panel.md) · **Next:** [Wiki index →](README.md)
+**Previous:** [← 14. Quota panel](14-quota-panel.md) · **Next:** [16. The agent protocol →](16-agent-protocol.md)
