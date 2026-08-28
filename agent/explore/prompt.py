@@ -31,7 +31,17 @@ _TEMPLATE = Path(__file__).with_name("system_prompt.md")
 
 def build(floor: int, members: int = 0,
           extra_sections: Optional[Sequence[str]] = None) -> str:
-    """The full system prompt for one exploration."""
+    """The full system prompt for one exploration.
+
+    The body ([system_prompt.md](system_prompt.md)) carries only the facts about
+    *this* system -- which pool serves a call, where the jail's `/` is, that
+    nobody is watching. The research *method* is not here: it arrives as an
+    `extra_section` from [session.orchestrator_prompt](session.py), ported from
+    upstream ([15.8](../../docs/15-explorer.md#158-the-deep-research-port)).
+
+    That split is the point. Our own method was measured against upstream's and
+    lost, so the half we keep writing is the half upstream cannot know.
+    """
     result = (
         _TEMPLATE.read_text(encoding="utf-8")
         .replace("{interactive_preamble}", HEADLESS_PREAMBLE)

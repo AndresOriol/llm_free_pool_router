@@ -89,11 +89,17 @@ def _run():
         assert failed["tool"] == "edit_file" and failed["ok"] is False
 
         # Whole files pass through tool results; they must be clipped, and the
-        # clip must say how much was dropped.
+        # clip must say how much was dropped. The budget is head + tail: the
+        # tail is what makes a `Sources:` block and a `file_path` survive, and
+        # it is bounded here against the constants so it cannot drift upwards
+        # unnoticed.
+        from agent.runtime.trace import _MAX_FIELD, _TAIL_FIELD
+
         tracer.on_tool_start({"name": "read_file"}, "x", run_id="t2")
         tracer.on_tool_end("y" * 50_000, run_id="t2")
         clipped = _lines(target)[-1]
-        assert len(clipped["output"]) < 2200, len(clipped["output"])
+        assert len(clipped["output"]) < _MAX_FIELD + _TAIL_FIELD + 100, \
+            len(clipped["output"])
         assert "50000 chars" in clipped["output"], clipped["output"]
 
         # Fallback path: no usage_metadata, only an OpenAI-style llm_output.
@@ -122,3 +128,35 @@ def test_trace():
 
 if __name__ == "__main__":
     _run()
+
+
+# --- clipping has to keep the end of a field, not only the start ------------
+# A `write_file` carries the whole file in `content` and the path after it; a
+# `web_search` result carries its `Sources:` block last. Head-only clipping
+# dropped both, and a post-mortem of a real run could answer neither "which
+# file did it write" nor "did that search return sources".
+
+
+def test_a_clipped_field_keeps_its_tail():
+    from agent.runtime.trace import _clip
+
+    text = "{'content': '" + "x" * 40_000 + "', 'file_path': '/research/a.md'}"
+    clipped = _clip(text)
+
+    assert len(clipped) < len(text)
+    assert clipped.startswith("{'content': 'xxx")
+    assert "/research/a.md" in clipped
+    assert "elided" in clipped
+
+
+def test_a_short_field_is_untouched():
+    from agent.runtime.trace import _clip
+
+    assert _clip("Sources: none returned") == "Sources: none returned"
+
+
+def test_a_search_result_keeps_its_sources_block():
+    from agent.runtime.trace import _clip
+
+    body = "an answer " * 1_000 + "\n\nSources:\n[1] swebench.com - https://x"
+    assert "Sources:" in _clip(body)

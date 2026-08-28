@@ -19,10 +19,49 @@ it, and how to grow the pool.*
 1. [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → sign in.
 2. **Create API key** (choose "create in new project" if unsure).
 3. Put it in `llm_router/.env` as `GEMINI_API_KEY_1`.
-4. For a second account: different Google account, `GEMINI_API_KEY_2`.
+4. For additional accounts/keys: follow [5.1.1 Creating a dedicated email for additional Gemini keys](#511-creating-a-dedicated-email-for-additional-gemini-keys) to set up a secondary Google account and register `GEMINI_API_KEY_2`.
+
+**Tavily Search** — search API for autonomous agents.
+
+1. [tavily.com](https://tavily.com) → sign up / log in.
+2. Go to **Overview** / **API Keys** → copy your API Key.
+3. Put it in `llm_router/.env` as `TAVILY_API_KEY_1`.
+4. For multiple accounts/keys for pool failover: add `TAVILY_API_KEY_2`, `TAVILY_API_KEY_3`, etc.
+
 
 `llm_router/.env` is gitignored. Keys never go in code or in `config.yaml` —
 config references an env var *name*, never a value.
+
+
+### 5.1.1 Creating a dedicated email for additional Gemini keys
+
+To expand your Gemini key pool via Google AI Studio, each API key requires a separate Google account. If you need to create a new dedicated email account for this purpose:
+
+1. **Create a Google Account**:
+   - Go to [accounts.google.com/signup](https://accounts.google.com/signup).
+   - Fill in your name, username (e.g., `yourproject.bot02@gmail.com`), and a strong password.
+   - Complete the phone verification if required.
+2. **Access Google AI Studio**:
+   - Open a private/incognito window (or use a dedicated browser profile) to prevent account session conflicts.
+   - Navigate to [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+   - Sign in with the newly created Google account.
+3. **Generate and store key**:
+   - Click **Create API key** (select **Create API key in new project**).
+   - Copy the generated API key.
+   - Add it to your local `llm_router/.env` file with an incremented variable name:
+     ```env
+     GEMINI_API_KEY_2=AIzaSy...
+     ```
+4. **Register in Config**:
+   - Add the new account entry under `accounts:` in `llm_router/config.yaml`:
+     ```yaml
+     accounts:
+       - name: gemini_2
+         user: yourproject.bot02@gmail.com
+         platform: gemini
+         type: gemini
+         api_key_env: GEMINI_API_KEY_2
+     ```
 
 ## 5.2 Config schema
 

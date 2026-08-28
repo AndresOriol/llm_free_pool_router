@@ -9,6 +9,9 @@ Environment:
   AGENT_TRACE_FILE    where to write the run tree; unset writes none
   EVAL_TRACE_FILE    set by the eval runner; the run tree lands beside it
   AGENT_CONTEXT_FLOOR override the input-token floor (default 128,000)
+  AGENT_PEERS        comma-separated agents this one may delegate to; unset
+                     means `explore`, and an empty value means none
+                     (docs/16-agent-protocol.md)
   HARNESS_SHELL=1    give the agent an unrestricted shell -- not contained,
                      so this is the operator's call, never a default
 """
@@ -19,7 +22,9 @@ import sys
 from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
-from agent.code.session import CONTEXT_FLOOR, check_floor, run_session
+from agent.code.session import (CONTEXT_FLOOR, RECURSION_LIMIT, check_floor,
+                                run_session)
+from agent.protocol import peers
 from agent.runtime.awake import keep_awake
 from agent.runtime.chat_model import RouterChatModel
 
@@ -47,7 +52,10 @@ def build(floor: int):
     # hard floor the eligible set is smaller than the pool, and an unlucky
     # ordering of benched accounts must not end the run.
     model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    return model.for_context(floor, strict=True), members
+    # The router itself comes back too, because a delegated agent must run on
+    # the *same* provider objects and so share their cooldown
+    # (docs/16-agent-protocol.md#163-why-the-transport-is-local).
+    return model.for_context(floor, strict=True), members, router
 
 
 def main() -> None:
@@ -62,7 +70,7 @@ def main() -> None:
         raise SystemExit("No task given.")
 
     floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
-    model, members = build(floor)
+    model, members, router = build(floor)
 
     shell = os.environ.get("HARNESS_SHELL") == "1"
     if shell:
@@ -81,13 +89,21 @@ def main() -> None:
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
         trace_file = Path(os.environ["EVAL_TRACE_FILE"]).with_name("trace.json")
 
+    # The task records go beside the run record and never inside the workdir:
+    # the agent commits its workdir, and a protocol log committed into the
+    # project under review is noise in every diff it produces afterwards.
+    transport = peers.build_transport(
+        router, model, workdir, floor=floor, members=members,
+        recursion_limit=RECURSION_LIMIT,
+        record_dir=Path(trace_file).parent / "a2a" if trace_file else None)
+
     # Hours of wall time with long gaps between calls looks like an idle
     # machine to Windows. Suspending mid-request is what left one run waiting
     # 43 minutes on a socket that had died while it slept.
     with keep_awake():
         final, written = run_session(
             model, task, workdir, floor=floor, members=members,
-            allow_shell=shell,
+            allow_shell=shell, transport=transport,
             trace_path=Path(trace_file) if trace_file else None)
 
     _summary(final, written)

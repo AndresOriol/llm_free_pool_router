@@ -68,8 +68,16 @@ ALLOWED_PROGRAMS = ("python", "python3", "py", "pytest", "git")
 
 def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
                 members: int = 0, allow_shell: bool = False,
+                transport=None,
                 extra_middleware: Optional[Sequence] = None):
-    """The compiled coding agent over a jailed backend."""
+    """The compiled coding agent over a jailed backend.
+
+    `transport` is an optional `LocalTransport` (agent/protocol/local.py). Given
+    one, the agent gains a single `delegate` tool and a directory of the agents
+    it can address; given None it is exactly the agent it was before, which is
+    what makes the two comparable as configurations
+    ([16. The agent protocol](../../docs/16-agent-protocol.md)).
+    """
     from deepagents import create_deep_agent
     from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 
@@ -79,9 +87,17 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
     backend = RestrictedShellBackend(root_dir=str(workdir), allow_git=True,
                                      allow_shell=allow_shell)
 
-    project = context.section(workdir)
+    tools = []
+    sections = [context.section(workdir)]
+    if transport is not None:
+        from agent.protocol.registry import directory_section
+        from agent.protocol.tools import make_delegate_tool
+
+        tools.append(make_delegate_tool(transport))
+        sections.append(directory_section(transport.registry))
+
     system_prompt = prompt.build(floor, members=members,
-                                 extra_sections=[project] if project else None)
+                                 extra_sections=[s for s in sections if s])
 
     middleware = list(extra_middleware or [])
     # Only meaningful while the backend still has an allowlist to mirror. With
@@ -93,6 +109,7 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
 
     return create_deep_agent(
         model=model,
+        tools=tools,
         system_prompt=system_prompt,
         backend=backend,
         middleware=middleware,
@@ -152,7 +169,7 @@ def _trace_locator(runs) -> tuple[Optional[str], Optional[str]]:
 
 def run_session(model, task: str, workdir: Path, config=None,
                 floor: int = CONTEXT_FLOOR, members: int = 0,
-                allow_shell: bool = False,
+                allow_shell: bool = False, transport=None,
                 trace_path: Optional[Path] = None) -> tuple:
     """Run one session. Returns (final_state, trace_written)."""
     config = dict(config or {})
@@ -175,7 +192,7 @@ def run_session(model, task: str, workdir: Path, config=None,
         config["callbacks"] = list(config.get("callbacks") or []) + [jsonl]
 
     agent = build_agent(workdir, model, floor=floor, members=members,
-                        allow_shell=allow_shell)
+                        allow_shell=allow_shell, transport=transport)
 
     # `collect_runs` learns the trace and project ids from the same callbacks
     # LangSmith's tracer uses, so the fetch afterwards knows what to ask for
@@ -198,6 +215,12 @@ def run_session(model, task: str, workdir: Path, config=None,
             "harness": "code",
             "context_floor": floor,
             "eligible_providers": members,
+            # Delegation is the one thing a run does that spends quota outside
+            # its own conversation, so the record says whether it happened
+            # before anyone reads the totals
+            # ([16](../../docs/16-agent-protocol.md)).
+            "peers": transport.registry.names if transport else [],
+            "delegated_tasks": len(transport.store) if transport else 0,
             "tracing_enabled": run_trace.tracing_enabled(),
         })
         if written:

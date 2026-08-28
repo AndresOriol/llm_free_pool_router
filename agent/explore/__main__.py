@@ -12,6 +12,7 @@ Environment:
   AGENT_TRACE_FILE    where to write the run tree; unset writes none
   EVAL_TRACE_FILE    set by the eval runner; the run tree lands beside it
   AGENT_CONTEXT_FLOOR override the input-token floor (default 128,000)
+  TAVILY_API_KEY_1..N  the search pool; at least one is required
 
 There is no HARNESS_SHELL here. The coding agent has one because it has to run
 the tests it writes; this one runs nothing, and an escape hatch nobody needs is
@@ -25,7 +26,7 @@ from pathlib import Path
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
 from agent.code.session import CONTEXT_FLOOR, check_floor
-from agent.explore.session import RESEARCH_DIR, check_search, run_session
+from agent.explore.session import RESEARCH_DIR, check_pool, run_session
 from agent.runtime.awake import keep_awake
 from agent.runtime.chat_model import RouterChatModel
 
@@ -44,20 +45,28 @@ for _stream in (sys.stdout, sys.stderr):
 
 
 def build(floor: int):
-    """(model, eligible member count, web pools). Raises before the run."""
+    """(model, eligible member count, Tavily pool). Raises before the run.
+
+    Two pools, and they are unrelated: the model pool serves the conversation
+    and the Tavily pool serves the searching. Neither can substitute for the
+    other, so both are checked here.
+    """
+    from llm_router import TavilyPoolRouter
+
     providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG") or None)
     if not providers:
         raise SystemExit("No providers loaded. Set your keys in llm_router/.env.")
     router = AutonomousLLMRouter(providers)
 
-    # Both checks up front, and the search one first: a pool that cannot reach
+    # Both checks up front, and the search one first: an agent that cannot reach
     # the web can never do this job, and finding that out after twenty minutes
     # of reading files is the expensive way to learn it.
-    web = check_search(router)
+    search = TavilyPoolRouter.from_env()
+    check_pool(search)
     members = check_floor(router, floor)
 
     model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    return model.for_context(floor, strict=True), members, web
+    return model.for_context(floor, strict=True), members, search
 
 
 def main() -> None:
@@ -72,7 +81,7 @@ def main() -> None:
         raise SystemExit("No task given.")
 
     floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
-    model, members, web = build(floor)
+    model, members, search = build(floor)
 
     trace_file = os.environ.get("AGENT_TRACE_FILE")
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
@@ -83,7 +92,7 @@ def main() -> None:
     # 43 minutes on a socket that had died while it slept.
     with keep_awake():
         final, written = run_session(
-            model, task, workdir, web, floor=floor, members=members,
+            model, task, workdir, search, floor=floor, members=members,
             trace_path=Path(trace_file) if trace_file else None)
 
     _summary(final, written, workdir)
