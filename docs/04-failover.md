@@ -16,6 +16,7 @@ repeat up to max_retries times:
     ├─ call that provider's LangChain chat model
     ├─ success        → return
     └─ failure        → classify it
+                        gone upstream → retire this member, try the next
                         transient     → bench this provider, try the next
                         not transient → raise immediately, stop rerouting
 raise "all providers exhausted"
@@ -199,7 +200,7 @@ binding is applied to whichever provider gets selected. It has to work this way
 
 | Gap | Effect | Status |
 | --- | --- | --- |
-| A **decommissioned model** returns `404 model_not_found`. 404 is not in the transient set, so it propagates and kills the run. | Roughly half of measured runs died for a reason unrelated to the task. A dead model should be disabled *permanently* and skipped, the way a rate-limited one is skipped temporarily. | The top item in [13. Roadmap](13-roadmap.md#132-what-to-do-next); it's a candidate change like any other — branch it and measure it. |
+| **Retirement is per process.** A **decommissioned model** returns `404 model_not_found`; the loop retires that member before the non-transient check and carries on, but nothing about the death outlives the process. | Not a crash any more. Each fresh run spends one attempt rediscovering each dead model before routing past it — one wasted call per process per dead model. | Item 5 in [13. Roadmap](13-roadmap.md#132-what-to-do-next); a decommissioned model should be disabled *permanently*, the way a rate-limited one is benched *temporarily*. |
 | Cooldown state is per process. | Two agents on the same keys each rediscover which accounts are hot. | Accepted for now; see [13.4](13-roadmap.md#134-open-questions). |
 | The pool gets walked hard for trivial work — ~10 provider calls and 5–7 distinct models for a one-line fix. | Efficiency numbers are hard to read until this is understood. | Under measurement, see [11. Evaluation status](11-eval-status.md). |
 
