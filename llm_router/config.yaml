@@ -22,9 +22,12 @@
 #
 # `limits` is the account's published free-tier quota for that model: `rpm`/`rpd`
 # requests and `tpm`/`tpd` tokens, from the tables in docs/05-providers.md. The
-# router never reads it -- routing is driven by what is available, not by
-# arithmetic against a budget -- but the quota panel measures recorded usage
-# against it (llm_router/quota/). A key left out is a limit the vendor does not
+# quota panel measures recorded usage against all four (llm_router/quota/), and
+# the router reads exactly one of them: `rpd`, to skip a member whose day is
+# already spent rather than spend an attempt discovering it (docs/04-failover.md
+# #42-size-aware-selection). Everything else about routing is still driven by
+# what is available, not by arithmetic against a budget. A key left out is a
+# limit the vendor does not
 # publish or does not enforce (Gemma's TPM), and the panel reads that as no
 # ceiling. These numbers change: treat them as a snapshot to re-check.
 #
