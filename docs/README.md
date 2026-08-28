@@ -90,6 +90,7 @@ else on this page is design and changes rarely; this block is state.*
 **[4. Failover](04-failover.md)** — the core logic: how a request finds a working account
 &nbsp;&nbsp;&nbsp;&nbsp;[4.1](04-failover.md#41-the-lifecycle-of-one-request) Lifecycle of one request ·
 [4.2](04-failover.md#42-size-aware-selection) Size-aware selection ·
+[4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent) Skipping a spent day ·
 [4.3](04-failover.md#43-classifying-a-failure) Classifying a failure ·
 [4.4](04-failover.md#44-cooldown-and-backoff) Cooldown and backoff ·
 [4.5](04-failover.md#45-the-failover-loop) The failover loop ·

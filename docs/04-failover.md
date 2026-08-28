@@ -35,8 +35,10 @@ priority sort:
 2. Drop any provider whose ceiling the request would overflow (with a `0.9`
    safety margin — the estimate is rough, and on Groq the model's own output
    shares the same tokens-per-minute budget).
-3. Return the lowest `priority` among what's left.
-4. If **nothing** fits, fall back to the largest available window and attempt
+3. Among what's left, prefer the ones with **requests-per-day left**
+   ([4.2.1](#421-skipping-a-member-whose-day-is-spent)).
+4. Return the lowest `priority` among those.
+5. If **nothing** fits, fall back to the largest available window and attempt
    the call anyway.
 
 A provider with no declared ceiling is never filtered out.
@@ -69,13 +71,56 @@ drain the whole pool down to Gemini's small daily quota — for a request that
 was never going to fit any of them. Now a large request routes straight to a
 high-capacity model.
 
-Step 4 is a judgement call: a best-effort attempt is better than a stall, and
+Step 5 is a judgement call: a best-effort attempt is better than a stall, and
 the resulting too-large error surfaces through the failure logging in
 [4.7](#47-making-a-reroute-visible) rather than vanishing.
 
 The estimate itself (`estimate_tokens`) is deliberately a chars/4 heuristic
 with no tokenizer and no dependency. It only has to be good enough to keep a
 request off a model it clearly overflows.
+
+### 4.2.1 Skipping a member whose day is spent
+
+Cooldown is how the pool learns an account is exhausted: ask, get refused, bench
+it for as long as the refusal said ([4.4](#44-cooldown-and-backoff)). That works
+because most free-tier limits are per minute — the wait is seconds, and the
+member really is usable again afterwards.
+
+**A daily ceiling breaks the mechanism.** Gemini refuses a run past 20
+requests-per-day with a `Retry-After` measured in seconds, so the member leaves
+cooldown, returns to the top of the priority order, is asked again, and is
+refused again — every time round the loop, until midnight Pacific. The pool
+spends its afternoon rediscovering a fact it recorded the first time.
+
+So selection reads it back. `RpdBudget`
+([quota/budget.py](../llm_router/quota/budget.py)) folds the usage ledger into
+one set — the members whose `rpd` in [config.yaml](../llm_router/config.yaml) is
+already spent in the last 24 hours — and step 3 passes over them silently. It is
+one reading of a file the router already writes, reused for 30 seconds, so a
+daily number is not re-parsed in front of every model call.
+
+**It is advisory, and the design is what makes that true rather than a promise.**
+The count is only what *this* router spent ([14.4](14-quota-panel.md#144-one-source-and-what-it-misses)),
+over a window model that is approximate on purpose
+([14.5](14-quota-panel.md#145-windows-and-when-they-reset)), possibly 30 seconds
+stale. Three rules keep every one of those errors cheap:
+
+- **It narrows, it never chooses.** The preference applies *within* the members
+  that fit the request and clear the caller's floor, never across them. A member
+  that cannot hold the job is not made preferable by having budget left.
+- **A pool it calls entirely spent is ignored.** If no candidate has quota left,
+  the count has said nothing useful, and every candidate is offered as before.
+  Selection therefore never returns `None` for want of quota, and the wait in
+  [4.5](#45-the-failover-loop) needs to know nothing about any of this.
+- **Not knowing means available.** An unreadable ledger, a missing pool
+  snapshot, a model with no published `rpd`, an exception anywhere in the read:
+  all of them mean *route to it*.
+
+Every way this can be wrong costs one refusal, on the path that has always
+handled refusals. Being wrong the other way — refusing to route to a member the
+vendor would have served — is the one that stalls an unattended run, and nothing
+here can produce it. `LLM_ROUTER_RPD_FILTER=0` turns the whole thing off for an
+A/B ([8. Evaluation method](08-evaluation-method.md)).
 
 ## 4.3 Classifying a failure
 

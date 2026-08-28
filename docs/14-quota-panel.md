@@ -227,17 +227,34 @@ and keeping the ledger's writer and its reader in one language matters more.
 
 ## 14.9 What it deliberately doesn't do
 
-**It never gates a call.** The router routes on availability, not on arithmetic
-against a budget: it learns an account is exhausted by being told so, and that
-stays the mechanism ([4.4](04-failover.md#44-cooldown-and-backoff)). Routing off
-a stored count would mean trusting our own arithmetic, over a window model we
-know is approximate, against the provider's live answer — and being wrong in the
-direction that stalls a run.
+**It never gates a call**, and that is now a narrower claim than it was. The
+*report* still gates nothing: no table, no JSON, no panel is on the path of a
+request. But the ledger underneath it is read by one caller for one purpose —
+[`budget.py`](../llm_router/quota/budget.py) tells the router which members have
+spent their requests-per-day, and selection skips those
+([4.2](04-failover.md#42-size-aware-selection)).
 
-Spending the ledger on better routing — skipping a member the count says is
-spent, rather than burning an attempt to find out — is a real option, and belongs
-in [13.2](13-roadmap.md#132-what-to-do-next) if it is ever wanted. It is not this
-page.
+The original objection was that routing off a stored count means trusting our own
+arithmetic, over a window model we know is approximate
+([14.5](#145-windows-and-when-they-reset)), against the provider's live answer —
+and being wrong in the direction that stalls a run. The objection was right and
+is answered by construction rather than by better arithmetic: the count may only
+*narrow* a choice, never make one. It picks among the members that already fit
+the request; if it claims every candidate is spent it is ignored and the call
+goes out anyway; and an unreadable ledger, a missing snapshot or an undeclared
+limit all mean *available*. Every way it can be wrong ends in one refusal on the
+retry path that has always handled refusals. None of them ends in a stall.
+
+What changed is the price of being right. A daily ceiling is the one budget a
+cooldown cannot express: the vendor refuses with a `Retry-After` of seconds, so
+the member is back in the pool and asked again within the minute, and on
+Gemini's twenty-a-day that is a fresh refusal every time round the loop until
+midnight. Paying once to learn it, instead of all afternoon, is worth one
+advisory read of a file we already write.
+
+**Still off the table:** routing on tokens, on the per-minute windows, or on a
+projection of what a run will cost. Those clear on their own, which is what a
+cooldown already is.
 
 ---
 
