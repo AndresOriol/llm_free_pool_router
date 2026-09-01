@@ -1,43 +1,23 @@
-# Every model here must support tool/function calling: the deep-agents loop
-# issues tool calls on every step and reroutes across the whole pool mid-task,
-# so a non-tool model would break a task if selected. Groq's `compound` /
-# `compound-mini` agentic systems don't accept a standard `tools` param and are
-# intentionally excluded.
+# All models must support tool/function calling (the agent loop tool-calls every
+# step and reroutes mid-task). Groq's `compound` systems are excluded for that.
 #
-# Each model is defined once per platform, not once per account: the loader
-# fans every model out across all accounts on that platform, so adding a
-# second Groq account (say) automatically gives every Groq model a fallback
-# account without touching the models list.
+# Models are defined once per platform; the loader fans each out across every
+# account on that platform. See docs/03-pool-model.md and docs/05-providers.md.
 #
-# `type` selects the provider adapter (openai_compatible or gemini) and, for
-# openai_compatible accounts, `url` is the v1 base (no /chat/completions).
-# `priority`: lower = tried first (shared by every account serving that
-# model). Optional `temperature` defaults to 0.2.
+# Fields:
+#   type              provider adapter: openai_compatible (url = v1 base) or gemini
+#   priority          lower = tried first; grouped in tiers (see below)
+#   temperature       optional, defaults to 0.2
+#   max_input_tokens  per-request ceiling for size-aware routing;
+#                     min(TPM, context window). Omit only if genuinely unknown.
+#   limits            published free-tier quota (rpm/rpd/tpm/tpd). The quota panel
+#                     checks all four; the router reads only rpd, to skip a member
+#                     whose day is spent (docs/04-failover.md). A missing key = not
+#                     published/enforced. Snapshot values -- re-check periodically.
 #
-# `max_input_tokens` is the per-request token ceiling the router uses to route a
-# large request to a model that can hold it (see get_best_provider). It's
-# min(TPM, context window): on Groq the TPM is the bottleneck (see
-# docs/05-providers.md), while Gemma has unlimited TPM so its context window is
-# the ceiling. Omit it only for a model whose limit is genuinely unknown.
-#
-# `limits` is the account's published free-tier quota for that model: `rpm`/`rpd`
-# requests and `tpm`/`tpd` tokens, from the tables in docs/05-providers.md. The
-# quota panel measures recorded usage against all four (llm_router/quota/), and
-# the router reads exactly one of them: `rpd`, to skip a member whose day is
-# already spent rather than spend an attempt discovering it (docs/04-failover.md
-# #42-size-aware-selection). Everything else about routing is still driven by
-# what is available, not by arithmetic against a budget. A key left out is a
-# limit the vendor does not
-# publish or does not enforce (Gemma's TPM), and the panel reads that as no
-# ceiling. These numbers change: treat them as a snapshot to re-check.
-#
-# Priority is grouped into four capability tiers (see docs/03-pool-model.md):
-# reasoning (1-9) -> mid (10-19) -> workhorse fallback (20-29) -> last resort
-# (30+). Within a tier, order doesn't matter much -- Groq's free tier shares one
-# org-wide request budget across every model on the account, so a burst of
-# steps exhausts the whole Groq side almost at once regardless of which Groq
-# model is listed first. The gaps between tiers leave room to slot in new
-# models without renumbering everything.
+# Priority tiers: reasoning (1-9) -> mid (10-19) -> workhorse (20-29) -> last
+# resort (30+). Order within a tier barely matters -- Groq shares one org-wide
+# request budget across all its models. Gaps leave room to slot in new models.
 accounts:
   - name: groq_1
     user: [EMAIL_ADDRESS]
@@ -77,24 +57,13 @@ accounts:
     api_key_env: GEMINI_API_KEY_5
 
 models:
-  # Groq retired its whole Llama line (3.3-70b, 3.1-8b, 4-scout) and qwen3-32b;
-  # all four were probed dead and removed. The router now retires a model the
-  # platform 404s on rather than dying on it, so the next retirement costs one
-  # logged attempt instead of the run, and shows up in the quota panel as a
-  # member that only ever errors (llm_router/quota/) -- but a known-dead entry
-  # is still noise, and does not belong here.
+  # Retired models (Groq's Llama line, qwen3-32b) are removed, not kept as
+  # known-dead entries -- the router self-retires anything the platform 404s.
 
-  # -- Reasoning tier: try first, best judgment on ambiguous/architectural steps.
-  # Gemini first: this tier exists for judgement over a wide view, and
-  # gpt-oss-120b cannot hold one -- its 8k ceiling is a tenth of what the
-  # Geminis take. It stays in the tier as the fallback for when the flash
-  # models' 20-a-day runs out, which on a working afternoon it will.
-  #
-  # 3.7 sits behind 3.6 despite being newer. Measured 2026-08-25: 3.7 answered
-  # in 33-54s and 503'd once in four calls ("experiencing high demand"), against
-  # 0.9s for 3.6. It thinks before it writes -- asked for 5 output tokens it
-  # returned MAX_TOKENS and no text -- so it is the better model and the worse
-  # first choice for a loop that makes a call per step.
+  # -- Reasoning tier: ambiguous/architectural steps. Gemini leads; gpt-oss-120b
+  # (8k ceiling) is only the fallback once the flash models' 20/day is spent.
+  # 3.7 sits behind 3.6 despite being newer: measured 2026-08-25 it took 33-54s
+  # (vs 0.9s) and 503'd once in four calls -- better model, worse per-step loop.
   - name: Gemini_3_6_Flash
     platform: gemini
     model: gemini-3.6-flash
@@ -123,7 +92,7 @@ models:
     max_input_tokens: 8000
     limits: {rpm: 30, tpm: 8000, rpd: 1000, tpd: 100000}
 
-  # -- Mid tier: solid for well-scoped implementation steps.
+  # -- Mid tier: well-scoped implementation steps.
   - name: Qwen3_6_27b
     platform: groq
     model: qwen/qwen3.6-27b
@@ -145,10 +114,9 @@ models:
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
 
-  # -- Workhorse fallback: weaker, but the free tier's real bottleneck (Groq's
-  # shared org-wide request budget) routinely dumps whole tasks here once the
-  # reasoning/mid tiers exhaust, so quality here matters more than the tier
-  # name implies. See docs/03-pool-model.md#34-priority-tiers.
+  # -- Workhorse fallback: weaker, but Groq's shared request budget routinely
+  # dumps whole tasks here once the upper tiers exhaust, so quality still matters.
+  # See docs/03-pool-model.md#34-priority-tiers.
   - name: GptOss20b
     platform: groq
     model: openai/gpt-oss-20b
@@ -177,8 +145,8 @@ models:
     max_input_tokens: 250000
     limits: {rpm: 10, tpm: 250000, rpd: 20}
 
-  # -- Last resort: only when everything above is in cooldown.
-  # Gemma has unlimited TPM, so its ceiling is the model's context window.
+  # -- Last resort: only when everything above is in cooldown. Gemma has
+  # unlimited TPM, so its ceiling is the model's context window.
   - name: Gemma4_31b
     platform: gemini
     model: gemma-4-31b-it
