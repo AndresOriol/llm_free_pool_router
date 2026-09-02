@@ -1,0 +1,96 @@
+# One service, one worker, one pool. See docs/18-serving.md.
+#
+#   cp .env.example .env      # then fill in the keys and SERVE_TOKEN
+#   docker compose up --build
+#
+# There is deliberately no `deploy.replicas` here and scaling this up is not a
+# supported configuration: cooldown lives on the provider object in one process
+# and the usage ledger is a JSONL file appended from it, so a second replica
+# would rediscover every rate limit by paying for it and both would interleave
+# writes into the same ledger (docs/17-deployment.md#176-what-has-to-change-first).
+# The pool's whole day is ~42 minutes of flat-out routing anyway, so a second
+# replica buys 429s rather than throughput.
+
+services:
+  agent:
+    build: .
+    image: free-coding-agent:latest
+    restart: unless-stopped
+
+    # Every key, plus SERVE_TOKEN, from a gitignored file. Nothing here is baked
+    # into the image; `.dockerignore` excludes `.env` from the build context for
+    # exactly that reason.
+    env_file:
+      - .env
+
+    ports:
+      # Published on ONE address, and loopback unless you say otherwise. This
+      # server runs a shell in a mounted filesystem and will clone a repository
+      # into it, so the token is equivalent to a shell on this host.
+      #
+      # To reach it from your own devices elsewhere, set SERVE_PUBLISH_ADDR to
+      # this machine's Tailscale address (100.x.y.z) -- the port is then on the
+      # overlay network only, and the home LAN and the home IP gain no exposure
+      # at all. What must never go here is 0.0.0.0 plus a port forward on the
+      # router (docs/18-serving.md#189-reaching-it-from-outside-the-house).
+      - "${SERVE_PUBLISH_ADDR:-127.0.0.1}:8080:8080"
+
+    volumes:
+      # The filesystem the agents are bound to. Every direct child of this
+      # directory is an addressable workspace. Point it at a host directory of
+      # checkouts, or leave it as a named volume and let the server clone.
+      - ./workspaces:/workspaces
+      # What the accounts have spent. The one volume that is not optional: a
+      # container starting with an empty ledger believes the whole pool is
+      # fresh and rediscovers each spent account by 429
+      # (docs/17-deployment.md#176-what-has-to-change-first).
+      - agent-usage:/var/lib/agent/usage
+      # One directory per task: the A2A record, and the run tree beside it.
+      - agent-records:/var/lib/agent/records
+
+    # docs/17-deployment.md#175-what-fits: 1 vCPU / 2 GiB for the agent, 4 GiB
+    # if it runs a heavy test suite in the jail -- a target project's suite
+    # shares this limit and one measured at 440-517 MB on its own.
+    mem_limit: 2g
+    cpus: 1.0
+
+    # The agent's `python` in the jail is arbitrary code execution by design.
+    # The container is the boundary the backend's docstring says it always was,
+    # so give it no more than it needs. None of this stops the agent doing its
+    # job -- it runs `python`, `pytest` and `git` as an unprivileged user and
+    # needs no capability to do any of it.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # A fork bomb is one `python -c` away from an agent that has misread its
+    # task, and without this it takes the host down rather than the container.
+    pids_limit: 512
+
+    # Nothing here mounts the Docker socket, and nothing here should: a
+    # container that can talk to the daemon can start a privileged one, which
+    # would make every limit above decorative.
+
+    # `read_only: true` with a tmpfs for /tmp is the next step and is left off
+    # deliberately: it was not verified on a built image (no Docker on the
+    # machine this was written on), and shipping an untested flag that makes
+    # the agent fail on its first write would be worse than not shipping it.
+    # Try it, and if the agent's own test runs still pass, keep it.
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+    healthcheck:
+      # The image's own HEALTHCHECK already does this; repeated here so
+      # `depends_on: condition: service_healthy` works for anything put in
+      # front of it later.
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+
+volumes:
+  agent-usage:
+  agent-records:

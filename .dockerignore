@@ -1,0 +1,52 @@
+# Keep the build context to source. Two entries here are about secrecy rather
+# than size, and both matter more than the rest put together.
+
+# The keys. Seven provider accounts plus LangSmith and Tavily live here, and
+# none of them belongs in an image layer -- they are environment variables at
+# run time (docs/17-deployment.md#176-what-has-to-change-first). Listed even
+# though it is gitignored: a build context is the working tree, not the index.
+llm_router/.env
+**/.env
+*.pem
+*.key
+
+# What this machine's accounts have spent. Baking a ledger into the image would
+# ship one developer's consumption to every container that ever runs it, and
+# the running container mounts a volume here instead.
+llm_router/.usage/
+
+.git/
+.gitignore
+.github/
+
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Run output: megabytes of log per run, none of it needed to serve.
+evals/results/runs/
+evals/results/reviews/
+.claude/
+
+# Prose. The wiki is how a human understands the system and no process in the
+# container reads it.
+#
+# `*.md` is root-level only -- a pattern's `*` does not cross `/` -- which is
+# why the two system prompts survive it. They are **not** prose: `prompt.build`
+# reads `agent/*/system_prompt.md` at run time, so an image without them starts
+# and then fails on the first task. The negations below say so out loud, so
+# that broadening this to `**/*.md` fails the build instead of a run.
+docs/
+*.md
+!agent/code/system_prompt.md
+!agent/explore/system_prompt.md
+
+Dockerfile
+.dockerignore
+docker-compose.yml
