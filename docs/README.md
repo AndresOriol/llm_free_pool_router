@@ -227,6 +227,17 @@ else on this page is design and changes rarely; this block is state.*
 [17.6](17-deployment.md#176-what-has-to-change-first) What has to change first ·
 [17.7](17-deployment.md#177-provider-terms) Provider terms
 
+**[18. Serving the agents](18-serving.md)** — the agents as HTTP endpoints, in a container, bound to a repository or a filesystem
+&nbsp;&nbsp;&nbsp;&nbsp;[18.1](18-serving.md#181-what-this-adds-and-what-it-does-not) What it adds ·
+[18.2](18-serving.md#182-the-surface) The surface ·
+[18.3](18-serving.md#183-why-submission-does-not-block) Why submission doesn't block ·
+[18.4](18-serving.md#184-binding-an-agent-to-a-repository-or-a-filesystem) Binding to a repo or filesystem ·
+[18.5](18-serving.md#185-why-there-is-exactly-one-worker) Why one worker ·
+[18.6](18-serving.md#186-the-token-is-not-optional) The token is not optional ·
+[18.7](18-serving.md#187-what-has-to-be-a-volume) What has to be a volume ·
+[18.8](18-serving.md#188-running-it) Running it ·
+[18.9](18-serving.md#189-reaching-it-from-outside-the-house) Reaching it from outside
+
 ---
 
 ## Documents outside this wiki

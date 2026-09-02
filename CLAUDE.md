@@ -85,6 +85,15 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   deliverable is still a file on disk that the protocol only points at
   ([16. The agent protocol](docs/16-agent-protocol.md)). **Unmeasured** — it is
   a configuration, and `AGENT_PEERS=` turns it off for the A/B.
+- [agent/serve](agent/serve/) — the agents as HTTP endpoints, for running this
+  in a container. A2A's methods over `http.server`: a caller POSTs a `Message`
+  to `/v1/agents/<name>/message:send`, gets **202** and a task id, and polls —
+  a run lasts hours and every platform in front kills a request in minutes.
+  What an agent is bound to is a workspace *name* resolved under one mounted
+  root, never a path from the request, and the server clones a repository into
+  a new one on request. Exactly one worker, because per-process cooldown and a
+  JSONL ledger both say so. Nothing here changes an agent
+  ([18. Serving](docs/18-serving.md)).
 - [evals](evals/) — the harness that decides whether a change to the above
   helped. Scenarios live in the separate `agent_evals` repo.
 - Providers today: Groq, Gemini. Expect more free-tier providers (Cerebras,
@@ -103,7 +112,8 @@ conventions — read it before adding a page.
 this file is the agent entry point (goal, standards, this index) — both stay
 short and link into the wiki rather than growing inline.
 
-Quick pointers: [4. Failover](docs/04-failover.md) for how the router works,
+Quick pointers: [18. Serving](docs/18-serving.md) for the container and the
+endpoints, [4. Failover](docs/04-failover.md) for how the router works,
 [14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
 [16. The agent protocol](docs/16-agent-protocol.md) for agent-to-agent
 delegation, [5. Providers](docs/05-providers.md) for accounts and limits,

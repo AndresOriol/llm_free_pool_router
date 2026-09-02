@@ -59,11 +59,37 @@ delegation costs a whole explorer session, so it is worth knowing it is on —
 `AGENT_PEERS=` turns it off. See
 [docs/16-agent-protocol.md](docs/16-agent-protocol.md).
 
+## Run it in a container
+
+The same two agents, addressable over HTTP, for when the caller is not a person
+at a terminal:
+
+```bash
+cp .env.example .env      # keys, and SERVE_TOKEN=$(openssl rand -hex 32)
+docker compose up --build
+```
+
+```bash
+curl -sS -X POST localhost:8080/v1/agents/code/message:send \
+  -H "Authorization: Bearer $SERVE_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"text": "Read NOTES.md and do what the newest feedback asks for",
+       "workspace": "my-project"}'
+```
+
+You get **202** and a task id to poll at `/v1/tasks/<id>` — a run lasts hours,
+so nothing waits on the request. An agent is bound to a *workspace*: a directory
+under the mounted root, either mounted in from the host or cloned from a
+repository URL you pass. See [docs/18-serving.md](docs/18-serving.md), and
+[docs/17-deployment.md](docs/17-deployment.md) for where this can actually run.
+
 ## Docs
 
 Everything beyond the quick start lives in the wiki — start at
 **[docs/README.md](docs/README.md)**, which indexes it.
 
+- **Deploy this in a container, or call the agents as endpoints?** →
+  [18. Serving the agents](docs/18-serving.md)
 - **New provider account, or want to add a provider?** →
   [5. Providers and limits](docs/05-providers.md)
 - **Have one agent ask another for work?** → [16. The agent protocol](docs/16-agent-protocol.md)
