@@ -218,6 +218,15 @@ else on this page is design and changes rarely; this block is state.*
 [14.8](14-quota-panel.md#148-reading-it) Reading it ·
 [14.9](14-quota-panel.md#149-what-it-deliberately-doesnt-do) What it doesn't do
 
+**[17. Deployment](17-deployment.md)** — where this can run unattended, why most hosting platforms cannot run it, and what to change first
+&nbsp;&nbsp;&nbsp;&nbsp;[17.1](17-deployment.md#171-the-question) The question ·
+[17.2](17-deployment.md#172-what-the-workload-actually-is) What the workload is ·
+[17.3](17-deployment.md#173-why-requestresponse-platforms-cannot-host-it) Why request/response platforms fail ·
+[17.4](17-deployment.md#174-the-ceiling-is-the-pool-not-the-compute) The ceiling is the pool ·
+[17.5](17-deployment.md#175-what-fits) What fits ·
+[17.6](17-deployment.md#176-what-has-to-change-first) What has to change first ·
+[17.7](17-deployment.md#177-provider-terms) Provider terms
+
 ---
 
 ## Documents outside this wiki
