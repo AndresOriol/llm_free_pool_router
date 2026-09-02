@@ -99,24 +99,17 @@ models:
     limits: {rpm: 30, tpm: 8000, rpd: 1000, tpd: 100000}
 
   # -- Mid tier: well-scoped implementation steps.
-  - name: Qwen3_6_27b
-    platform: groq
-    model: qwen/qwen3.6-27b
-    priority: 11
-    max_input_tokens: 8000
-    limits: {rpm: 30, tpm: 8000, rpd: 1000, tpd: 100000}
-
   - name: Gemini_3_Flash
     platform: gemini
     model: gemini-3-flash-preview
-    priority: 12
+    priority: 11
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
 
   - name: Gemini_2_5_Flash
     platform: gemini
     model: gemini-2.5-flash
-    priority: 13
+    priority: 12
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
 

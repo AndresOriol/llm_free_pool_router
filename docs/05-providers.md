@@ -140,7 +140,6 @@ what a person reads, the config is what the panel believes.
 | :--- | :---: | :---: | :---: | :---: |
 | `openai/gpt-oss-20b` | 30 | 8K | 1K | 100K |
 | `openai/gpt-oss-120b` | 30 | 8K | 1K | 100K |
-| `qwen/qwen3.6-27b` | 30 | 8K | 1K | 100K |
 
 Groq's Llama line (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`,
 `meta-llama/llama-4-scout-17b-16e-instruct`) and `qwen/qwen3-32b` were retired
