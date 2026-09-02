@@ -266,8 +266,15 @@ class Task:
     def to_dict(self) -> dict:
         return {"kind": "task", "id": self.id, "contextId": self.context_id,
                 "status": self.status.to_dict(),
-                "artifacts": [a.to_dict() for a in self.artifacts],
-                "history": [m.to_dict() for m in self.history],
+                # Iterated over copies, not the live lists. Not schema drift --
+                # nothing about the output changes -- but a served task is
+                # mutated by the worker thread while an HTTP reader may be
+                # serializing it for `tasks/get`, and appending to a list that
+                # another thread is iterating raises. The local transport never
+                # had two threads and so never needed this
+                # ([18.3](../../docs/18-serving.md#183-why-submission-does-not-block)).
+                "artifacts": [a.to_dict() for a in list(self.artifacts)],
+                "history": [m.to_dict() for m in list(self.history)],
                 "metadata": self.metadata}
 
     @classmethod
