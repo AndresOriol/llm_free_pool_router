@@ -128,9 +128,23 @@ others — destroying comparability.
 4. **Verify** — copy the finished workdir somewhere pristine, overlay the
    withheld `evaluation/` directory, run the `fail_to_pass` and `pass_to_pass`
    sets. Record both ratios and the raw output.
-5. **Integrity** — re-hash the immutable manifest. Any change marks the run
+5. **Integrity** — re-hash the immutable manifest, then ask of each file that
+   changed whether the change *weakened* it. A hash cannot tell that on its
+   own: appending a regression test to a protected suite and deleting the
+   assertion the suite exists to make are the same event to a hash, and the
+   first full-set batch produced four of the former and one of the latter, all
+   five scored `tampered`. For a file pytest can collect, the oracle is the
+   file itself — restore the seed's copy over the finished tree and run it, and
+   require the version the agent left to pass too. The first condition says the
+   guarantee still holds against the new code; the second says the check
+   survived in the tree a human inherits. A deleted protected file, and any
+   protected file pytest would not collect — a frozen spec page, a module
+   frozen so the work happens elsewhere — keep the byte comparison, because
+   they have no assertions to re-run. Only a weakening marks the run
    `tampered`, which is a fail regardless of test outcome and is reported
-   separately — it's a distinct failure mode, not the same as "got it wrong".
+   separately: it's a distinct failure mode, not the same as "got it wrong".
+   A change that survives both conditions is recorded in `extended_files` and
+   scored as nothing at all.
 6. **Judge** — [10.4](10-metrics.md#104-the-judge). Skipped if a run with an
    identical diff hash was already judged.
 7. **Record** — write `evals/results/runs/<run_id>/`, one self-contained
