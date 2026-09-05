@@ -31,3 +31,8 @@ evals/results/reviews/*
 # The default workspace root for `docker compose up`. What the agents are bound
 # to is someone else's repository, or a clone of one -- never this one's history.
 /workspaces/
+
+# UI build artifacts and local state
+ui/node_modules/
+ui/dist/
+.ui_data/
