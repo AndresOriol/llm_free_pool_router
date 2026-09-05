@@ -173,7 +173,8 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
                                   "evaluation/solution.patch") or ""
     measured = metrics_mod.collect(out_dir / "trace.jsonl", patch, reference,
                                    outcome, execution["stderr"],
-                                   has_account=has_account)
+                                   has_account=has_account,
+                                   broken_files=integrity["broken"])
 
     # newline="\n" everywhere, and on diff.patch it is load-bearing: the default
     # translates each one to a CRLF pair on Windows, and a patch whose context lines
@@ -204,6 +205,11 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
         # hold. Recorded rather than scored, so the behaviour stops being
         # invisible before anything starts rewarding it.
         "extended_files": integrity["extended"],
+        # Protected files the agent left unrunnable. Not tampering: the original
+        # assertions still hold against its code, so nothing was removed on
+        # purpose -- it wrote something that does not parse. Classified as
+        # tooling below, which is what it is.
+        "broken_files": integrity["broken"],
         "lost_invariants": lost_invariants,
         "exit_code": execution["exit_code"],
         "wall_time_s": round(execution["wall_time_s"], 1),
