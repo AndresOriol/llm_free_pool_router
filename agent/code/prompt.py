@@ -120,6 +120,43 @@ def invariant_guard_section() -> str:
     return INVARIANT_GUARD
 
 
+_ACCOUNT_ENV = "AGENT_WRITE_ACCOUNT"
+
+ACCOUNT_RULE = """
+**The project's own feedback file is the exception, and it is not optional.**
+If the project has one — a `NOTES.md` at its root, a working journal written
+newest-first — then whoever asked for this work reads that file and not your
+transcript, and it is the deliverable. Before you finish, append an entry to it:
+what you changed, what you decided and why, what you checked it with, and
+anything you left undone or could not resolve. Date it and put it at the top.
+
+Write what happened, not what was hoped for. An entry claiming a test passed
+that you did not run, or describing a change you did not make, is worse than no
+entry: it is the one artefact nobody can check against the code without redoing
+the work.
+"""
+
+
+def account_section() -> str:
+    """The `## Documentation` addition making the project's notes the exception.
+
+    The rule it qualifies -- *do not create summary markdown files describing
+    work you just did* -- is right for a one-shot coding task and precisely
+    wrong for a standing maintainer whose deliverable is the account
+    (design/long-run-harness.md R7). The agent has been obeying it: 7 of 23
+    runs that solved their task wrote an account, and four scenarios have never
+    produced one (docs/10-metrics.md 10.2.1).
+
+    The distinction is a file the project already keeps versus a file the agent
+    invents to describe itself. The first is the human interface; the second is
+    the noise the original rule exists to stop, and it still does.
+    """
+    if os.environ.get(_ACCOUNT_ENV, "1").strip().lower() in _OFF:
+        logger.info("Account rule disabled; the notes file is not requested.")
+        return ""
+    return ACCOUNT_RULE
+
+
 def pool_identity_section(floor: int, members: int = 0) -> str:
     """The `### Model Identity` section, for a pool rather than a model.
 
@@ -164,6 +201,7 @@ def build(floor: int, members: int = 0,
         .replace("{ambiguity_guidance}", HEADLESS_AMBIGUITY)
         .replace("{filesystem_tool_guidance}", FS_TOOL_GUIDANCE)
         .replace("{invariant_guard_section}", invariant_guard_section())
+        .replace("{account_section}", account_section())
         .replace("{model_identity_section}", pool_identity_section(floor, members))
         .replace("{working_dir_section}", workdir_section())
     )
