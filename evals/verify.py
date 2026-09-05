@@ -69,10 +69,19 @@ def prune_artifacts(root: Path) -> None:
 
 
 def make_diff(seed_dir: Path, work_dir: Path) -> str:
-    """Unified diff of what the agent changed, with plain a/ b/ prefixes."""
+    """Unified diff of what the agent changed, with plain a/ b/ prefixes.
+
+    Decoded as UTF-8, not as the locale: `text=True` alone reads cp1252 on
+    Windows, and every em dash in a seed's prose came back as three characters
+    and was written to `diff.patch` that way. That patch is what `metrics`
+    counts, what the failure taxonomy derives `touched` from, and what `bundle`
+    hands a reviewer -- and it is the only record of what the agent did, since
+    the workdir is a temp directory by then.
+    """
     result = subprocess.run(
         ["git", "diff", "--no-index", "--no-color", seed_dir.name, work_dir.name],
-        cwd=seed_dir.parent, capture_output=True, text=True, errors="replace")
+        cwd=seed_dir.parent, capture_output=True,
+        encoding=scenario_mod.ENCODING, errors="replace")
     # --no-index exits 1 when there are differences; only >1 is a real error.
     if result.returncode > 1:
         raise RuntimeError(f"git diff failed: {result.stderr.strip()}")
@@ -83,7 +92,8 @@ def _pytest(node_id: str, cwd: Path, timeout: int = 300) -> tuple:
     try:
         result = subprocess.run(["python", "-m", "pytest", node_id, "-q",
                                  "--no-header", "-p", "no:cacheprovider"],
-                                cwd=cwd, capture_output=True, text=True,
+                                cwd=cwd, capture_output=True,
+                                encoding=scenario_mod.ENCODING,
                                 errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         return False, f"{node_id}: TIMEOUT"
@@ -125,8 +135,9 @@ def _imports(root: Path, entry_point: str) -> bool:
         return True
     try:
         result = subprocess.run(["python", "-c", f"import {entry_point}"],
-                                cwd=root, capture_output=True, text=True,
-                                timeout=60)
+                                cwd=root, capture_output=True,
+                                encoding=scenario_mod.ENCODING,
+                                errors="replace", timeout=60)
     except subprocess.TimeoutExpired:
         return False
     return result.returncode == 0
