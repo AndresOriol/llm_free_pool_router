@@ -98,7 +98,7 @@ laziness:
    ([15.4](15-explorer.md#154-which-account-serves-a-search)), and it only holds
    inside one process.
 2. **The delegate's calls land in the caller's trace.** One run, one record, one
-   `input_tokens` total — the number the whole evaluation rests on
+   `tokens_in` total — the number the whole evaluation rests on
    ([10. Metrics](10-metrics.md)). Split across processes, a delegation spends
    quota that no run's record accounts for, and every efficiency comparison
    silently stops meaning anything.
@@ -193,7 +193,7 @@ plausibly cost more than the coding turn that asked for it.
 Nothing enforces a ceiling today. That is a decision, not an oversight, and the
 reasoning is that a limit invented before a single run has been observed is a
 number pulled from the air — the honest first move is to let it run and read
-`delegated_tasks` and `input_tokens` off the record. What *is* in place is the
+`delegated_tasks` and `tokens_in` off the record. What *is* in place is the
 slot for the answer: A2A has no concept of cost, so a per-task budget belongs in
 `Task.metadata`, which the spec reserves for exactly this, and the field is
 threaded through `message_send` from the start. Adding a budget later is a
@@ -284,7 +284,7 @@ is that the mechanism works, not what it costs.
 | `deepagents` filesystem jail | `Path.resolve()` on Windows returns the `\?\` extended-length form when another process holds the file open, and the root was resolved once without it — so a write **inside** the jail is refused as an escape. Three files into a directory, the fourth was refused, and it killed the session. | `RestrictedShellBackend._resolve_path` normalizes both sides ([agent/runtime/backend.py](../agent/runtime/backend.py)). |
 | `agent/runtime/backend.py` | The git allowlist denied `--delete` and `-D` and **not `-d`** — and the agent used `-d`. A list that claims to forbid deletion while permitting the spelling an agent reaches for first is worse than no list. | `-d` denied. |
 
-The first is the one worth dwelling on: it inflated `input_tokens`, the single
+The first is the one worth dwelling on: it inflated `tokens_in`, the single
 number the whole comparison rests on
 ([10. Metrics](10-metrics.md)), and it did it *only* for delegated work — so the
 configuration that delegates would have looked more expensive than it is, and

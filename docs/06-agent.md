@@ -50,7 +50,7 @@ re-run it to a conclusion.
 the maintenance of one, every change had to be made and evaluated in both, and
 the conversational arm is the one whose loop, compaction and tooling come from a
 maintained SDK rather than from this repo. The cost gap is the standing risk that
-choice accepts, and `input_tokens` per run is the metric to watch for it
+choice accepts, and `tokens_in` per run is the metric to watch for it
 ([10.2](10-metrics.md#102-automatic-metrics)).
 
 **What left with it.** The narrow-role session read a project's `NOTES.md`,

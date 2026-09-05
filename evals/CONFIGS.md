@@ -34,7 +34,7 @@ the simpler configuration.
 | `harness-v7-orchestrated` | `harness/adhoc-router` | Hub and spoke; execution as an agent | L0, n=3 | 0/3, most calls | **dropped for this task shape** |
 | `harness-v8-session` | `harness/adhoc-router` | A session: briefed roles, journal, branch, docs and rationale as deliverables | L1+L2 `session`, n=2 | 2/4 | **no verdict** — ran alone, no baseline |
 | `code` (was `deepagents`) | `harness/deepagents` | A conversation instead of narrow roles: `create_deep_agent` on the pool behind a hard 128k context floor, configured like `deepagents-code` | — | **never run** | **the only configuration left** — no eval run recorded, so no verdict |
-| `code-peers` | `harness/agent-protocol` | `code` plus one `delegate` tool: it can ask the web explorer for a report mid-task, over A2A on a local transport ([16](../docs/16-agent-protocol.md)). The explorer is LangChain's deep-research agent, ported ([15.8](../docs/15-explorer.md#158-the-deep-research-port)) | — | **never run** | no verdict — read `input_tokens` and `delegated_tasks` first, and interleave against `code` |
+| `code-peers` | `harness/agent-protocol` | `code` plus one `delegate` tool: it can ask the web explorer for a report mid-task, over A2A on a local transport ([16](../docs/16-agent-protocol.md)). The explorer is LangChain's deep-research agent, ported ([15.8](../docs/15-explorer.md#158-the-deep-research-port)) | — | **never run** | no verdict — read `tokens_in` and `delegated_tasks` first, and interleave against `code` |
 
 
 ### code-peers, before any eval run (2026-08-27)
@@ -58,7 +58,7 @@ agent has exactly the tools `code` has, so the only difference measured is the
 
 Expect it to be the expensive arm. A delegation is a whole explorer session --
 14-21 model calls -- billed to the same `EVAL_TRACE_FILE` as the caller, so
-`input_tokens` here includes it and is not comparable to `code` without reading
+`tokens_in` here includes it and is not comparable to `code` without reading
 `delegated_tasks` beside it. Nothing enforces a per-task budget yet; that number
 is meant to be observed rather than invented
 ([16.6](../docs/16-agent-protocol.md#166-what-a-delegation-costs)).
