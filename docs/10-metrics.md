@@ -12,13 +12,47 @@ is what stops a comparison from being read as "number went up".
 
 | Axis | Metrics | What it's for |
 | --- | --- | --- |
-| **Task success** | `outcome`, `f2p_ratio`, `p2p_ratio` | The only gating axis. |
+| **Task success** | `verified`, `f2p_ratio`, `p2p_ratio` | The only gating axis. `verified` is the *capability* half of `outcome`, and it is what the results table counts — see 10.1.1. |
 | **Diagnosis** | `failure_class` | What to actually work on next. |
 | **Autonomy** | `ran_own_tests`, `self_corrected` | Closing its own loop is the difference between an agent and a code generator. |
 | **Efficiency** | `provider_calls`, `failover_bounces`, `tokens_*` | On a free pool this *is* the cost model. A run that passes but drains the pool is a weak pass. |
 | **Robustness to failover** | `models_used` vs `outcome` | Did switching model mid-task derail it? |
 | **Integrity** | `tampered`, `extended_files` | Non-negotiable, tracked separately so it can never be averaged away. Only a *weakening* counts; strengthening a protected suite is the second column. |
 | **Quality** | Judge scores | Right for the right reason, and in the right scope. |
+
+### 10.1.1 Why the ledger counts `verified` and not `outcome`
+
+`outcome` is one label over two questions that do not share a scale — *did it
+solve the task*, and *did it respect what it was told not to touch*. A run that
+flips every hidden test and weakens a protected file is recorded `tampered`,
+because integrity outranks everything else in the verdict, and it should. But
+the results table then read that as a failed task, and there is no rate that
+can hold both meanings: a version that solves nothing and a version that solves
+everything by rewriting the tests are both bad, differently.
+
+The first full-set batch is what made this concrete. It recorded 3/9 while
+seven of the nine runs left every hidden test green, and `verified: true` was
+sitting in each of those records with nothing rendering it. The correction is
+not confined to that batch — splitting the columns moves `context-and-gate`
+from 1/4 to 3/4 and `deepagents` from 0/1 to 1/1 in three separate rows.
+
+So the tables report **solved** (`verified`) and **integrity** in separate
+columns and never combine them. A weakening still makes the run's `outcome`
+`tampered`; what changed is that it is no longer also counted as a task the
+agent could not do.
+
+Two things the same tables now refuse to average:
+
+- **Verdicts from before the integrity oracle changed.** That oracle hashed the
+  file, so it could not tell an appended regression test from a deleted
+  assertion. Such a record has no `extended_files` key at all, which makes the
+  field's absence an exact marker for which evaluator scored it. `config_sha`
+  pins the agent; nothing yet pins the harness, which is why this has to be
+  inferred.
+- **Runs with no trace.** Everything summed over `trace.jsonl` records zero
+  when the trace never arrived, and a zero is indistinguishable from a
+  measurement. Cost means are taken over the traced runs only, and the count of
+  the rest is printed beside them.
 
 ## 10.2 Automatic metrics
 
