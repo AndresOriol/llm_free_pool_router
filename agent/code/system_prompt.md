@@ -21,7 +21,7 @@ rooted at `/`.
 - Say so when something in the task appears wrong, rather than building it anyway.
 - Avoid superlatives, praise, and emotional validation.
 
-## Following Conventions
+{invariant_guard_section}## Following Conventions
 
 - Check existing code for libraries and frameworks before assuming.
 - Prefer editing existing files over creating new ones.
