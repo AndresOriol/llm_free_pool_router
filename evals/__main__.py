@@ -120,13 +120,34 @@ def cmd_run(args) -> int:
         for config in configs:
             trees.enter_context(config.checkout())
 
+        # A run that dies takes only itself. The runner already returns a record
+        # for a crashed *agent*; this is for the runner failing around it -- a
+        # missing file, a git error, a disk full -- and one such failure ended a
+        # batch at run 6 of 18, spending five runs of free-tier quota on no
+        # comparison. Interleaving means the arms stay balanced either way.
+        broken = []
         for index, (config, scenario, task, rep) in enumerate(plan, 1):
             print(f"[{index}/{len(plan)}] {scenario.topic}/{scenario.id}/{task.id} "
                   f"{config.name} rep{rep} ... ", end="", flush=True)
-            record = run_mod.execute_run(repo, scenario, task, config, rep, results)
+            try:
+                record = run_mod.execute_run(repo, scenario, task, config, rep,
+                                             results)
+            except Exception as exc:  # noqa: BLE001 - reported, batch continues
+                broken.append(f"{scenario.id}/{task.id} {config.name} rep{rep}: "
+                              f"{exc!r}")
+                print(f"RUNNER ERROR: {exc!r}")
+                continue
             detail = record["failure_class"] or ""
             print(f"{record['outcome']}{' (' + detail + ')' if detail else ''} "
                   f"[{record['wall_time_s']}s, {record['provider_calls']} calls]")
+
+    if broken:
+        # Loud, and a non-zero exit: these runs recorded nothing, so the batch
+        # is not the comparison it was asked for.
+        print(f"\n{len(broken)} run(s) failed in the runner and recorded nothing:")
+        for line in broken:
+            print(f"  {line}")
+        return 1
     return 0
 
 
