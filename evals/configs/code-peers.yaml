@@ -24,7 +24,7 @@
 #      answered by reading the repo.
 #   2. What does it cost? A delegation is now an orchestrator conversation plus
 #      one sub-agent conversation per topic, all billed to the same
-#      EVAL_TRACE_FILE, so `input_tokens` here includes them. Read that column
+#      EVAL_TRACE_FILE, so `tokens_in` here includes them. Read that column
 #      against `code` before reading anything else. The direction is genuinely
 #      unknown: there are more conversations, and the fetched pages stay in a
 #      context that is thrown away.

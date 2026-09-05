@@ -28,7 +28,7 @@ requirement to design around. Groq stays in the pool for work that fits it.
 
 **This was a maintenance decision, not a measurement.** The deleted arm won the
 last cost comparison 39× over, on inputs that no longer hold and that nobody
-re-ran. `input_tokens` per run is the number that says whether that was a
+re-ran. `tokens_in` per run is the number that says whether that was a
 mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
 
 ## Non-goals

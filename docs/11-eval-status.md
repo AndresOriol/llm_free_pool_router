@@ -5,7 +5,7 @@
 *The running state. This is the one page in the wiki expected to change often —
 everything else describes design; this describes today.*
 
-**Last updated: 2026-08-25.** Update it when a phase lands, a scenario is added,
+**Last updated: 2026-09-05.** Update it when a phase lands, a scenario is added,
 or a comparison is decided. A status page nobody updates is worse than none.
 
 ## 11.1 One-paragraph summary
@@ -112,17 +112,19 @@ Four observations:
 | Issue | Impact | State |
 | --- | --- | --- |
 | Five scenarios, none run more than n=2 | No longer *the* blocker, but nothing here has enough reps to compare configurations. `retry-after-case` (L0) is exhausted as an instrument ([9.7](09-scenarios.md#97-the-difficulty-ladder)) | P4 |
-| Five of the eight scenario categories are still unwritten | `feature`, `tests`, `refactor`, `long-context` and `ambiguous` have never been run, so nothing probes size-based routing or multi-file construction ([9.6](09-scenarios.md#96-categories-to-cover)) | P4 |
+| The set is a repair set | Every scenario is a broken seed plus a hidden test pinning the fix. Generative requests — "build X" — are probed by nothing, and the empty-patch gate degenerates on them, so the oracle needs a second reference implementation before one can be authored ([design note](design/generative-scenarios.md)) | P4 |
+| Five of the nine scenario categories are still unwritten | `generative`, `tests`, `refactor`, `long-context` and `ambiguous`, so nothing probes size-based routing or construction. Don't maintain this list by hand — the catalogue's **Gaps** section derives it from the tags ([9.9](09-scenarios.md#99-the-catalogue)); this row was already wrong before it did, naming `feature`, which `duration-notes` has covered since August | P4 |
 | A model retired upstream costs an attempt on every run | No longer a crash: the router retires the member and carries on, which is what retired the trimmed eval pool. The retirement lasts one process, so each fresh run rediscovers it | [13.2](13-roadmap.md#132-what-to-do-next) |
 | **Four of five scenario tags, and three of four topic branches, are local only** | `origin` has `topic/alerts` and a stale `scenario/retry-after-case`; everything else exists on one machine. Tags are not pushed by default, so this is silent. The scenario set is unrecoverable if the disk goes | [13.2](13-roadmap.md#132-what-to-do-next), item 2 |
-| **The shipping agent has never run under the runner** | Its config exists (`evals/configs/code.yaml`) and it works, but no eval run has been recorded — and the arm it replaced is deleted, so there is nothing left to compare it against except its own history | [13.2](13-roadmap.md#132-what-to-do-next), item 1 |
+| **The shipping agent has never run under the runner, and could not have been** | `evals/configs/code.yaml` pinned `ref: harness/deepagents`, a branch merged into `master` and deleted locally. `agent_config.load` resolves `ref` to a SHA at load time and **raises** when it cannot, so `--config code` never started; `code-peers` was broken the same way. Fixed on `harness/eval-generative` — both now pin `master`. This is why item 1 of [13.2](13-roadmap.md#132-what-to-do-next) never happened, and it was invisible because nothing runs the configs | fixed; the runs are still owed |
+| **`bad_tool_calls` reads zero on every run ever recorded** | Not a result. Soft tool errors are detected by `str(output).startswith("Error")`, while the tools return lowercase `error:` and deepagents returns a `ToolMessage` whose repr starts `content=`. Measured: 0 hits against 94 error-shaped outputs over 1,093 `tool_end` events. `trace.py` hardcodes `ok=True`, discarding the status the tool already sets | [design note](design/generative-scenarios.md) §6 |
 
 ## 11.5 What to do next
 
 1. **Run `code` over the four non-exhausted scenarios** and establish
    what it actually costs. The interleaved comparison is no longer possible —
    the other arm is deleted — so the standard it is held to is its own recorded
-   `input_tokens` against the 5,756 the deleted arm managed
+   `tokens_in` against the 5,756 the deleted arm managed
    ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). Start at n=3 and check
    the quota arithmetic first: at ~20 calls a run, the flash tier funds about
    nine runs a day.
