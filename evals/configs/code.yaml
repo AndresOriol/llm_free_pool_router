@@ -20,7 +20,7 @@
 # blast radius silently (docs/design/long-run-harness.md#42-bash-for-the-executor).
 name: code
 repo: ../..
-ref: harness/deepagents
+ref: master
 env_file: ../../llm_router/.env
 overrides:
   router_config: llm_router/config.yaml

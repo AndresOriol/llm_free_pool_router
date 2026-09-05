@@ -43,7 +43,7 @@
 # is what left `harness-v8-session` with no verdict (evals/CONFIGS.md).
 name: code-peers
 repo: ../..
-ref: harness/agent-protocol
+ref: master
 env_file: ../../llm_router/.env
 overrides:
   router_config: llm_router/config.yaml
