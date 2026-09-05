@@ -67,7 +67,15 @@ def read_env_file(path: Path) -> dict:
 @dataclass
 class AgentConfig:
     name: str
-    path: Path          # the yaml this was read from; copied into every run dir
+    path: Path          # the yaml this was read from, for messages
+    # Its bytes, read once. `execute_run` used to copy from `path` on every run,
+    # which made the config the one part of a pinned configuration that was not
+    # pinned: `ref` is resolved to a SHA up front and the agent's code is
+    # materialised into a throwaway worktree, but the config file was read live
+    # from a tree the operator owns. A batch is hours long, and one died at run
+    # 6 of 18 with FileNotFoundError because a branch was switched under it --
+    # five runs of free-tier quota for no comparison.
+    spec_text: str
     repo: Path
     ref: str
     sha: str
@@ -130,7 +138,8 @@ def load(path: Path) -> AgentConfig:
     """Read a config and resolve its ref. No tree is created here -- `ref` is
     resolved to a SHA now so a batch cannot silently straddle a commit that
     moved under it, and `checkout()` builds the tree when the batch starts."""
-    spec = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw = path.read_text(encoding="utf-8")
+    spec = yaml.safe_load(raw)
     repo = (path.parent / spec["repo"]).resolve()
     ref = spec.get("ref", "master")
     sha = _git(repo, "rev-parse", ref)
@@ -139,6 +148,7 @@ def load(path: Path) -> AgentConfig:
     return AgentConfig(
         name=spec["name"],
         path=path.resolve(),
+        spec_text=raw,
         repo=repo,
         ref=ref,
         sha=sha,

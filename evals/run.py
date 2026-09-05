@@ -122,11 +122,14 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
     results_dir = Path(results_dir).resolve()
     out_dir = results_dir / "runs" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Copied now rather than at the end, so a run that dies mid-flight still
+    # Written now rather than at the end, so a run that dies mid-flight still
     # says what it was. With `config_sha` in run.json this is the whole recipe
     # for rebuilding the configuration: `git worktree add --detach <sha>` plus
     # the overrides in this file. Nothing else about the checkout is kept.
-    shutil.copyfile(config.path, out_dir / "config.yaml")
+    #
+    # From the bytes read at load time, not from the path: the file lives in a
+    # tree the operator owns and a batch runs for hours.
+    _write(out_dir / "config.yaml", config.spec_text)
 
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)

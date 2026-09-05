@@ -10,6 +10,7 @@ One named test per behaviour, after `tests/agent/test_failover.py`.
 """
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -491,3 +492,30 @@ def test_the_corpus_separates_edits_from_commands(tmp_path):
 
     assert files.most_common() == [("a.py", 2)]
     assert commands == ["pytest"]
+
+
+# --- configuration pinning ------------------------------------------------
+
+def test_the_config_is_read_once_and_kept(tmp_path):
+    """The one part of a "pinned" configuration that was not pinned.
+
+    `ref` resolves to a SHA up front and the agent's code goes into a throwaway
+    worktree, but the config file was re-read from the live tree on every run.
+    A batch is hours long and that tree is the operator's: one died at run 6 of
+    18 because a branch was switched under it.
+    """
+    from evals import agent_config
+
+    spec = tmp_path / "demo.yaml"
+    spec.write_text("name: demo\nrepo: .\nref: HEAD\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "--allow-empty",
+                    "-m", "x"], check=True,
+                   env={**os.environ, "GIT_AUTHOR_NAME": "t",
+                        "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+                        "GIT_COMMITTER_EMAIL": "t@t"})
+
+    config = agent_config.load(spec)
+    spec.unlink()
+
+    assert "name: demo" in config.spec_text
