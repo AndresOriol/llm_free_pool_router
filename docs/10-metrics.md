@@ -72,6 +72,7 @@ output ([7.3](07-observability.md#73-the-local-trace)).
 | `tokens_per_call` | `tokens_in` over provider calls — what one step costs. Separates a long run from an expensive one, which `tokens_in` alone cannot ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)) |
 | `bounces_per_call` | Failover bounces over provider calls. A quota and latency figure, **not** a cost one: a refused call carries no input tokens |
 | `tampered_files` | Protected files the agent weakened — see [8.5](08-evaluation-method.md) for what makes a change a weakening |
+| `lost_invariants` | Documented guarantees the run deleted — `"<page>: <phrase>"`, declared per scenario in `doc_invariants` ([9.6.1](09-scenarios.md)) |
 | `extended_files` | Protected files it changed *without* weakening: it appended to a suite it was told not to break, and the original assertions still hold. Recorded, never scored |
 | `bad_tool_calls` | Invalid tool name, failed `edit_file`, malformed args |
 | `models_used` | Distinct models that served a step, and the per-model call mix |
