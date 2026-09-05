@@ -1,0 +1,29 @@
+# `code` with the agent's subprocess reads pinned to UTF-8.
+#
+# The A/B is one encoding decision, in the channel the agent uses to find out
+# whether its change worked. `text=True` alone decodes with the platform
+# codepage -- cp1252 here -- so every non-ASCII character in a project's own
+# test output reached the model mangled, and the seeds in this set are full of
+# em dashes. The decode was also strict, and cp1252 leaves 0x81, 0x8d, 0x8f,
+# 0x90 and 0x9d undefined, so a traceback carrying one of those bytes raised
+# inside `execute` rather than returning output.
+#
+# Both halves of the fix are needed. `git` already emits UTF-8, so reading it as
+# cp1252 mangles it; a Python child encodes its stdout with *its* locale, so
+# switching the read alone breaks the case that worked. PYTHONUTF8 and
+# PYTHONIOENCODING make the child speak what the parent reads.
+#
+# What a run is asking: whether any of that ever mattered to a score. The unit
+# tests prove the mangling and the crash; this asks whether the agent was
+# reading corrupted test output often enough to change what it did. The
+# direction is genuinely unknown and the honest prior is "no difference" -- an
+# em dash in a pytest failure line is not usually load-bearing.
+#
+# Interleaved against `code`, never alone.
+name: code-utf8
+repo: ../..
+ref: agent/subprocess-encoding
+env_file: ../../llm_router/.env
+overrides:
+  router_config: llm_router/config.yaml
+  env: {}

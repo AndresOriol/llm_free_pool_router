@@ -137,7 +137,8 @@ def _clone(repo: str, path: Path) -> None:
     try:
         done = subprocess.run(
             ("git", "clone", "--", repo, str(path)),
-            capture_output=True, text=True, timeout=CLONE_TIMEOUT,
+            capture_output=True, encoding="utf-8", errors="replace",
+            timeout=CLONE_TIMEOUT,
             # The clone must not inherit the pool's keys, on the same principle
             # the jail strips them from the agent's own children.
             env={k: v for k, v in os.environ.items()

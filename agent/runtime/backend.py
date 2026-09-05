@@ -87,10 +87,20 @@ def _child_env() -> dict:
     """Inherit the parent env (PATH etc. are needed to find python) but drop
     anything that looks like a credential, so the test process can't read the
     pool's API keys out of its environment."""
-    return {
+    env = {
         k: v for k, v in os.environ.items()
         if not any(marker in k.upper() for marker in _SECRET_MARKERS)
     }
+    # Make the child speak the encoding we read it in. Both halves are needed
+    # and neither works alone: `git` already emits UTF-8, so decoding with the
+    # platform codepage mangles it, but a Python child encodes its stdout with
+    # *its* locale -- cp1252 here -- so switching our decode to UTF-8 without
+    # this would break the case that used to work. PYTHONUTF8 also puts the
+    # child's own `open()` into UTF-8, which is what the agent's tests read the
+    # project's files with.
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
 
 
 def _unprefixed(path: Path) -> Path:
@@ -249,7 +259,16 @@ class RestrictedShellBackend(FilesystemBackend, SandboxBackendProtocol):
                 shell=self._allow_shell,
                 capture_output=True,
                 stdin=subprocess.DEVNULL,
-                text=True,
+                # UTF-8, not the locale. `text=True` alone decodes with the
+                # platform codepage -- cp1252 on Windows -- so every non-ASCII
+                # character in a project's own test output reached the model
+                # mangled, in the one channel it has for finding out whether
+                # its change worked. Worse, the decode was strict and cp1252
+                # leaves 0x81, 0x8d, 0x8f, 0x90 and 0x9d undefined, so a
+                # traceback or a `git diff` carrying one of those bytes raised
+                # inside this call instead of returning output.
+                encoding="utf-8",
+                errors="replace",
                 timeout=effective_timeout,
                 cwd=str(self.cwd),
                 env=_child_env(),

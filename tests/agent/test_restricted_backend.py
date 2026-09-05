@@ -76,3 +76,50 @@ def test_restricted_backend():
 
 if __name__ == "__main__":
     _run()
+
+
+def test_program_output_is_decoded_as_utf8_not_the_locale(tmp_path):
+    """The agent's only channel for finding out whether its change worked.
+
+    `text=True` alone decodes with the platform codepage -- cp1252 on Windows --
+    so every em dash in a project's own test output reached the model as three
+    characters. The seeds are full of them.
+    """
+    backend = RestrictedShellBackend(root_dir=str(tmp_path), allow_git=False)
+    (tmp_path / "dash.py").write_text(
+        'print("the rule — as written")\n', encoding="utf-8")
+
+    result = backend.execute("python dash.py")
+
+    assert "—" in result.output
+    assert "â€" not in result.output
+
+
+def test_an_undecodable_byte_does_not_raise(tmp_path):
+    """cp1252 leaves 0x81, 0x8d, 0x8f, 0x90 and 0x9d undefined, and the decode
+    was strict -- so a traceback or a `git diff` carrying one of those bytes
+    raised inside `execute` rather than returning output."""
+    backend = RestrictedShellBackend(root_dir=str(tmp_path), allow_git=False)
+    (tmp_path / "raw.py").write_text(
+        "import sys\nsys.stdout.buffer.write(bytes([0x81, 0x0a]))\n",
+        encoding="utf-8")
+
+    result = backend.execute("python raw.py")
+
+    assert result.exit_code == 0
+
+
+def test_the_child_reads_project_files_as_utf8(tmp_path):
+    """PYTHONUTF8 covers the child's own `open()`, not just its stdout.
+
+    The agent's tests read the project's files, and the seeds are written in
+    UTF-8; a child left on cp1252 would fail to decode them or read them wrong.
+    """
+    backend = RestrictedShellBackend(root_dir=str(tmp_path), allow_git=False)
+    (tmp_path / "page.md").write_text("the rule — as written\n", encoding="utf-8")
+    (tmp_path / "read.py").write_text(
+        "print(open('page.md').read().strip())\n", encoding="utf-8")
+
+    result = backend.execute("python read.py")
+
+    assert "the rule — as written" in result.output
