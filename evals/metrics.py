@@ -14,6 +14,8 @@ import json
 import re
 from pathlib import Path
 
+from llm_router.base_provider import looks_decommissioned
+
 # The RouterChatModel wrapper reports itself as a model too. Its calls are
 # agent *steps*; the child calls underneath it are the real provider calls.
 ROUTER_MODELS = {"router", "RouterChatModel"}
@@ -126,6 +128,33 @@ def account_written(patch_text: str) -> bool:
     return added_by_file(patch_text).get(ACCOUNT_FILE, 0) > 0
 
 
+def bounce_breakdown(events: list) -> tuple:
+    """(bounces per model, models that went away) -- who is losing the pool time.
+
+    `failover_bounces` is one number and says only that the run was long. What
+    it never said is *which member*, and that turned out to matter: 135 of 247
+    bounces in a 40-run batch were a single model answering 404, five times a
+    run, in every run. The router handled it correctly and logged an ERROR
+    naming the model to delete -- into a run nobody greps. It costs no tokens
+    and fails no run, so this column is the only place it can surface.
+
+    The model comes from the `llm_start` that shares the failed attempt's
+    `run_id`; the verdict comes from the same matcher the router routes on, so
+    the two cannot drift.
+    """
+    model_of = {e.get("run_id"): e.get("model") for e in events
+                if e.get("event") == "llm_start"}
+    per_model, retired = {}, set()
+    for event in events:
+        if event.get("event") != "llm_error":
+            continue
+        model = model_of.get(event.get("run_id")) or "unknown"
+        per_model[model] = per_model.get(model, 0) + 1
+        if looks_decommissioned(str(event.get("detail", ""))):
+            retired.add(model)
+    return per_model, sorted(retired)
+
+
 def from_trace(events: list) -> dict:
     """Counts over the event stream."""
     llm_starts = [e for e in events if e.get("event") == "llm_start"]
@@ -162,6 +191,11 @@ def from_trace(events: list) -> dict:
         "bounces_per_call": round(
             sum(1 for e in events if e.get("event") == "llm_error")
             / len(provider_starts), 2) if provider_starts else 0.0,
+        "bounce_models": bounce_breakdown(events)[0],
+        # Members the pool dropped mid-run because they are gone upstream. A
+        # retirement is correct behaviour and costs nothing measurable, which is
+        # exactly why it went unnoticed for a month.
+        "retired_models": bounce_breakdown(events)[1],
         "tool_calls": len(tool_starts),
         "bad_tool_calls": len(tool_errors) + len(soft_errors),
         "models_used": sorted({e.get("model") for e in provider_starts if e.get("model")}),

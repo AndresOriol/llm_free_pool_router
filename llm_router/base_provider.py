@@ -180,7 +180,19 @@ def is_decommissioned(exc: Exception) -> bool:
     supposedly written to prevent exactly that. The status is therefore read out
     of the message too, which is the only place a wrapped error still has it.
     """
-    message = str(getattr(exc, "message", "") or exc).lower()
+    return looks_decommissioned(str(getattr(exc, "message", "") or exc),
+                                _status_of(exc))
+
+
+def looks_decommissioned(message: str, status: Optional[int] = None) -> bool:
+    """The same question asked of text rather than of an exception.
+
+    Split out so the eval harness can classify a recorded `llm_error` detail
+    without reconstructing the exception, and so the signals live in one place:
+    a batch spent 135 of its 247 bounces on a model this list already
+    recognised, and the second definition would have been the one that drifted.
+    """
+    message = message.lower()
     for signal in ("model_not_found",
                    "does not exist or you do not have access",
                    "is not found for api version",
@@ -189,7 +201,7 @@ def is_decommissioned(exc: Exception) -> bool:
                    "no longer available"):
         if signal in message:
             return True
-    if _status_of(exc) == 404:
+    if status == 404:
         return True
     # A wrapped 404, read out of the text. Both halves are required: a bare
     # `404` appears in plenty of messages that are not retirements (a token

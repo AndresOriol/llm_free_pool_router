@@ -476,6 +476,18 @@ def _traced(rows: list) -> list:
     return [r for r in rows if r.get("provider_calls")]
 
 
+def _retired(rows: list) -> str:
+    """Members that went away mid-run, named next to the bounces they caused.
+
+    A retirement is the router working: the member is dropped and the run
+    carries on. It costs no tokens and fails nothing, so no metric anyone reads
+    moves — which is how one dead model came to own 55% of a batch's bounces
+    without being noticed. Naming it here is the whole fix.
+    """
+    gone = sorted({m for r in rows for m in (r.get("retired_models") or [])})
+    return f" — retired: {', '.join(f'`{m}`' for m in gone)}" if gone else ""
+
+
 def _account(rows: list) -> str:
     """How often the run left an account, over the runs that could leave one.
 
@@ -555,7 +567,7 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             f"| {_mean(group, 'tokens_in'):,.0f}{_unmeasured(group)} "
             f"| {_mean(group, 'tokens_per_call'):,.0f} "
             f"| {_mean(group, 'provider_calls'):.1f} "
-            f"| {_mean(group, 'failover_bounces'):.1f} "
+            f"| {_mean(group, 'failover_bounces'):.1f}{_retired(group)} "
             f"| {_account(group)} "
             f"| {sum(r.get('added_tests') or 0 for r in group)} "
             f"| {', '.join(f'{k}={v}' for k, v in sorted(classes.items())) or '—'} |")
@@ -583,7 +595,10 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             "that can be checked without reading it. Nothing gates on this "
             "yet — it is here to establish a baseline. **+tests** is test "
             "functions the runs added that nothing asked for, which until "
-            "recently the harness could only score as tampering.",
+            "recently the harness could only score as tampering. A **bounces** "
+            "cell naming a *retired* model is the pool dropping a member that "
+            "has gone away upstream: correct behaviour, free, and invisible "
+            "everywhere else — delete it from the config.",
             "",
             "A mean marked *untraced* was taken over fewer runs than the row "
             "counts. A run whose `trace.jsonl` never arrived records zero for "
