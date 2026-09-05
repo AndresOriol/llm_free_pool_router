@@ -22,7 +22,7 @@ else on this page is design and changes rarely; this block is state.*
   configures one. That was a decision about what to maintain, **not** a finding:
   the last measurement had the deleted arm winning on input tokens 39× over, on
   inputs that no longer hold and that nobody has re-run
-  ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). Watch `input_tokens`.
+  ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). Watch `tokens_in`.
 - **A second agent researches the web.** `agent/explore/` shares the loop, the
   pool and the jail, swaps the shell for `tavily_search`/`think_tool`, and hands
   off to the coding agent by writing files ([15](15-explorer.md)). It runs
@@ -34,7 +34,7 @@ else on this page is design and changes rarely; this block is state.*
 - **The coding agent can now ask the explorer for research mid-task**, over
   A2A's data model on a local transport ([16](16-agent-protocol.md)). It is on
   by default and a delegation costs a whole explorer session, so a run's
-  `input_tokens` may include one; the record carries `delegated_tasks` and
+  `tokens_in` may include one; the record carries `delegated_tasks` and
   `AGENT_PEERS=` turns it off. **Unmeasured** — `code-peers` has never been run
   against `code`.
 - **The explorer has been watched once, and it drifted.** A live run searched 13 times, opened **zero** sources, and wrote one file at the end — all against its own prompt, and none of it visible to any existing metric. The prompt now carries numeric rules and
@@ -170,7 +170,8 @@ else on this page is design and changes rarely; this block is state.*
 [9.5](09-scenarios.md#95-the-task-file) The task file ·
 [9.6](09-scenarios.md#96-categories-to-cover) Categories ·
 [9.7](09-scenarios.md#97-the-difficulty-ladder) The difficulty ladder ·
-[9.8](09-scenarios.md#98-the-validation-gate) The validation gate
+[9.8](09-scenarios.md#98-the-validation-gate) The validation gate ·
+[9.9](09-scenarios.md#99-the-catalogue) The catalogue
 
 **[10. Metrics](10-metrics.md)** — what gets measured, and why nothing is collapsed into one score
 &nbsp;&nbsp;&nbsp;&nbsp;[10.1](10-metrics.md#101-the-axes) The axes ·

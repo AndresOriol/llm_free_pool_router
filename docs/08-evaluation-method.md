@@ -40,9 +40,11 @@ plausible reasoning and starts being improved by measurement.
   the metric definitions, the configurations, and the results. Metrics are code
   and evolve with the agent, so a metric change and the change it measures land
   in the same history.
-- **`agent_evals`** — scenarios only. No harness, no results. A scenario is a
-  commit whose tree is a real codebase state, which is the natural storage for a
-  test case aimed at something that edits code.
+- **`agent_evals`** — the data, and no harness code. A scenario is a commit
+  whose tree is a real codebase state, which is the natural storage for a test
+  case aimed at something that edits code. Its `master` carries no scenario at
+  all: it is documentation, holding the generated scenario catalogue and the
+  **results ledger** ([9.9](09-scenarios.md#99-the-catalogue)).
 
 Two consequences, both of which were nearly designed wrong:
 
@@ -50,6 +52,12 @@ Two consequences, both of which were nearly designed wrong:
   index would conflict on every merge. Results are therefore **one directory
   per run** with no index; a summary is a glob, not a query. Nothing to
   conflict on.
+- That same argument says where the *durable* ledger goes. Run directories are
+  gitignored and live only on the machine that made them, so a comparison
+  otherwise survives as prose someone remembered to write. It cannot go in this
+  repo for the reason just given — but the scenario repo has one branch and no
+  forks, so `python -m evals index` renders the ledger onto its `master`. The
+  evidence stays local; the ledger names the `run_id` holding each.
 - Results answer LangSmith expiring: everything a verdict rests on is on disk
   ([7.1](07-observability.md#71-why-two)).
 

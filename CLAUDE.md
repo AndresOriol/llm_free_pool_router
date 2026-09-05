@@ -28,7 +28,7 @@ requirement to design around. Groq stays in the pool for work that fits it.
 
 **This was a maintenance decision, not a measurement.** The deleted arm won the
 last cost comparison 39× over, on inputs that no longer hold and that nobody
-re-ran. `input_tokens` per run is the number that says whether that was a
+re-ran. `tokens_in` per run is the number that says whether that was a
 mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
 
 ## Non-goals
@@ -111,6 +111,15 @@ conventions — read it before adding a page.
 [README.md](README.md) is the human entry point (quick start, links out) and
 this file is the agent entry point (goal, standards, this index) — both stay
 short and link into the wiki rather than growing inline.
+
+**"Artifact" in this repo means a markdown file in
+[.claude/artifacts/](.claude/artifacts/)** — a plan, an audit, or a queue of
+work, written to be read once and acted on, not a wiki page. Ask for one and
+that is what to produce: a title, an italic provenance line naming the branch,
+the date and the scope, a one-paragraph version up front, then numbered
+sections that link back into the repo with relative paths. They are working
+documents, so they go stale; a finding that outlives its artifact belongs in
+[docs/](docs/) instead.
 
 Quick pointers: [18. Serving](docs/18-serving.md) for the container and the
 endpoints, [4. Failover](docs/04-failover.md) for how the router works,
