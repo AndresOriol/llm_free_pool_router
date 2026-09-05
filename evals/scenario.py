@@ -92,8 +92,8 @@ def list_topics(repo: Path) -> list:
     return sorted({tag.split("/")[1] for tag in list_scenarios(repo)})
 
 
-def _parse_task(text: str, task_id: str, scenario_id: str) -> Task:
-    """Front matter, then '## Prompt' / '## Judge notes' sections."""
+def _split(text: str) -> tuple:
+    """Optional front matter, then '## Heading' sections keyed lowercase."""
     meta, body = {}, text
     if text.startswith("---"):
         _, raw, body = text.split("---", 2)
@@ -106,7 +106,12 @@ def _parse_task(text: str, task_id: str, scenario_id: str) -> Task:
             sections[current] = []
         elif current:
             sections[current].append(line)
-    joined = {k: "\n".join(v).strip() for k, v in sections.items()}
+    return meta, {k: "\n".join(v).strip() for k, v in sections.items()}
+
+
+def _parse_task(text: str, task_id: str, scenario_id: str) -> Task:
+    """Front matter, then '## Prompt' / '## Judge notes' sections."""
+    meta, joined = _split(text)
 
     return Task(
         id=meta.get("id", task_id),
@@ -145,6 +150,18 @@ def load(repo: Path, tag: str) -> Scenario:
         if text is not None:
             scenario.tasks.append(_parse_task(text, Path(path).stem, scenario.id))
     return scenario
+
+
+def describe(repo: Path, tag: str) -> dict:
+    """The scenario's page for a human: `evaluation/scenario.md`, by section.
+
+    Withheld from the workdir like everything else under `evaluation/`, which
+    is the point: it can say what the scenario is really probing, and how the
+    two test sets encode that, without handing any of it to the agent. Empty
+    for a scenario that has none.
+    """
+    text = read(repo, tag, "evaluation/scenario.md")
+    return _split(text)[1] if text else {}
 
 
 def _archive(repo: Path, tag: str, subdir: str = "") -> bytes:

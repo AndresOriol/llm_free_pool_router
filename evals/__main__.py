@@ -1,6 +1,7 @@
 """CLI: python -m evals <command>
 
     validate [--topic T] [--scenario TAG]     the untouched/gold-patch gate
+    index [--check]                           rebuild the scenario repo docs
     run --config NAME [...]                   execute runs and record them
     show [--config NAME]                      summarize recorded runs
     bundle [--config NAME] [--out FILE]       collect a batch's evidence for J2
@@ -16,8 +17,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from evals import (agent_config, bundle as bundle_mod, run as run_mod,
-                   scenario as scenario_mod, verify as verify_mod)
+from evals import (agent_config, bundle as bundle_mod, catalog as catalog_mod,
+                   run as run_mod, scenario as scenario_mod, verify as verify_mod)
 
 REPO = Path(__file__).resolve().parents[1]
 CONFIGS = REPO / "evals" / "configs"
@@ -52,6 +53,26 @@ def _selected_tasks(scenarios: list, suite: str, tags: list) -> list:
                 continue
             chosen.append((scenario, task))
     return chosen
+
+
+def cmd_index(args) -> int:
+    """Rebuild the scenario repo's documentation, or fail if it has drifted.
+
+    The one command that writes to the scenario repo. It writes on `master`,
+    which no run ever materializes, so the pages can repeat what a run
+    withholds.
+    """
+    repo = _scenario_repo(args)
+    results = Path(args.results)
+    if args.check:
+        stale = catalog_mod.check(repo, results)
+        if not stale:
+            print("Scenario repo docs are up to date.")
+            return 0
+        sys.exit(f"Stale: {', '.join(stale)}. Run: python -m evals index")
+    for path in catalog_mod.write(repo, results):
+        print(f"Wrote {path}")
+    return 0
 
 
 def cmd_validate(args) -> int:
@@ -165,6 +186,13 @@ def main() -> int:
     validate.add_argument("--topic", default="")
     validate.add_argument("--scenario", help="a full tag, e.g. scenario/<topic>/<id>")
     validate.set_defaults(func=cmd_validate)
+
+    index = sub.add_parser("index", help="rebuild the scenario repo's docs")
+    index.add_argument("--scenarios", default="")
+    index.add_argument("--results", default=str(RESULTS))
+    index.add_argument("--check", action="store_true",
+                       help="fail if the docs have drifted from tags or runs")
+    index.set_defaults(func=cmd_index)
 
     run = sub.add_parser("run", help="execute runs")
     run.add_argument("--config", action="append", required=True,

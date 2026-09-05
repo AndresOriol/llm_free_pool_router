@@ -39,6 +39,7 @@ Three things follow, all load-bearing:
 ```
 <the code, at the root>   the code state — this is what the agent gets
 tasks/<task-id>.md        one or more prompts posed against this code
+evaluation/scenario.md    WITHHELD: what this scenario is, for a human
 evaluation/               WITHHELD: criteria.md, tests/, solution.patch
 scenario.yaml             WITHHELD: metadata, test sets, immutable list
 ```
@@ -56,6 +57,24 @@ the visible ones. `scenario.yaml` is withheld too, because it names them.
 The runner **asserts** the withholding after materializing rather than assuming
 it. A scenario that leaked its own tests would score every configuration far too
 well, and would read as a win rather than as a bug.
+
+### 9.3.1 `evaluation/scenario.md`, the page for a human
+
+`criteria.md` is written *at* a judge and `## Judge notes` is written at a
+verdict; neither is what someone browsing the set to decide what to author next
+needs. That page is `evaluation/scenario.md`, in four fixed sections — **The
+seed**, **The task**, **The challenge**, **What it checks** — the last of which
+says what `fail_to_pass` and `pass_to_pass` are really asserting and names the
+answers that pass without being right.
+
+It is withheld because it is under `evaluation/`, and that is the whole reason
+it can be explicit. `HIDDEN` matches on the **first path component**, so this
+costs no code — and it is also why the page must not go anywhere near `docs/`,
+which is *visible* seed content in three scenarios and, in `count-and-share`, is
+the trap itself.
+
+The first line of *The challenge* is lifted verbatim into the catalogue's
+summary column, so it is written as one self-contained sentence.
 
 ## 9.4 `scenario.yaml`
 
@@ -120,6 +139,7 @@ authoring cost.
 | **bugfix, test-driven** | Baseline competence. Failing test provided. |
 | **bugfix, symptom only** | Diagnosis — no test, the agent must localize. |
 | **feature** | Multi-file construction, from a spec plus hidden tests. |
+| **generative** | Construction from nothing — "build X". No before state, so the empty-patch gate degenerates and a second reference implementation replaces it; scored on a tier ladder rather than a boolean ([design note](design/generative-scenarios.md)). |
 | **tests** | Writing tests for existing code; verified mutation-style (the tests must fail against a seeded broken variant). |
 | **refactor** | Restraint — behaviour-preserving, hidden tests must still pass. |
 | **long-context** | A large file that exceeds small-TPM pool members. Directly probes size-based routing ([4.2](04-failover.md#42-size-aware-selection)). |
@@ -164,6 +184,14 @@ python -m evals validate
 2. Untouched code + `evaluation/solution.patch` → **all** must pass. Otherwise
    the task is impossible and every configuration scores a free fail.
 3. Every file in `immutable:` exists in the code state.
+4. `fail_to_pass` is **not empty**. A misspelled key defaults to `[]` and then
+   reads clean through every check above — `0 > 0` is false, `0 != 0` is false,
+   and the reference solution "passes" — so the scenario hands every
+   configuration a free pass, forever, without measuring anything.
+5. Neither catalogue page ([9.9](#99-the-catalogue)) is in the code state. They
+   repeat the withheld material, and `docs/` is visible seed content, so a topic
+   branch rooted on a master commit that carried them would hand a human's full
+   explanation to the agent.
 
 This is SWE-bench's empty-patch / gold-patch gate, and it runs on every scenario
 **every time the suite runs**, not just at authoring time. Dependency drift that
@@ -172,6 +200,29 @@ every configuration regressing at once — a conclusion that would waste days.
 
 A scenario that fails validation never enters a suite. This single gate catches
 most of the ways an eval set silently stops measuring anything.
+
+## 9.9 The catalogue
+
+The set is only useful if someone can see what is in it. `python -m evals index`
+renders two pages onto the scenario repo's `master`, which is documentation and
+nothing else:
+
+- **`docs/scenarios/`** — every scenario with its branch, tag, category, level,
+  tasks, test counts and its `evaluation/scenario.md`, ending in a **Gaps**
+  section: categories and levels with no scenario, topic branches carrying no
+  tag, scenarios with no page, scenarios with an empty test set.
+- **`docs/results/`** — what each agent version scored
+  ([8.3](08-evaluation-method.md#83-where-things-live)).
+
+`--check` fails when either has drifted from the tags or the run records. The
+hand-maintained table this replaced had already gone wrong in the ordinary way:
+`topic/pipeline` existed as a branch with no scenarios and no row, so the gap
+the index exists to show was the gap it was hiding.
+
+This is the **one** thing that ever writes to the scenario repo
+([9.2](#92-materialization-is-git-archive-not-a-checkout) is otherwise still
+true: nothing writes to a *scenario*). It writes on `master`, which no run
+materializes, which is what lets both pages repeat what a run withholds.
 
 ---
 

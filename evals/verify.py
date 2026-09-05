@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from evals import scenario as scenario_mod
+from evals import catalog as catalog_mod, scenario as scenario_mod
 
 _DIFF_HEADER = re.compile(r"^diff --git a/[^/]+/(.*) b/[^/]+/(.*)$", re.MULTILINE)
 _DIFF_PREFIX = re.compile(r"^(--- a|\+\+\+ b)/[^/]+/", re.MULTILINE)
@@ -155,6 +155,25 @@ def validate(repo: Path, scenario) -> list:
         for rel in scenario.immutable:
             if not (seed / rel).is_file():
                 problems.append(f"immutable file not in the code state: {rel}")
+
+        # A test set that is empty passes every run without measuring anything,
+        # and every check below reads clean on it: 0 > 0 is False, 0 != 0 is
+        # False, and the reference solution "passes". Misspell `fail_to_pass`
+        # and the scenario scores every configuration a free pass, silently.
+        if not scenario.fail_to_pass:
+            problems.append(
+                "no fail_to_pass tests -- every run would pass without being "
+                "measured; check the key is spelled right in scenario.yaml")
+
+        # The catalogue on the scenario repo's master repeats the withheld
+        # material for a human. That is only safe while no scenario commit
+        # carries it, since `docs/` is visible seed content in several
+        # scenarios and would be handed straight to the agent.
+        for page in catalog_mod.PAGES:
+            if (seed / page).exists():
+                problems.append(
+                    f"{page} is in the code state -- the catalogue would be "
+                    "materialized into the agent's workdir")
 
         # Empty patch: the bug must be present and nothing else broken.
         empty = verify(repo, scenario, seed, base / "empty")
