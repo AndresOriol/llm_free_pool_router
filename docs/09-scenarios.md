@@ -182,9 +182,41 @@ authoring cost.
 | **generative** | Construction from nothing — "build X". No before state, so the empty-patch gate degenerates and a second reference implementation replaces it; scored on a tier ladder rather than a boolean ([design note](design/generative-scenarios.md)). |
 | **tests** | Writing tests for existing code; verified mutation-style (the tests must fail against a seeded broken variant). |
 | **refactor** | Restraint — behaviour-preserving, hidden tests must still pass. |
-| **long-context** | A large file that exceeds small-TPM pool members. Directly probes size-based routing ([4.2](04-failover.md#42-size-aware-selection)). |
+| **long-context** | A requirement buried in a document too large to read in full — the agent must find the part that matters. **Not** a routing probe; see 9.6.2. |
 | **ambiguous** | Judge-only. Does the agent ask, or invent requirements? |
 | **trap** | The brief asks for something the code contradicts, or that would break a documented invariant. Measures over-eagerness. No auto-pass. |
+
+### 9.6.2 What `long-context` stopped meaning
+
+It used to read *"a large file that exceeds small-TPM pool members. Directly
+probes size-based routing."* That is no longer true of any run in this set, and
+the definition was measuring nothing.
+
+A coding session selects only members holding at least **128,000** input tokens
+(`CONTEXT_FLOOR` in [agent/code/session.py](../agent/code/session.py)). The
+8,000-token Groq members are therefore never candidates for this work, so no
+scenario file can be large enough to exclude them — they were excluded before
+the file was read. A category defined around a filter that never runs cannot
+probe it, whatever size the file is.
+
+**Size-aware selection is still tested, and better.**
+`tests/llm_router/test_size_routing.py` exercises it directly, against a
+constructed pool, deterministically and for free. A scenario was always the
+worse instrument for a router property: it needs an agent, a model and several
+minutes to assert something a unit test settles in milliseconds — and it can
+only assert it *indirectly*, by hoping the routing shows up in an outcome.
+
+So the category is redefined around what it actually measures, which is what
+`scenario/pipeline/model-v3-propagation` has been testing and passing all along:
+a 600-line specification with two changed rules in different places, one of them
+absent from the changelog. The probe is retrieval inside a large document, not
+the router.
+
+**What this gives up.** Nothing in the eval set now exercises the small members
+at all, and that is the honest consequence of the context floor rather than a
+gap to paper over. If those members ever serve a coding session again, the thing
+to add is a scenario whose *prompt* fits 8,000 tokens — not a large file, which
+is what the old definition confused itself with.
 
 ## 9.7 The difficulty ladder
 

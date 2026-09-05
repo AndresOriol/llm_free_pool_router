@@ -29,6 +29,12 @@ would force `llm_router` to import `agent` and invert the layering.
 
 ## 4.2 Size-aware selection
 
+> Exercised by `tests/llm_router/test_size_routing.py`, not by the eval set. A
+> coding session's 128,000-token floor means the small members are never
+> candidates for it, so no scenario can probe this
+> ([9.6.2](09-scenarios.md)).
+
+
 Selection takes an optional token estimate, and applies it **before** the
 priority sort:
 
