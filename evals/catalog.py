@@ -470,10 +470,14 @@ def _traced(rows: list) -> list:
     `deepagents` runs are in the record with no trace at all -- written before
     the trace path was made absolute, so the agent wrote it inside its own
     worktree -- and they pull that version's `tokens_in` mean to exactly 0,
-    which the table then prints beside a real one. `provider_calls` is the
-    marker: a run that reached a model made at least one.
+    which the table then prints beside a real one.
+
+    Runs say `traced` outright now. For the five that predate the field,
+    `provider_calls` is the marker, because a run that reached a model made at
+    least one.
     """
-    return [r for r in rows if r.get("provider_calls")]
+    return [r for r in rows
+            if r.get("traced", r.get("provider_calls")) and r.get("provider_calls")]
 
 
 def _retired(rows: list) -> str:
@@ -535,9 +539,29 @@ def _run_integrity(record: dict) -> str:
     return ", ".join(parts) or "—"
 
 
+def is_stub(record: dict) -> bool:
+    """Was this run a stub rather than an agent?
+
+    `stub` is recorded from the config now. Older records predate the field, so
+    the name is the fallback -- every stub configuration is named `stub-*`, and
+    that is how the four already sitting in the results directory are caught.
+    """
+    if "stub" in record:
+        return bool(record["stub"])
+    return str(record.get("config", "")).startswith("stub-")
+
+
 def render_results(results_dir: Path, pages: dict = None) -> str:
     pages = pages or {}
     records = run_mod.load_records(results_dir) if results_dir.is_dir() else []
+    # A stub writes a hardcoded file and calls no model, so its runs measure the
+    # runner -- which is what they are for -- and are not a configuration
+    # anything should be compared against. Four were in the real results
+    # directory, rendering as the cheapest and most reliable version in the
+    # table at 4/4 and 912 tokens. The invariant was written in a comment and
+    # enforced by nobody.
+    stubs = [r for r in records if is_stub(r)]
+    records = [r for r in records if not is_stub(r)]
     out = [RESULTS_HEADER, ""]
     if not records:
         return "\n".join(out + [
@@ -547,7 +571,10 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
     for record in records:
         versions[(record.get("config"), (record.get("config_sha") or "")[:8])].append(record)
 
-    out += [f"**{len(records)} runs across {len(versions)} agent versions.**", "",
+    out += [f"**{len(records)} runs across {len(versions)} agent versions.**"
+            + (f" {len(stubs)} stub run(s) excluded — a stub writes a hardcoded "
+               "file and calls no model, so its runs measure the runner rather "
+               "than an agent." if stubs else ""), "",
             "## Agent versions", "",
             "| Configuration | commit | runs | solved | 95% interval | integrity "
             "| `tokens_in` mean | tok/call | calls | bounces | account "

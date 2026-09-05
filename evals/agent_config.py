@@ -36,6 +36,13 @@ import yaml
 # config line rather than a second runner.
 DEFAULT_AGENT_CMD = ["python", "-m", "agent.code", "{workdir}"]
 
+# What makes a configuration a stub rather than an agent. `fake_agent.py` writes
+# a hardcoded file and calls no model, so its runs measure the runner and
+# nothing else -- and four of them are in the real results directory, rendering
+# as the cheapest, most reliable "agent version" in the table at 4/4 and 912
+# tokens. The invariant was stated in a comment and enforced by nobody.
+STUB_AGENT = "fake_agent.py"
+
 
 def read_env_file(path: Path) -> dict:
     """Parse a KEY=VALUE file.
@@ -68,6 +75,11 @@ class AgentConfig:
     env: dict = field(default_factory=dict)
     secrets: dict = field(default_factory=dict)
     router_config: str = ""
+
+    @property
+    def is_stub(self) -> bool:
+        """Does a stub run this, rather than an agent?"""
+        return any(STUB_AGENT in str(part) for part in self.agent_cmd)
     # Set only while `checkout()` is open. Nothing outside a batch has a tree.
     worktree: Optional[Path] = None
 

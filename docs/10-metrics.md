@@ -70,6 +70,8 @@ output ([7.3](07-observability.md#73-the-local-trace)).
 | `failover_bounces` | Transient failures before a step succeeded — wasted quota |
 | `tokens_in` / `tokens_out` | Summed where the provider reports usage |
 | `tokens_per_call` | `tokens_in` over provider calls — what one step costs. Separates a long run from an expensive one, which `tokens_in` alone cannot ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)) |
+| `stub` | Was this a stub rather than an agent — stubs are excluded from the ledger |
+| `traced` | Did `trace.jsonl` arrive. Everything summed over the trace reads 0 when it did not, which is indistinguishable from a measurement |
 | `bounce_models` | Bounces per model — which member is spending the pool's time |
 | `retired_models` | Members dropped mid-run because they are gone upstream. See 10.2.3 |
 | `bounces_per_call` | Failover bounces over provider calls. A quota and latency figure, **not** a cost one: a refused call carries no input tokens |
