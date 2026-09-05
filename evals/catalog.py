@@ -476,6 +476,20 @@ def _traced(rows: list) -> list:
     return [r for r in rows if r.get("provider_calls")]
 
 
+def _account(rows: list) -> str:
+    """How often the run left an account, over the runs that could leave one.
+
+    `wrote_account` is None where the seed ships no feedback file, and those are
+    excluded rather than counted as failures -- otherwise the number improves
+    every time a scenario is added that does not test this.
+    """
+    applicable = [r for r in rows if r.get("wrote_account") is not None]
+    if not applicable:
+        return "—"
+    wrote = sum(1 for r in applicable if r["wrote_account"])
+    return f"{wrote}/{len(applicable)}"
+
+
 def _mean(rows: list, key: str) -> float:
     """Averaged over the traced runs only, so a 0 means measured-as-zero."""
     values = [r.get(key) or 0 for r in _traced(rows)]
@@ -524,8 +538,9 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
     out += [f"**{len(records)} runs across {len(versions)} agent versions.**", "",
             "## Agent versions", "",
             "| Configuration | commit | runs | solved | 95% interval | integrity "
-            "| `tokens_in` mean | tok/call | calls | bounces | failure classes |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "| `tokens_in` mean | tok/call | calls | bounces | account "
+            "| failure classes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for (name, sha), group in sorted(versions.items()):
         passed = _solved(group)
         low, high = _wilson(passed, len(group))
@@ -540,6 +555,7 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             f"| {_mean(group, 'tokens_per_call'):,.0f} "
             f"| {_mean(group, 'provider_calls'):.1f} "
             f"| {_mean(group, 'failover_bounces'):.1f} "
+            f"| {_account(group)} "
             f"| {', '.join(f'{k}={v}' for k, v in sorted(classes.items())) or '—'} |")
 
     out += ["",
@@ -557,6 +573,13 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             "tell appending a regression test from deleting an assertion and "
             "called both tampering. Their integrity verdicts are not comparable "
             "with the ones below them, and are not counted with them.",
+            "",
+            "**account** is how often the run appended to the project's "
+            "`NOTES.md`, over the runs whose scenario ships one. "
+            "[R7](../../docs/design/long-run-harness.md) calls that file \"the "
+            "whole human interface\", and it is the only part of an account "
+            "that can be checked without reading it. Nothing gates on this "
+            "yet — it is here to establish a baseline.",
             "",
             "A mean marked *untraced* was taken over fewer runs than the row "
             "counts. A run whose `trace.jsonl` never arrived records zero for "

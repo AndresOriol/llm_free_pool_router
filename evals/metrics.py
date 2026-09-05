@@ -19,6 +19,13 @@ from pathlib import Path
 ROUTER_MODELS = {"router", "RouterChatModel"}
 
 EDIT_TOOLS = {"edit_file", "write_file", "str_replace", "apply_patch"}
+
+# The project's feedback file. "Notes in, notes out" -- the session reads it and
+# appends its account to it -- is R7 in design/long-run-harness.md, and that note
+# calls it "the whole human interface". Phase 2's north star is an agent that
+# writes an account a human reviews instead of the code, so whether the account
+# exists is the one thing about it that can be checked without reading it.
+ACCOUNT_FILE = "NOTES.md"
 READ_TOOLS = {"read_file", "ls", "glob", "grep", "search"}
 
 
@@ -52,6 +59,39 @@ def diff_summary(patch_text: str) -> dict:
     return {"files_touched": len(files), "diff_lines": added + removed,
             "diff_added": added, "diff_removed": removed,
             "diff_files": sorted(files)}
+
+
+def added_by_file(patch_text: str) -> dict:
+    """Lines added per path, read off the diff.
+
+    `diff_summary` counts additions across the whole patch, which cannot answer
+    "did it write *there*". Keyed on the `+++ b/` header, so a file the agent
+    only deleted from contributes nothing -- which is correct here: deleting the
+    notes is not writing an account.
+    """
+    counts, current = {}, None
+    for line in patch_text.splitlines():
+        if line.startswith("+++ b/"):
+            current = line[len("+++ b/"):].strip()
+            counts.setdefault(current, 0)
+        elif line.startswith(("+++", "---", "diff --git", "index ", "@@")):
+            continue
+        elif current and line.startswith("+"):
+            counts[current] += 1
+    return counts
+
+
+def account_written(patch_text: str) -> bool:
+    """Did the run add anything to the project's feedback file?
+
+    Deliberately shallow: it asks whether the account exists, not whether it is
+    any good. Three of nine runs in the first full-set batch added nothing to
+    `NOTES.md` -- one of them on a task literally called `session-from-notes` --
+    and a run that implemented an ambiguous reading consistently and never wrote
+    the decision down scored p2p 6/6, which is silent competence and reads as
+    success everywhere else in the record.
+    """
+    return added_by_file(patch_text).get(ACCOUNT_FILE, 0) > 0
 
 
 def from_trace(events: list) -> dict:
@@ -163,7 +203,7 @@ def classify_failure(outcome: str, events: list, gold: set, touched: set,
 
 
 def collect(trace_path: Path, patch_text: str, reference_patch: str,
-            outcome: str, stderr: str = "") -> dict:
+            outcome: str, stderr: str = "", has_account: bool = False) -> dict:
     events = load_trace(trace_path)
     gold = gold_files(reference_patch)
     summary = diff_summary(patch_text)
@@ -172,5 +212,10 @@ def collect(trace_path: Path, patch_text: str, reference_patch: str,
     metrics = {**from_trace(events), **summary}
     metrics["gold_files"] = sorted(gold)
     metrics["found_gold_file"] = _read_gold(events, gold)
+    # None, not False, when the seed has no feedback file to append to: a
+    # scenario that never offered one cannot be said to have skipped it, and
+    # averaging those in would make the number look better the more scenarios
+    # are added that do not test this at all.
+    metrics["wrote_account"] = account_written(patch_text) if has_account else None
     metrics["failure_class"] = classify_failure(outcome, events, gold, touched, stderr)
     return metrics

@@ -142,6 +142,10 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
                 raise RuntimeError(
                     f"{scenario.tag} leaked {hidden!r} into the workdir")
         shutil.copytree(seed, workdir)
+        # Asked of the seed, before the agent can create one: a scenario that
+        # ships no feedback file records `wrote_account: null` rather than a
+        # failure to write one.
+        has_account = (seed / metrics_mod.ACCOUNT_FILE).is_file()
         before = scenario_mod.hash_files(workdir, scenario.immutable)
 
         execution = _execute(config, workdir, task.prompt,
@@ -161,7 +165,8 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
     reference = scenario_mod.read(repo, scenario.tag,
                                   "evaluation/solution.patch") or ""
     measured = metrics_mod.collect(out_dir / "trace.jsonl", patch, reference,
-                                   outcome, execution["stderr"])
+                                   outcome, execution["stderr"],
+                                   has_account=has_account)
 
     # newline="\n" everywhere, and on diff.patch it is load-bearing: the default
     # translates each one to a CRLF pair on Windows, and a patch whose context lines

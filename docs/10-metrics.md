@@ -76,9 +76,36 @@ output ([7.3](07-observability.md#73-the-local-trace)).
 | `bad_tool_calls` | Invalid tool name, failed `edit_file`, malformed args |
 | `models_used` | Distinct models that served a step, and the per-model call mix |
 | `ran_own_tests` | Did the agent invoke `execute` on the test command itself |
+| `wrote_account` | Did the run append to the project's `NOTES.md` — `null` where the scenario ships none. See 10.2.1 |
 | `self_corrected` | Did a failing `execute` get followed by another edit |
 | `files_touched` / `diff_lines` | Change size, vs the reference solution's size |
 | `wall_time_s` | End to end |
+
+### 10.2.1 The account, and why it is only counted
+
+[R7](design/long-run-harness.md) is *"notes in, notes out: the session reads the
+project's feedback file and appends its account to it. This is the whole human
+interface."* Phase 2's north star is an agent that writes an account a human
+reviews instead of the code, and until now nothing recorded whether one existed.
+
+`wrote_account` is lines added to `NOTES.md`, off the diff. Deterministic, zero
+tokens, no new scenario. It is `null` where the seed ships no feedback file,
+because a scenario that never offered one cannot have skipped it — counting
+those as failures would make the number improve every time such a scenario is
+added.
+
+**The baseline, over 40 runs: 7 of the 23 runs that solved their task also wrote
+an account.** Four scenarios have never produced one —
+`model-v3-propagation` in six runs, `bots-to-base-class`, `stock-export` and
+`cover-the-rejections` in two each.
+
+**Read that as a measurement, not yet as a verdict.** The standing session prompt
+says to read `NOTES.md` and do what the newest feedback asks, then update any
+documentation the change makes wrong. It does not say to append an account. So
+these runs are not disobeying an instruction; they are declining an unstated
+expectation, and closing that gap is a prompt change to be measured like any
+other rather than a scoring change to be imposed. Nothing gates on this metric —
+it exists so the question has a number attached before anyone argues about it.
 
 ## 10.3 Failure taxonomy
 
