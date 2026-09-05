@@ -524,8 +524,8 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
     out += [f"**{len(records)} runs across {len(versions)} agent versions.**", "",
             "## Agent versions", "",
             "| Configuration | commit | runs | solved | 95% interval | integrity "
-            "| `tokens_in` mean | calls | bounces | failure classes |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "| `tokens_in` mean | tok/call | calls | bounces | failure classes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for (name, sha), group in sorted(versions.items()):
         passed = _solved(group)
         low, high = _wilson(passed, len(group))
@@ -537,6 +537,7 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             f"| `{name}` | `{sha}` | {len(group)} | {passed}/{len(group)} "
             f"| {low:.0%}–{high:.0%} | {_integrity(group)} "
             f"| {_mean(group, 'tokens_in'):,.0f}{_unmeasured(group)} "
+            f"| {_mean(group, 'tokens_per_call'):,.0f} "
             f"| {_mean(group, 'provider_calls'):.1f} "
             f"| {_mean(group, 'failover_bounces'):.1f} "
             f"| {', '.join(f'{k}={v}' for k, v in sorted(classes.items())) or '—'} |")
