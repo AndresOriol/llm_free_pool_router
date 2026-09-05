@@ -26,7 +26,7 @@ Four properties. Measured 2026-09-02 on this repo, not estimated.
 | **A run lasts hours** | [awake.py](../agent/runtime/awake.py) exists because a session "runs for hours with long gaps between provider calls" |
 | **Memory floor ~186 MB, before any conversation** | RSS after importing `llm_router` (153 MB) plus `RouterChatModel` and both sessions. Cold imports take 6.2 s. Add the message history: a session only routes to members holding ≥128,000 input tokens |
 | **It spawns child processes** | [backend.py](../agent/runtime/backend.py) allows `python`/`pytest`/`git`. They share the container memory limit. A target project test suite can peak far above the agent itself — closet_ai's ONNX segmentation suite measured 440–517 MB |
-| **Nothing calls it while it works** | The entry point is `python -m agent.code [workdir] < brief.md`. There is no HTTP server anywhere in the repo |
+| **Nothing calls it while it works** | The entry point is `python -m agent.code [workdir] < brief.md`. There is an HTTP server now ([18](18-serving.md)), and it does not change this: a caller submits a task and polls, so the hours in between still carry no inbound traffic |
 
 CPU is the one thing it barely needs. The agent is I/O-bound on provider calls;
 it is the `pytest` child, not the loop, that wants a core.
@@ -103,6 +103,14 @@ runs a heavy test suite in the jail. 512 MB is not a candidate.
 
 Prerequisites, not polish. Every option above trips on them.
 
+*Where these stand since [18. Serving](18-serving.md): the ledger and the
+secrets are handled by the image and its volumes
+([18.7](18-serving.md#187-what-has-to-be-a-volume)). Per-process cooldown and
+concurrent JSONL appends are **not** solved — they are the reason the server
+runs exactly one worker
+([18.5](18-serving.md#185-why-there-is-exactly-one-worker)), which contains
+them rather than fixing them.*
+
 - **The usage ledger is machine-local and ephemeral.**
   `llm_router/.usage/ledger.jsonl` lives inside the repo tree
   ([14.3](14-quota-panel.md#143-two-files-under-llm_routerusage),
@@ -138,4 +146,4 @@ one.
 
 ---
 
-**Previous:** [← 16. The agent protocol](16-agent-protocol.md) · **Next:** [Wiki index →](README.md)
+**Previous:** [← 16. The agent protocol](16-agent-protocol.md) · **Next:** [18. Serving the agents →](18-serving.md)

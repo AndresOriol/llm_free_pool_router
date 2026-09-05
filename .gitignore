@@ -22,3 +22,12 @@ evals/results/reviews/*
 # with an agent. Point-in-time artifacts, not maintained state -- what survives
 # is the writing that gets promoted into docs/ or evals/results/reports/.
 /.claude/artifacts/
+
+# The container's environment file: every provider key plus SERVE_TOKEN.
+# `llm_router/.env` above is the same secret in the CLI's location; both are
+# excluded from the Docker build context as well (.dockerignore).
+/.env
+
+# The default workspace root for `docker compose up`. What the agents are bound
+# to is someone else's repository, or a clone of one -- never this one's history.
+/workspaces/
