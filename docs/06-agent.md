@@ -53,6 +53,26 @@ maintained SDK rather than from this repo. The cost gap is the standing risk tha
 choice accepts, and `tokens_in` per run is the metric to watch for it
 ([10.2](10-metrics.md#102-automatic-metrics)).
 
+**What the cost actually is, measured over 40 runs.** `tokens_in` correlates
+**+0.95 with `steps`**, +0.95 with `tool_calls` and +0.92 with `provider_calls`
+— and only **+0.24 with `failover_bounces`**. The suspicion that failover was
+replaying whole contexts and inflating the number is wrong: a bounce spends a
+*request* and no tokens, because a 429 or a 404 is refused at the gate and there
+is nothing to bill.
+
+So the number is what it looks like. A call carries **25,000–40,000 input
+tokens**, and a run makes 25 to 50 of them, because a conversation re-sends
+itself every step. That is the architecture, not a defect in it, and it is why
+the narrow-role arm was cheap: it never held a conversation to re-send.
+`tokens_per_call` is recorded per run so this stays visible without being
+re-derived — it separates a run that was long from one that was expensive, which
+`tokens_in` alone cannot do.
+
+**This does not settle whether deleting that arm was a mistake.** It settles
+where the money goes. The comparison itself is still unrun: 226,854 against
+5,756 was measured on a different pool, a different floor and a different SDK,
+and nothing since has put the two architectures on the same scenarios.
+
 **What left with it.** The narrow-role session read a project's `NOTES.md`,
 appended its own account to it, journalled every step so a crash could resume,
 and committed incrementally on its own branch. The conversational agent commits
