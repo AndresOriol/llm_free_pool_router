@@ -98,6 +98,15 @@ conventions — read it before adding a page.
 this file is the agent entry point (goal, standards, this index) — both stay
 short and link into the wiki rather than growing inline.
 
+**"Artifact" in this repo means a markdown file in
+[.claude/artifacts/](.claude/artifacts/)** — a plan, an audit, or a queue of
+work, written to be read once and acted on, not a wiki page. Ask for one and
+that is what to produce: a title, an italic provenance line naming the branch,
+the date and the scope, a one-paragraph version up front, then numbered
+sections that link back into the repo with relative paths. They are working
+documents, so they go stale; a finding that outlives its artifact belongs in
+[docs/](docs/) instead.
+
 Quick pointers: [4. Failover](docs/04-failover.md) for how the router works,
 [14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
 [16. The agent protocol](docs/16-agent-protocol.md) for agent-to-agent
