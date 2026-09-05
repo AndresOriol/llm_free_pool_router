@@ -394,3 +394,46 @@ def test_a_healthy_pool_names_nothing(tmp_path):
     results = tmp_path / "results"
     _record(results, "a", failover_bounces=2, retired_models=[])
     assert "retired:" not in catalog.render_results(results)
+
+
+def test_a_stub_run_is_kept_out_of_the_leaderboard(tmp_path):
+    """A stub writes a hardcoded file and calls no model.
+
+    Four were in the real results directory, rendering as the cheapest and most
+    reliable agent version in the table at 4/4 and 912 tokens. The invariant was
+    stated in a comment and enforced by nobody.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", config="code")
+    _record(results, "b", config="stub-fix", stub=True)
+    text = catalog.render_results(results)
+
+    assert "1 runs across 1 agent versions" in text
+    assert "1 stub run(s) excluded" in text
+    assert "stub-fix" not in text
+
+
+def test_an_older_stub_record_is_recognised_by_its_name(tmp_path):
+    """The four already recorded predate the `stub` field."""
+    results = tmp_path / "results"
+    _record(results, "a", config="stub-fix")          # no `stub` key
+    _record(results, "b", config="code")
+    assert catalog.is_stub({"config": "stub-fix"}) is True
+    assert catalog.is_stub({"config": "code"}) is False
+    assert "stub-fix" not in catalog.render_results(results)
+
+
+def test_a_config_that_says_it_is_not_a_stub_is_believed(tmp_path):
+    """The recorded field wins over the name, in both directions."""
+    assert catalog.is_stub({"config": "stub-like-name", "stub": False}) is False
+    assert catalog.is_stub({"config": "code", "stub": True}) is True
+
+
+def test_a_run_that_says_it_has_no_trace_is_not_averaged_in(tmp_path):
+    """`traced` is recorded now, rather than inferred from a zero."""
+    results = tmp_path / "results"
+    _record(results, "a", tokens_in=100_000, provider_calls=10, traced=True)
+    _record(results, "b", tokens_in=0, provider_calls=0, traced=False)
+    text = catalog.render_results(results)
+
+    assert "100,000 (1 untraced)" in text

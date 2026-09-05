@@ -132,6 +132,10 @@ def cmd_show(args) -> int:
     rows = run_mod.load_records(Path(args.results))
     if args.config:
         rows = [r for r in rows if r["config"] in args.config]
+    else:
+        # Named explicitly you get them; in the leaderboard you do not. A stub
+        # calls no model, so 4/4 at 912 tokens would top every column it is in.
+        rows = [r for r in rows if not catalog_mod.is_stub(r)]
     if not rows:
         sys.exit("No results yet.")
 

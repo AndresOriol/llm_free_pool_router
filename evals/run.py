@@ -196,6 +196,17 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
         "context_mode": scenario.context_mode,
         "task": task.id, "task_tags": task.tags,
         "config": config.name, "config_sha": config.sha,
+        # Recorded rather than inferred from the name: a leaderboard mixing
+        # stubbed and measured runs is worse than no leaderboard, and until now
+        # the only thing keeping them apart was the operator remembering to
+        # pass --results.
+        "stub": config.is_stub,
+        # Whether the trace arrived, said outright rather than inferred from a
+        # zero. Five recorded runs have no trace.jsonl at all -- written before
+        # the trace path was made absolute, so the agent wrote it inside its own
+        # throwaway worktree -- and every metric summed over it reads 0, which
+        # is indistinguishable from a measurement of nothing.
+        "traced": (out_dir / "trace.jsonl").is_file(),
         "config_fingerprint": config.fingerprint,
         "rep": rep,
         "outcome": outcome,
