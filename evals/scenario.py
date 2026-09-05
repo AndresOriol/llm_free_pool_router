@@ -73,9 +73,17 @@ class Scenario:
     contract_tests: list = field(default_factory=list)
 
 
+# Git hands back blob bytes, and every file in the scenario repo is UTF-8.
+# `text=True` alone decodes with the locale default, which on Windows is
+# cp1252: an em dash in `evaluation/scenario.md` came back as three characters
+# and was written straight into the generated catalogue. Pin the encoding on
+# every read, and on the writes in `verify` that feed a patch back to git.
+ENCODING = "utf-8"
+
+
 def _git(repo: Path, *args: str) -> str:
     result = subprocess.run(["git", "-C", str(repo), *args],
-                            capture_output=True, text=True)
+                            capture_output=True, encoding=ENCODING)
     if result.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout
@@ -84,7 +92,7 @@ def _git(repo: Path, *args: str) -> str:
 def read(repo: Path, tag: str, path: str) -> Optional[str]:
     """One file out of a scenario commit, without checking anything out."""
     result = subprocess.run(["git", "-C", str(repo), "show", f"{tag}:{path}"],
-                            capture_output=True, text=True)
+                            capture_output=True, encoding=ENCODING)
     return result.stdout if result.returncode == 0 else None
 
 

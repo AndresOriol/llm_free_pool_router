@@ -197,12 +197,13 @@ def validate(repo: Path, scenario) -> list:
         # The catalogue on the scenario repo's master repeats the withheld
         # material for a human. That is only safe while no scenario commit
         # carries it, since `docs/` is visible seed content in several
-        # scenarios and would be handed straight to the agent.
-        for page in catalog_mod.PAGES:
-            if (seed / page).exists():
-                problems.append(
-                    f"{page} is in the code state -- the catalogue would be "
-                    "materialized into the agent's workdir")
+        # scenarios and would be handed straight to the agent. The catalogue
+        # is a directory of pages, so the check is on the directories: a
+        # single scenario's page leaks that scenario's answer whole.
+        for page in catalog_mod.leaked_pages(seed):
+            problems.append(
+                f"{page} is in the code state -- the catalogue would be "
+                "materialized into the agent's workdir")
 
         # Empty patch: the bug must be present and nothing else broken.
         empty = verify(repo, scenario, seed, base / "empty")
@@ -224,7 +225,8 @@ def validate(repo: Path, scenario) -> list:
         gold = base / "gold"
         scenario_mod.materialize_code(repo, scenario.tag, gold)
         applied = subprocess.run(["git", "apply", "-p1", "-"], cwd=gold,
-                                 input=patch, text=True, capture_output=True)
+                                 input=patch, capture_output=True,
+                                 encoding=scenario_mod.ENCODING)
         if applied.returncode != 0:
             problems.append(f"reference patch does not apply: {applied.stderr.strip()}")
             return problems
@@ -258,7 +260,8 @@ def _check_alternative(repo: Path, scenario, base: Path) -> list:
     tree = base / "alt"
     scenario_mod.materialize_code(repo, scenario.tag, tree)
     applied = subprocess.run(["git", "apply", "-p1", "-"], cwd=tree,
-                             input=alt, text=True, capture_output=True)
+                             input=alt, capture_output=True,
+                             encoding=scenario_mod.ENCODING)
     if applied.returncode != 0:
         return [f"alternative patch does not apply: {applied.stderr.strip()}"]
 

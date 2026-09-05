@@ -29,7 +29,7 @@ Nothing names the file, so the whole probe is localisation.
 It is hard for one further reason.
 
 ## What it checks
-That the bug is gone and nothing else broke.
+That the bug is gone and nothing else broke — the same exception `later` takes.
 """
 
 SCENARIO_YAML = """id: demo
@@ -84,6 +84,23 @@ def _scenario_repo(tmp_path: Path, *, page: str = PAGE,
     _git(repo, "commit", "-q", "-m", "scenario: demo")
     _git(repo, "tag", "scenario/demo/demo")
     return repo
+
+
+def _second_scenario(repo: Path) -> None:
+    """A later commit on the same topic branch: the next scenario in the line.
+
+    Named so that the alphabetical order of the tags is the reverse of the
+    order the commits are in, which is the thing the topic line has to get
+    right.
+    """
+    (repo / "demo.py").write_text("value = 2\n", encoding="utf-8")
+    (repo / "scenario.yaml").write_text(
+        SCENARIO_YAML.replace("id: demo", "id: later"), encoding="utf-8")
+    (repo / "evaluation" / "scenario.md").write_text(
+        PAGE.replace("`later`", "`demo`"), encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "scenario: later")
+    _git(repo, "tag", "scenario/demo/later")
 
 
 # --- the page ------------------------------------------------------------
@@ -148,7 +165,80 @@ def test_a_malformed_tag_is_reported_not_raised(tmp_path):
     _git(repo, "tag", "scenario/demo/nothing", "master")
     text = catalog.render(repo)
     assert "**malformed**" in text
-    assert "scenario/demo/demo" in text        # the good one still renders
+    assert "[`demo`](demo/demo.md)" in text    # the good one still renders
+
+
+# --- the wiki -------------------------------------------------------------
+
+def test_every_scenario_gets_its_own_page(tmp_path):
+    repo = _scenario_repo(tmp_path)
+    _second_scenario(repo)
+    pages = catalog._pages(repo, tmp_path / "nothing")
+    assert "docs/scenarios/demo/demo.md" in pages
+    assert "docs/scenarios/demo/later.md" in pages
+
+
+def test_the_index_links_to_the_page_rather_than_repeating_it(tmp_path):
+    text = catalog.render(_scenario_repo(tmp_path))
+    assert "[`demo`](demo/demo.md)" in text
+    assert "One module with a bug in it." not in text
+
+
+def test_the_page_carries_the_tag_a_run_cites(tmp_path):
+    repo = _scenario_repo(tmp_path)
+    page = catalog._pages(repo, tmp_path / "n")["docs/scenarios/demo/demo.md"]
+    assert "| Tag | `scenario/demo/demo` |" in page
+    assert "One module with a bug in it." in page
+
+
+def test_a_sibling_named_in_the_prose_becomes_a_link(tmp_path):
+    repo = _scenario_repo(tmp_path)
+    _second_scenario(repo)
+    page = catalog._pages(repo, tmp_path / "n")["docs/scenarios/demo/demo.md"]
+    assert "[`later`](later.md)" in page
+    # Its own id stays plain text: a page does not link to itself.
+    assert "[`demo`]" not in page
+
+
+def test_a_topic_line_is_ordered_by_commit_not_by_tag(tmp_path):
+    """`later` is the second commit and sorts first alphabetically."""
+    repo = _scenario_repo(tmp_path)
+    _second_scenario(repo)
+    assert catalog.topic_line(repo, "demo",
+                              ["scenario/demo/later", "scenario/demo/demo"]) == [
+        "scenario/demo/demo", "scenario/demo/later"]
+
+
+def test_a_page_no_scenario_claims_is_removed(tmp_path):
+    """A moved tag would otherwise leave its page behind, still being read."""
+    repo = _scenario_repo(tmp_path)
+    results = tmp_path / "nothing"
+    catalog.write(repo, results)
+    orphan = repo / "docs" / "scenarios" / "demo" / "gone.md"
+    orphan.write_text("a scenario that no longer exists\n", encoding="utf-8")
+    assert catalog.check(repo, results) == ["docs/scenarios/demo/gone.md"]
+    catalog.write(repo, results)
+    assert not orphan.exists()
+    assert catalog.check(repo, results) == []
+
+
+def test_a_page_is_written_as_utf_8(tmp_path):
+    """An em dash read back through the locale default arrives as mojibake."""
+    repo = _scenario_repo(tmp_path)
+    catalog.write(repo, tmp_path / "nothing")
+    page = (repo / "docs" / "scenarios" / "demo" / "demo.md").read_bytes()
+    assert "—".encode("utf-8") in page
+    assert "â€".encode("utf-8") not in page
+
+
+def test_a_scenario_page_in_a_code_state_is_a_leak(tmp_path):
+    """Not just the index: one scenario's page gives that scenario away."""
+    seed = tmp_path / "seed"
+    (seed / "docs" / "scenarios" / "demo").mkdir(parents=True)
+    (seed / "docs" / "scenarios" / "demo" / "demo.md").write_text("x",
+                                                                 encoding="utf-8")
+    (seed / "docs" / "ledger.md").write_text("visible seed docs", encoding="utf-8")
+    assert catalog.leaked_pages(seed) == ["docs/scenarios/demo/demo.md"]
 
 
 # --- results -------------------------------------------------------------

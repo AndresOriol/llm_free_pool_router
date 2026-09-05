@@ -207,14 +207,20 @@ The set is only useful if someone can see what is in it. `python -m evals index`
 renders two pages onto the scenario repo's `master`, which is documentation and
 nothing else:
 
-- **`docs/scenarios/`** — every scenario with its branch, tag, category, level,
-  tasks, test counts and its `evaluation/scenario.md`, ending in a **Gaps**
-  section: categories and levels with no scenario, topic branches carrying no
-  tag, scenarios with no page, scenarios with an empty test set.
+- **`docs/scenarios/`** — a small wiki: an index, and one page per scenario at
+  `<topic>/<id>.md` carrying its branch, tag, category, level, tasks, test
+  counts and its `evaluation/scenario.md`. The index cuts the set four ways —
+  one table, then by category, by level and by topic line — and ends in a
+  **Gaps** section: categories and levels with no scenario, topic branches
+  carrying no tag, scenarios with no page, scenarios with an empty test set.
+  A scenario's page is a stable address, so a result or a commit message can
+  cite one; a backticked scenario id in the prose becomes a link to it.
 - **`docs/results/`** — what each agent version scored
   ([8.3](08-evaluation-method.md#83-where-things-live)).
 
-`--check` fails when either has drifted from the tags or the run records. The
+`--check` fails when either has drifted from the tags or the run records, and
+a page under `docs/scenarios/` that no tag claims any more — what a renamed tag
+leaves behind — counts as drift and is removed on the next rebuild. The
 hand-maintained table this replaced had already gone wrong in the ordinary way:
 `topic/pipeline` existed as a branch with no scenarios and no row, so the gap
 the index exists to show was the gap it was hiding.

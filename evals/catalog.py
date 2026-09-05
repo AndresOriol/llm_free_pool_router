@@ -1,14 +1,21 @@
 """The scenario repo's `master`: what the eval set holds, and what it scored.
 
-Two generated pages, both for a human and neither read by any run.
+Generated documentation, all of it for a human and none of it read by any run.
 
-**`docs/scenarios/`** — the set. The runner reads scenarios one tag at a time
-and never needs an overview; a person deciding what to author next does, and
-the only overview that existed was a table hand-maintained in that repo's
-README which was already wrong — `topic/pipeline` had been a branch with no
-scenarios and no row in it. A hand-kept index of a growing set decays silently,
-and an index nobody trusts is worse than none. So it is generated from the
-tags, which are what runs actually cite, and `--check` fails on drift.
+**`docs/scenarios/`** — the set, as a small wiki: an index, and one page per
+scenario at `<topic>/<id>.md`. The runner reads scenarios one tag at a time and
+never needs an overview; a person deciding what to author next does, and the
+only overview that existed was a table hand-maintained in that repo's README
+which was already wrong — `topic/pipeline` had been a branch with no scenarios
+and no row in it. A hand-kept index of a growing set decays silently, and an
+index nobody trusts is worse than none. So it is generated from the tags, which
+are what runs actually cite, and `--check` fails on drift.
+
+One page per scenario rather than one page for all of them because the unit a
+reader works in is a scenario: the page a tag's `evaluation/scenario.md` fills
+runs to a couple of hundred lines, and ten of them concatenated is a document
+nobody opens twice. Split, each is a stable address a result or a commit
+message can cite, and a backticked scenario id in the prose becomes a link.
 
 **`docs/results/`** — what each agent version scored. `evals/results/runs/` is
 gitignored and lives only on the machine that produced it
@@ -37,25 +44,29 @@ CATEGORIES = ("bugfix", "feature", "generative", "tests", "refactor",
               "long-context", "ambiguous", "trap")
 LEVELS = ("L0", "L1", "L2", "L3")
 
-SCENARIOS_INDEX = "docs/scenarios/README.md"
-RESULTS_INDEX = "docs/results/README.md"
+SCENARIOS_DIR = "docs/scenarios"
+RESULTS_DIR = "docs/results"
+SCENARIOS_INDEX = f"{SCENARIOS_DIR}/README.md"
+RESULTS_INDEX = f"{RESULTS_DIR}/README.md"
 
-# Neither page may ever appear inside a scenario commit: `docs/` is visible
-# seed content in three scenarios today, so a topic branch rooted on a master
-# commit carrying these would hand a human's full explanation to the agent.
-PAGES = (SCENARIOS_INDEX, RESULTS_INDEX)
+# No generated page may ever appear inside a scenario commit: `docs/` is
+# visible seed content in three scenarios today, so a topic branch rooted on a
+# master commit carrying one would hand a human's full explanation to the
+# agent. The catalogue is a directory of pages rather than one file, so the
+# check is on the directories -- a single scenario's page leaks that
+# scenario's answer whole, which is worse than leaking the index.
+PAGE_ROOTS = (SCENARIOS_DIR, RESULTS_DIR)
 
-HEADER = """# Scenario catalogue
 
-*Generated — `python -m evals index` in the harness repo rewrites this file
-from the scenario tags. Don't edit it by hand; `python -m evals index --check`
-fails when it has drifted, which is how a scenario added without a rebuild
-gets caught.*
-
-Every row is a tag, because a tag is what a run cites and tags are never
-moved. The prose under each one is its `evaluation/scenario.md`, withheld from
-the agent during a run and repeated here because this branch is not.
-"""
+def leaked_pages(seed: Path) -> list:
+    """Generated documentation found inside a materialized code state."""
+    found = []
+    for root in PAGE_ROOTS:
+        directory = seed / root
+        if directory.is_dir():
+            found += [str(path.relative_to(seed)).replace("\\", "/")
+                      for path in sorted(directory.rglob("*")) if path.is_file()]
+    return found
 
 
 def topic_branches(repo: Path) -> list:
@@ -139,64 +150,240 @@ def _gaps(repo: Path, rows: list) -> list:
     return gaps
 
 
-def render(repo: Path) -> str:
-    rows = collect(repo)
+INDEX_HEADER = """# Scenario catalogue
+
+*Generated — `python -m evals index` in the harness repo rewrites this
+directory from the scenario tags: this index, and one page per scenario under
+`<topic>/<id>.md`. Don't edit them by hand; `python -m evals index --check`
+fails when they have drifted, which is how a scenario added without a rebuild
+gets caught.*
+
+Every page is a tag, because a tag is what a run cites and tags are never
+moved. The prose on it is its `evaluation/scenario.md`, withheld from the agent
+during a run and repeated here because this branch is never materialized into a
+workdir. Start from the table, or walk a topic line from its first scenario to
+its last.
+"""
+
+
+def page_path(tag: str) -> str:
+    """Where a scenario's own page lives, mirroring the tag that names it."""
+    _, topic, scenario_id = tag.split("/", 2)
+    return f"{SCENARIOS_DIR}/{topic}/{scenario_id}.md"
+
+
+def topic_line(repo: Path, topic: str, tags: list) -> list:
+    """`tags`, ordered oldest commit first.
+
+    Each commit on a topic branch is the previous scenario's code with its fix
+    applied, so branch order is the order a reader should walk them in. Tag
+    order is alphabetical and says nothing about which came first.
+    """
+    try:
+        commits = scenario_mod._git(repo, "log", "--format=%H",
+                                    f"topic/{topic}").split()
+    except RuntimeError:
+        return tags                      # no branch to order against
+    rank = {commit: position for position, commit in enumerate(commits)}
+
+    def age(tag: str) -> int:
+        try:
+            commit = scenario_mod._git(repo, "rev-parse", f"{tag}^{{commit}}")
+        except RuntimeError:
+            return 0
+        return -rank.get(commit.strip(), 0)
+
+    return sorted(tags, key=age)
+
+
+def _link(source_tag: str, target_tag: str) -> str:
+    """Href from one scenario page to another, relative to its own directory."""
+    target = page_path(target_tag)
+    if source_tag.split("/")[1] == target_tag.split("/")[1]:
+        return target.rsplit("/", 1)[1]
+    return "../" + target.split("/", 2)[2]
+
+
+def _crosslink(text: str, source_tag: str, by_id: dict) -> str:
+    """A backticked scenario id in the prose becomes a link to its page.
+
+    Authors already refer to a sibling that way — "the same exception
+    `duration-notes` takes" — and in a single page that was as far as it went.
+    Split across pages it is the whole point of splitting them.
+    """
+    for scenario_id, tag in by_id.items():
+        if tag == source_tag:
+            continue
+        text = text.replace(f"`{scenario_id}`",
+                            f"[`{scenario_id}`]({_link(source_tag, tag)})")
+    return text
+
+
+def render_scenario(scenario, sections: dict, branches: list, line: list,
+                    by_id: dict) -> str:
+    """One scenario's page: its metadata, its prose, its tasks, its tests."""
+    tag = scenario.tag
+    position = line.index(tag) + 1 if tag in line else 1
+    nav = ["[← All scenarios](../README.md)"]
+    if len(line) < 2:
+        nav.append(f"the only scenario on **`topic/{scenario.topic}`**")
+    else:
+        nav.append(f"scenario {position} of {len(line)} on "
+                   f"**`topic/{scenario.topic}`**")
+        if position > 1:
+            previous = line[position - 2]
+            nav.append(f"previous: [`{previous.split('/')[2]}`]"
+                       f"({_link(tag, previous)})")
+        if position < len(line):
+            following = line[position]
+            nav.append(f"next: [`{following.split('/')[2]}`]"
+                       f"({_link(tag, following)})")
+
+    out = [f"# {tag.split('/')[2]}", "",
+           f"**{scenario.title}**", "",
+           f"> {_crosslink(_probe(sections, scenario), tag, by_id)}", "",
+           " · ".join(nav), "",
+           "| | |", "| --- | --- |",
+           f"| Tag | `{tag}` |",
+           f"| Branch | {', '.join(f'`{b}`' for b in branches) or '(unreferenced)'} |",
+           f"| Category | [{scenario.category}](../README.md#by-category) |",
+           f"| Level | [{scenario.difficulty}](../README.md#by-level) |",
+           f"| Tags | {', '.join(f'`{t}`' for t in scenario.tags) or '—'} |",
+           f"| Context mode | `{scenario.context_mode}` |",
+           f"| Timeout | {scenario.timeout_s} s |",
+           f"| Tests | {len(scenario.fail_to_pass)} `fail_to_pass` / "
+           f"{len(scenario.pass_to_pass)} `pass_to_pass` |",
+           f"| Tasks | {', '.join(f'`{t.id}`' for t in scenario.tasks) or '—'} |",
+           ""]
+
+    for heading, body in sections.items():
+        out += [f"## {heading.capitalize()}", "",
+                _crosslink(body, tag, by_id), ""]
+    if not sections:
+        out += ["*No `evaluation/scenario.md`. What this scenario probes is "
+                "recorded only in its withheld `criteria.md`.*", ""]
+
+    out += ["## Tasks", "",
+            "A run poses one of these against the seed. Everything else on "
+            "this page is withheld from the agent.", ""]
+    for task in scenario.tasks:
+        suites = ", ".join(f"`{s}`" for s in task.suite) or "—"
+        tags = ", ".join(f"`{t}`" for t in task.tags)
+        out += [f"### `{task.id}`", "",
+                f"*Suites: {suites}" + (f" · tags: {tags}" if tags else "") + "*",
+                "",
+                f"> {' '.join(task.prompt.split())}", ""]
+    if not scenario.tasks:
+        out += ["*None. Nothing can be posed against this scenario.*", ""]
+
+    out += ["## Verification", "",
+            "The tests below live in the withheld `evaluation/` directory, so "
+            "an attempt is scored against checks it could not read.", "",
+            f"**`fail_to_pass` ({len(scenario.fail_to_pass)})** — must fail "
+            "against the untouched seed and pass once the task is done.", ""]
+    out += [f"- `{t}`" for t in scenario.fail_to_pass] or [
+        "- *none — this scenario passes every run without measuring anything.*"]
+    out += ["", f"**`pass_to_pass` ({len(scenario.pass_to_pass)})** — already "
+            "green, and must stay green.", ""]
+    out += [f"- `{t}`" for t in scenario.pass_to_pass] or ["- *none*"]
+    if scenario.immutable:
+        out += ["", "**Immutable** — editing these is recorded as tampering "
+                "rather than scored as a result.", ""]
+        out += [f"- `{f}`" for f in scenario.immutable]
+
+    prose = " ".join(sections.values())
+    related = [t for t in by_id.values() if t != tag
+               and (f"`{t.split('/')[2]}`" in prose or t in line)]
+    if related:
+        out += ["", "## See also", ""]
+        for other in related:
+            why = ("same topic line" if other in line else "referred to above")
+            out.append(f"- [`{other.split('/')[2]}`]({_link(tag, other)}) — {why}")
+
+    out += ["", "[← All scenarios](../README.md) · "
+            "[what each version scored](../../results/README.md) · "
+            "[how the set is laid out](../../../README.md)", "",
+            "---", "",
+            f"*This page is the `evaluation/scenario.md` of `{tag}`, plus its "
+            "`scenario.yaml` and task files. A run never sees any of it.*", ""]
+    return "\n".join(out).rstrip() + "\n"
+
+
+def render(repo: Path, rows: list = None) -> str:
+    """The index: the whole set once as a table, then cut three other ways.
+
+    `rows` is the output of `collect`, passed in by `_pages` so that building
+    the whole directory reads the tags once rather than once per page.
+    """
+    rows = collect(repo) if rows is None else rows
     ok = [r for r in rows if r[1] is not None]
     topics = sorted({r[1].topic for r in ok})
+    by_id = {r[0].split("/")[2]: r[0] for r in ok}
 
-    out = [HEADER, "",
-           f"**{len(ok)} scenarios across {len(topics)} topics.**", "",
+    out = [INDEX_HEADER, "",
+           f"**{len(ok)} scenarios across {len(topics)} topics.** See also: "
+           "[what each agent version scored](../results/README.md) · "
+           "[how the set is laid out](../../README.md).", "",
            "## The set", "",
-           "| Scenario | Branch | Category | Level | Tasks | f2p / p2p | Probes |",
+           "| Scenario | Topic | Category | Level | Tasks | f2p / p2p | Probes |",
            "| --- | --- | --- | --- | --- | --- | --- |"]
     for tag, scenario, sections, branches, error in rows:
         if scenario is None:
             out.append(f"| `{tag}` | — | **malformed** | — | — | — | {error} |")
             continue
         tasks = ", ".join(f"`{t.id}`" for t in scenario.tasks) or "—"
+        page = page_path(tag).split("/", 2)[2]
         out.append(
-            f"| [`{tag}`](#{_anchor(tag)}) | {', '.join(branches) or '(unreferenced)'} "
+            f"| [`{tag.split('/')[2]}`]({page}) | `topic/{scenario.topic}` "
             f"| {scenario.category} | {scenario.difficulty} | {tasks} "
             f"| {len(scenario.fail_to_pass)} / {len(scenario.pass_to_pass)} "
             f"| {_probe(sections, scenario)} |")
 
+    def listing(matches: list) -> str:
+        return ", ".join(f"[`{r[0].split('/')[2]}`]"
+                         f"({page_path(r[0]).split('/', 2)[2]})"
+                         for r in matches) or "*nothing yet*"
+
+    out += ["", "## By category", "",
+            "The eight categories the set is meant to cover. An empty one is a "
+            "gap, not a category that does not apply.", ""]
+    for category in CATEGORIES:
+        out.append(f"- **{category}** — "
+                   + listing([r for r in ok if r[1].category == category]))
+
+    out += ["", "## By level", "",
+            "L0 checks the harness rather than the agent; L3 is a scenario a "
+            "strong session still loses.", ""]
+    for level in LEVELS:
+        out.append(f"- **{level}** — "
+                   + listing([r for r in ok if r[1].difficulty == level]))
+
+    out += ["", "## Topic lines", "",
+            "Each commit on a topic branch is a scenario, and each one is the "
+            "previous scenario's code with its fix applied — so a line with "
+            "more than one entry reads as a codebase evolving rather than as "
+            "unrelated trees. Oldest first.", ""]
+    for topic in topics:
+        tags = topic_line(repo, topic, [r[0] for r in ok if r[1].topic == topic])
+        out += [f"### `topic/{topic}`", ""]
+        for position, tag in enumerate(tags, 1):
+            scenario = next(r[1] for r in ok if r[0] == tag)
+            out.append(f"{position}. [`{tag.split('/')[2]}`]"
+                       f"({page_path(tag).split('/', 2)[2]}) — {scenario.title}")
+        out.append("")
+
     gaps = _gaps(repo, rows)
+    out += ["## Gaps", ""]
     if gaps:
-        out += ["", "## Gaps", "",
-                "What the set does not cover. This is the section to read "
+        out += ["What the set does not cover. This is the section to read "
                 "before authoring.", ""]
         out += [f"- {gap}" for gap in gaps]
-
-    out += ["", "## Scenarios", ""]
-    for tag, scenario, sections, branches, _ in rows:
-        if scenario is None:
-            continue
-        out += [f"### {tag}", "",
-                f"**{scenario.title}**", "",
-                f"*{scenario.category} · {scenario.difficulty} · "
-                f"{', '.join(scenario.tags) or 'no tags'} · "
-                f"branch {', '.join(branches) or '(unreferenced)'} · "
-                f"timeout {scenario.timeout_s}s*", ""]
-        for heading, body in sections.items():
-            out += [f"**{heading.capitalize()}**", "", body, ""]
-        if not sections:
-            out += ["*No `evaluation/scenario.md`. What this scenario probes is "
-                    "recorded only in its withheld `criteria.md`.*", ""]
-        out += ["Tasks:", ""]
-        for task in scenario.tasks:
-            prompt = " ".join(task.prompt.split())
-            out.append(f"- **`{task.id}`** — suites {task.suite or '[]'}. "
-                       f"{prompt[:200]}{'…' if len(prompt) > 200 else ''}")
-        out += ["",
-                f"Verified by {len(scenario.fail_to_pass)} `fail_to_pass` and "
-                f"{len(scenario.pass_to_pass)} `pass_to_pass` tests"
-                + (f"; immutable: {', '.join(f'`{f}`' for f in scenario.immutable)}"
-                   if scenario.immutable else "") + ".", ""]
+    else:
+        out += ["Every category and level has at least one scenario, every "
+                "topic branch carries a tag, every scenario has a page and a "
+                "non-empty `fail_to_pass`. Adding a scenario means deepening a "
+                "category, not filling a hole.", ""]
     return "\n".join(out).rstrip() + "\n"
-
-
-def _anchor(tag: str) -> str:
-    return tag.replace("/", "").replace(".", "")
 
 
 # --- results -------------------------------------------------------------
@@ -239,7 +426,20 @@ def _mean(rows: list, key: str) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
-def render_results(results_dir: Path) -> str:
+def _scenario_link(scenario_id: str, pages: dict) -> str:
+    """A results row's scenario id, linked to its page in the catalogue.
+
+    `pages` maps id to page path; a run citing a scenario that no longer has a
+    tag stays plain text rather than becoming a dead link.
+    """
+    page = pages.get(scenario_id)
+    if not page:
+        return f"`{scenario_id}`"
+    return f"[`{scenario_id}`](../{page.split('/', 1)[1]})"
+
+
+def render_results(results_dir: Path, pages: dict = None) -> str:
+    pages = pages or {}
     records = run_mod.load_records(results_dir) if results_dir.is_dir() else []
     out = [RESULTS_HEADER, ""]
     if not records:
@@ -288,8 +488,9 @@ def render_results(results_dir: Path) -> str:
     for (scenario, task), group in sorted(by_scenario.items()):
         passed = sum(1 for r in group if r.get("outcome") == "pass")
         seen = len({(r.get("config"), (r.get("config_sha") or "")[:8]) for r in group})
-        out.append(f"| `{scenario}` / `{task}` | {len(group)} | {passed}/{len(group)} "
-                   f"| {seen} | {_mean(group, 'tokens_in'):,.0f} |")
+        out.append(f"| {_scenario_link(scenario, pages)} / `{task}` | {len(group)} "
+                   f"| {passed}/{len(group)} | {seen} "
+                   f"| {_mean(group, 'tokens_in'):,.0f} |")
 
     out += ["", "## Every run", "",
             "Chronological. The evidence for each is in "
@@ -298,7 +499,8 @@ def render_results(results_dir: Path) -> str:
             "| --- | --- | --- | --- | --- | --- |"]
     for record in sorted(records, key=lambda r: r.get("run_id", "")):
         out.append(
-            f"| `{record.get('run_id')}` | `{record.get('scenario')}` / "
+            f"| `{record.get('run_id')}` "
+            f"| {_scenario_link(record.get('scenario'), pages)} / "
             f"`{record.get('task')}` | `{record.get('config')}` @ "
             f"`{(record.get('config_sha') or '')[:8]}` | {record.get('outcome')} "
             f"| {record.get('failure_class') or '—'} "
@@ -309,25 +511,66 @@ def render_results(results_dir: Path) -> str:
 # --- writing -------------------------------------------------------------
 
 def _pages(repo: Path, results_dir: Path) -> dict:
-    return {SCENARIOS_INDEX: render(repo),
-            RESULTS_INDEX: render_results(results_dir)}
+    """Every generated page: the two indexes, and one page per scenario."""
+    rows = collect(repo)
+    by_id = {r[0].split("/")[2]: r[0] for r in rows if r[1] is not None}
+    lines = {}
+    scenario_pages = {tag.split("/")[2]: page_path(tag)
+                      for tag, scenario, *_ in rows if scenario is not None}
+    pages = {SCENARIOS_INDEX: render(repo, rows),
+             RESULTS_INDEX: render_results(results_dir, scenario_pages)}
+    for tag, scenario, sections, branches, _ in rows:
+        if scenario is None:
+            continue                     # named in the index; has nothing to say
+        if scenario.topic not in lines:
+            lines[scenario.topic] = topic_line(
+                repo, scenario.topic,
+                [r[0] for r in rows
+                 if r[1] is not None and r[1].topic == scenario.topic])
+        pages[page_path(tag)] = render_scenario(
+            scenario, sections, branches, lines[scenario.topic], by_id)
+    return pages
+
+
+def _orphans(repo: Path, pages: dict) -> list:
+    """Pages under the catalogue that no scenario claims any more.
+
+    A moved or renamed tag would otherwise leave its page sitting there being
+    read, which is the failure mode a generated catalogue exists to prevent.
+    """
+    directory = repo / SCENARIOS_DIR
+    if not directory.is_dir():
+        return []
+    return sorted(str(path.relative_to(repo)).replace("\\", "/")
+                  for path in directory.rglob("*.md")
+                  if str(path.relative_to(repo)).replace("\\", "/") not in pages)
 
 
 def write(repo: Path, results_dir: Path) -> list:
     written = []
-    for relative, text in _pages(repo, results_dir).items():
+    pages = _pages(repo, results_dir)
+    for relative, text in pages.items():
         path = repo / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        # Explicit LF: the scenario repo is read on more than one platform,
+        # and a page rewritten with CRLF is a whole-file diff saying nothing.
+        path.write_text(text, encoding="utf-8", newline="\n")
         written.append(path)
+    for relative in _orphans(repo, pages):
+        (repo / relative).unlink()
+        print(f"Removed {relative} (no scenario claims it)")
+    for topic in sorted((repo / SCENARIOS_DIR).glob("*")):
+        if topic.is_dir() and not any(topic.iterdir()):
+            topic.rmdir()
     return written
 
 
 def check(repo: Path, results_dir: Path) -> list:
     """The pages that have drifted. Empty when master is up to date."""
+    pages = _pages(repo, results_dir)
     stale = []
-    for relative, text in _pages(repo, results_dir).items():
+    for relative, text in pages.items():
         path = repo / relative
         if not path.is_file() or path.read_text(encoding="utf-8") != text:
             stale.append(relative)
-    return stale
+    return stale + _orphans(repo, pages)

@@ -222,9 +222,9 @@ anywhere near `docs/` — that is visible seed content in three scenarios, and i
 `count-and-share` `docs/ledger.md` *is* the trap.
 
 **5.2 A generated catalogue on the scenario repo's `master`.** `python -m evals
-index` renders `docs/scenarios/README.md` from the tags: every scenario, its
-branch, category, level, tasks, test counts, and its page. `--check` fails when
-it has drifted. The hand-kept table it replaces was already wrong —
+index` renders `docs/scenarios/` from the tags — an index plus one page per
+scenario at `<topic>/<id>.md`, each with its branch, category, level, tasks,
+test counts, and its page. `--check` fails when any of them has drifted. The hand-kept table it replaces was already wrong —
 `topic/pipeline` had existed as a branch with no scenarios and no row, which is
 what a hand-kept index of a growing set does. The catalogue's **Gaps** section is
 the part that earns it: uncovered categories and levels, tagless topic branches,
@@ -232,9 +232,11 @@ scenarios with no page, and scenarios with an empty `fail_to_pass`.
 
 This is the one thing that ever writes to the scenario repo, and it writes on a
 branch no run materializes — which is what lets it repeat the withheld material.
-`validate` now refuses a scenario whose tree contains that path, so the day
-someone roots a topic branch on a commit carrying the catalogue, the run stops
-instead of quietly handing the answers over.
+`validate` now refuses a scenario whose tree contains anything under
+`docs/scenarios/` or `docs/results/`, so the day someone roots a topic branch on
+a commit carrying the catalogue, the run stops instead of quietly handing the
+answers over. The check is on the directories rather than on two filenames: a
+single scenario's page gives that scenario away whole.
 
 **5.3 An empty test set is a validation failure.** A `scenario.yaml` with
 `fail_to_pass` misspelled defaults to `[]`, and then reads clean through every
