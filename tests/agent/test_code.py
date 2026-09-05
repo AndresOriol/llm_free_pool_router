@@ -46,6 +46,47 @@ def test_prompt_roots_paths_at_the_jail():
     assert "C:\\Users\\..." in text
 
 
+def test_prompt_forbids_editing_the_thing_that_contradicts_the_task(monkeypatch):
+    """The one behaviour the guard exists to stop.
+
+    A run in the first full-set batch was told to write a field onto objects the
+    documentation says are never modified. It mutated them, replaced the test
+    guarding the invariant with one asserting the opposite, and deleted the
+    guarantee from the page.
+    """
+    monkeypatch.delenv("AGENT_INVARIANT_GUARD", raising=False)
+    text = prompt.build(128_000)
+    assert "## Contradicted Requests" in text
+    assert "Never edit a test or a document so that it stops contradicting you" in text
+
+
+def test_the_guard_overrides_the_ambiguity_guidance_explicitly(monkeypatch):
+    """Both are in the prompt and they point opposite ways on this case.
+
+    A headless run is told to pick a reading and proceed, which is right for
+    ambiguity and is the wrong instruction in front of a stated guarantee. The
+    section has to say which one wins, or it is one more thing to weigh.
+    """
+    monkeypatch.delenv("AGENT_INVARIANT_GUARD", raising=False)
+    text = prompt.build(128_000)
+    assert 'overrides "make reasonable assumptions and proceed"' in text
+    assert "make reasonable assumptions and proceed" in text.split(
+        "## Contradicted Requests")[0]
+
+
+def test_the_guard_is_a_configuration_that_can_be_turned_off(monkeypatch):
+    """Per CLAUDE.md a prompt change is a branch measured against a baseline.
+
+    `AGENT_INVARIANT_GUARD=0` is the other arm, the same arrangement AGENT_PEERS
+    uses -- and the placeholder still has to be gone, or turning it off ships
+    literal braces to the model.
+    """
+    monkeypatch.setenv("AGENT_INVARIANT_GUARD", "0")
+    text = prompt.build(128_000)
+    assert "Contradicted Requests" not in text
+    assert not re.findall(r"\{[a-z_]+\}", text)
+
+
 def test_shell_allows_an_allowlisted_program():
     middleware = ShellAllowListMiddleware(["python", "pytest"])
     assert _refuse(middleware, "python -m pytest -q") is None
