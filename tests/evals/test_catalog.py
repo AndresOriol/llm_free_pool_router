@@ -366,3 +366,11 @@ def test_the_account_column_counts_only_scenarios_that_ship_notes(tmp_path):
     text = catalog.render_results(results)
 
     assert "| 1/2 |" in text
+
+
+def test_unprompted_tests_are_reported(tmp_path):
+    """27 of 40 recorded runs did this; the harness could only call it tampering."""
+    results = tmp_path / "results"
+    _record(results, "a", added_tests=3)
+    _record(results, "b", added_tests=1)
+    assert "| 4 |" in catalog.render_results(results)

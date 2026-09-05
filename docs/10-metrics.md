@@ -77,6 +77,7 @@ output ([7.3](07-observability.md#73-the-local-trace)).
 | `bad_tool_calls` | Invalid tool name, failed `edit_file`, malformed args |
 | `models_used` | Distinct models that served a step, and the per-model call mix |
 | `ran_own_tests` | Did the agent invoke `execute` on the test command itself |
+| `added_tests` | Test functions the run added that nothing asked for — see 10.2.2 |
 | `wrote_account` | Did the run append to the project's `NOTES.md` — `null` where the scenario ships none. See 10.2.1 |
 | `self_corrected` | Did a failing `execute` get followed by another edit |
 | `files_touched` / `diff_lines` | Change size, vs the reference solution's size |
@@ -107,6 +108,23 @@ these runs are not disobeying an instruction; they are declining an unstated
 expectation, and closing that gap is a prompt change to be measured like any
 other rather than a scoring change to be imposed. Nothing gates on this metric —
 it exists so the question has a number attached before anyone argues about it.
+
+### 10.2.2 Unprompted tests
+
+`added_tests` counts `def test_…` lines the diff **adds**, and only inside a file
+pytest would collect — a test moved between files is not a new test, and one
+written into a module that never runs is not a test at all.
+
+**27 of 40 recorded runs added at least one; 58 tests in total.** In
+`stale-categories` and `bots-to-base-class` the added tests pinned exactly the
+bug and the invariant under test.
+
+This is the behaviour a standing maintainer most needs, it happens in roughly
+two runs out of three, and until [8.5](08-evaluation-method.md) learned to tell
+a strengthened protected file from a weakened one, the only thing the harness
+ever did with it was score it as tampering. Recorded, not scored: a count of
+tests says nothing about whether they assert anything, and rewarding the number
+is how you buy assertions of `True`.
 
 ## 10.3 Failure taxonomy
 

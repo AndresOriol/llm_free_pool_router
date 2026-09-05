@@ -539,8 +539,9 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             "## Agent versions", "",
             "| Configuration | commit | runs | solved | 95% interval | integrity "
             "| `tokens_in` mean | tok/call | calls | bounces | account "
-            "| failure classes |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "| +tests | failure classes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+            "| --- | --- |"]
     for (name, sha), group in sorted(versions.items()):
         passed = _solved(group)
         low, high = _wilson(passed, len(group))
@@ -556,6 +557,7 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             f"| {_mean(group, 'provider_calls'):.1f} "
             f"| {_mean(group, 'failover_bounces'):.1f} "
             f"| {_account(group)} "
+            f"| {sum(r.get('added_tests') or 0 for r in group)} "
             f"| {', '.join(f'{k}={v}' for k, v in sorted(classes.items())) or '—'} |")
 
     out += ["",
@@ -579,7 +581,9 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             "[R7](../../docs/design/long-run-harness.md) calls that file \"the "
             "whole human interface\", and it is the only part of an account "
             "that can be checked without reading it. Nothing gates on this "
-            "yet — it is here to establish a baseline.",
+            "yet — it is here to establish a baseline. **+tests** is test "
+            "functions the runs added that nothing asked for, which until "
+            "recently the harness could only score as tampering.",
             "",
             "A mean marked *untraced* was taken over fewer runs than the row "
             "counts. A run whose `trace.jsonl` never arrived records zero for "

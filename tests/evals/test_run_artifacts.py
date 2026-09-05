@@ -116,3 +116,46 @@ def test_deleting_the_notes_is_not_writing_an_account(tmp_path):
                 "--- a/NOTES.md\n+++ /dev/null\n@@ -1,2 +0,0 @@\n"
                 "-# Notes\n-Working journal.\n")
     assert metrics.account_written(deletion) is False
+
+
+TEST_DIFF = """diff --git a/tests/test_bots.py b/tests/test_bots.py
+--- a/tests/test_bots.py
++++ b/tests/test_bots.py
+@@ -10,3 +10,8 @@ def test_existing():
+     assert True
++
++
++def test_cautious_tie_break_high():
++    assert engine.play("cautious", FLAT, 1) == [(2, 3)]
+diff --git a/bots/engine.py b/bots/engine.py
+--- a/bots/engine.py
++++ b/bots/engine.py
+@@ -1,2 +1,3 @@
+ def play(name):
++    # def test_not_really(): this is a comment, not a test
+     return name
+"""
+
+
+def test_an_added_test_is_counted(tmp_path):
+    """The behaviour a standing maintainer most needs, previously only penalised."""
+    from evals import metrics
+
+    assert metrics.added_tests(TEST_DIFF) == 1
+
+
+def test_a_def_outside_a_test_file_is_not_a_test(tmp_path):
+    """`bots/engine.py` is not collected, so nothing in it can be a new test."""
+    from evals import metrics
+
+    module_only = TEST_DIFF.split("diff --git a/bots")[1]
+    assert metrics.added_tests("diff --git a/bots" + module_only) == 0
+
+
+def test_removing_a_test_does_not_count_as_adding_one(tmp_path):
+    from evals import metrics
+
+    removal = ("diff --git a/tests/test_bots.py b/tests/test_bots.py\n"
+               "--- a/tests/test_bots.py\n+++ b/tests/test_bots.py\n@@ -1,4 +1,1 @@\n"
+               "-def test_gone():\n-    assert True\n")
+    assert metrics.added_tests(removal) == 0
