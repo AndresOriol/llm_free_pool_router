@@ -191,6 +191,16 @@ def from_trace(events: list) -> dict:
         "bounces_per_call": round(
             sum(1 for e in events if e.get("event") == "llm_error")
             / len(provider_starts), 2) if provider_starts else 0.0,
+        # No edit tool was ever called. The mechanical half of a failure the
+        # harness cannot fully see: three recorded runs finished with an empty
+        # tree and a closing message reporting the work as done -- "were
+        # implemented", "has been fully implemented and tested", a heading
+        # reading *Implemented Requirements* over three fields that do not
+        # exist. Whether the prose claims completion needs a reader; whether
+        # anything was edited does not, and it is the half that can be trusted.
+        "edited_nothing": not any(
+            e.get("event") == "tool_start" and e.get("tool") in EDIT_TOOLS
+            for e in events),
         "bounce_models": bounce_breakdown(events)[0],
         # Members the pool dropped mid-run because they are gone upstream. A
         # retirement is correct behaviour and costs nothing measurable, which is
