@@ -111,6 +111,18 @@ a workdir's `CLAUDE.md` as its system prompt
 both modes measures how much the harness depends on curated context — worth
 knowing before investing in more of it.
 
+### 9.6.0 Where a scenario comes from
+
+A scenario invented to be testable tests what is easy to grade. Every scenario
+added since the generative batch is drawn from a request someone actually made,
+recovered from the recorded sessions with `python -m evals mine --out <dir>` —
+120 of them, 12,047 tool calls, each human turn beside the files it produced.
+
+The extractor interprets nothing: it turns an append-only log into a turn list
+so that reading a hundred sessions is a grep. The judgement — which shapes recur
+and which are worth a scenario — is a table a human maintains, in
+[evals/ARCHETYPES.md](../evals/ARCHETYPES.md).
+
 ### 9.6.1 `immutable` or `doc_invariants`?
 
 They protect different things and are not interchangeable.

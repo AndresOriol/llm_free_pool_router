@@ -5,6 +5,7 @@
     run --config NAME [...]                   execute runs and record them
     show [--config NAME]                      summarize recorded runs
     bundle [--config NAME] [--out FILE]       collect a batch's evidence for J2
+    mine --out DIR [--sessions DIR]           recorded sessions -> scenario material
 
 Scenarios are data and live in a separate repo (default: the `agent_evals`
 sibling of this one); point elsewhere with --scenarios or EVAL_SCENARIOS.
@@ -18,7 +19,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from evals import (agent_config, bundle as bundle_mod, catalog as catalog_mod,
-                   run as run_mod, scenario as scenario_mod, verify as verify_mod)
+                   mine as mine_mod, run as run_mod, scenario as scenario_mod,
+                   verify as verify_mod)
 
 REPO = Path(__file__).resolve().parents[1]
 CONFIGS = REPO / "evals" / "configs"
@@ -175,6 +177,28 @@ def cmd_show(args) -> int:
     return 0
 
 
+def cmd_mine(args) -> int:
+    """Recorded Claude Code sessions into a corpus a scenario can be drawn from."""
+    sessions = Path(args.sessions or mine_mod.DEFAULT_SESSIONS)
+    if not sessions.is_dir():
+        sys.exit(f"No session store at {sessions}. Pass --sessions.")
+    out = Path(args.out).resolve()
+    index = mine_mod.mine(sessions, out)
+    if not index:
+        sys.exit(f"No sessions found under {sessions}.")
+
+    by_project = defaultdict(int)
+    for row in index:
+        by_project[row["project"]] += 1
+    print(f"{len(index)} session(s) across {len(by_project)} project(s) -> {out}")
+    for name, count in sorted(by_project.items(), key=lambda kv: -kv[1]):
+        print(f"  {count:4}  {name}")
+    print(f"{sum(r['tool_calls'] for r in index):,} tool calls, "
+          f"{sum(r['human_turns'] for r in index):,} human turns. "
+          f"Read evals/ARCHETYPES.md next.")
+    return 0
+
+
 def cmd_bundle(args) -> int:
     rows = run_mod.load_records(Path(args.results))
     if args.config:
@@ -225,6 +249,12 @@ def main() -> int:
     # no leaderboard.
     run.add_argument("--results", default=str(RESULTS))
     run.set_defaults(func=cmd_run)
+
+    mine = sub.add_parser("mine", help="recorded sessions -> scenario material")
+    mine.add_argument("--out", required=True, help="directory to write the corpus into")
+    mine.add_argument("--sessions", default="",
+                      help=f"session store (default: {mine_mod.DEFAULT_SESSIONS})")
+    mine.set_defaults(func=cmd_mine)
 
     show = sub.add_parser("show", help="summarize recorded runs")
     show.add_argument("--config", action="append")

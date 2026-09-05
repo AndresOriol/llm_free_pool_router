@@ -64,6 +64,15 @@ prompt that produced this commit" is a scenario factory, and this repo will have
 the raw material for it once sessions are logged beside their diffs. That is a
 roadmap item, not a next step.
 
+**It stopped being a roadmap item.** The raw material was already there —
+Claude Code keeps an append-only JSONL per session — and `python -m evals mine`
+reads it into a corpus: 120 sessions, 12,047 tool calls, the human turns in
+order with the files each one wrote. Five of the scenarios in the set came out
+of it. The seven request shapes it surfaced, and the two not yet built, are in
+[evals/ARCHETYPES.md](../../evals/ARCHETYPES.md); the strongest unbuilt one is
+*fix the reported case, then find its siblings*, which splits two behaviours the
+current set scores identically.
+
 Three numbers from elsewhere shape every decision below:
 
 - **Hiding the tests is worth about 19 points.** NL2Repo-Bench ran the ablation:

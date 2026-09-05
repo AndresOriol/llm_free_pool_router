@@ -437,3 +437,57 @@ def test_a_run_that_says_it_has_no_trace_is_not_averaged_in(tmp_path):
     text = catalog.render_results(results)
 
     assert "100,000 (1 untraced)" in text
+
+
+# --- session mining -------------------------------------------------------
+
+SESSION_LOG = """{"type":"user","timestamp":"2026-08-01T10:00:00Z","gitBranch":"topic/x","cwd":"/proj","message":{"content":"widen the suite"}}
+{"type":"assistant","timestamp":"2026-08-01T10:00:05Z","message":{"model":"claude-x","content":[{"type":"text","text":"on it"},{"type":"tool_use","name":"Edit","id":"t1","input":{"file_path":"tests/test_a.py"}}]}}
+{"type":"assistant","timestamp":"2026-08-01T10:00:09Z","message":{"model":"claude-x","content":[{"type":"tool_use","name":"Bash","id":"t2","input":{"command":"python -m pytest"}}]}}
+{"truncated line
+"""
+
+
+def test_a_session_becomes_a_turn_list(tmp_path):
+    """The corpus is the scenario factory: what was asked, beside what it became."""
+    from evals import mine
+
+    store = tmp_path / "projects" / "proj"
+    store.mkdir(parents=True)
+    (store / "abc.jsonl").write_text(SESSION_LOG, encoding="utf-8")
+
+    index = mine.mine(tmp_path / "projects", tmp_path / "out")
+
+    assert len(index) == 1
+    assert index[0]["first_prompt"] == "widen the suite"
+    assert index[0]["tool_calls"] == 2
+    assert index[0]["branches"] == ["topic/x"]
+    assert index[0]["top_files"] == ["tests/test_a.py"]
+
+
+def test_a_half_written_final_line_is_skipped(tmp_path):
+    """The log is appended to while the session runs, so the tail is routinely
+    half-written -- a session that is still open, or one that died."""
+    from evals import mine
+
+    store = tmp_path / "projects" / "proj"
+    store.mkdir(parents=True)
+    (store / "abc.jsonl").write_text(SESSION_LOG, encoding="utf-8")
+
+    records = list(mine.read_jsonl(store / "abc.jsonl"))
+    assert len(records) == 3
+
+
+def test_the_corpus_separates_edits_from_commands(tmp_path):
+    from evals import mine
+
+    turns = [
+        {"role": "tool", "name": "Edit", "input": {"file_path": "a.py"}},
+        {"role": "tool", "name": "Edit", "input": {"file_path": "a.py"}},
+        {"role": "tool", "name": "Bash", "input": {"command": "pytest"}},
+        {"role": "human", "text": "not a tool call"},
+    ]
+    files, commands = mine.work_done(turns)
+
+    assert files.most_common() == [("a.py", 2)]
+    assert commands == ["pytest"]
