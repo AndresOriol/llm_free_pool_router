@@ -139,18 +139,35 @@ def cmd_show(args) -> int:
     for row in rows:
         grouped[row["config"]].append(row)
 
-    print(f"{'config':<20}{'runs':>6}{'pass':>7}{'rate':>8}"
-          f"{'calls':>8}{'bounces':>9}  failure classes")
+    # Two columns, not one. `solved` counts `verified` -- every fail_to_pass
+    # flipped and every pass_to_pass held -- and `weak` counts the runs that got
+    # there by weakening something they were told not to touch. They do not
+    # share a scale, so nothing here adds them up.
+    print(f"{'config':<20}{'runs':>6}{'traced':>8}{'solved':>8}{'rate':>8}"
+          f"{'weak':>6}{'ext':>5}{'calls':>8}{'bounces':>9}  failure classes")
     for name, group in sorted(grouped.items()):
-        passed = sum(1 for r in group if r["outcome"] == "pass")
+        solved = sum(1 for r in group if r.get("verified"))
+        # `extended_files` is absent from anything the previous integrity
+        # oracle scored, so its absence says which evaluator produced the
+        # verdict. Those runs counted an added test as tampering; leaving them
+        # in the weak column would carry that mistake forward.
+        current = [r for r in group if "extended_files" in r]
+        weak = sum(1 for r in current if r.get("tampered_files"))
+        extended = sum(1 for r in current if r.get("extended_files"))
         classes = defaultdict(int)
         for row in group:
             if row.get("failure_class"):
                 classes[row["failure_class"]] += 1
         summary = ", ".join(f"{k}={v}" for k, v in sorted(classes.items())) or "-"
-        print(f"{name:<20}{len(group):>6}{passed:>7}{passed / len(group):>8.0%}"
-              f"{_mean(group, 'provider_calls'):>8.1f}"
-              f"{_mean(group, 'failover_bounces'):>9.1f}  {summary}")
+        # `calls` and `bounces` are means over the traced runs only, so the
+        # two counts have to be visible side by side: a version whose trace
+        # never arrived reports zero cost, not no cost.
+        print(f"{name:<20}{len(group):>6}"
+              f"{len(catalog_mod._traced(group)):>8}"
+              f"{solved:>8}{solved / len(group):>8.0%}"
+              f"{weak:>6}{extended:>5}"
+              f"{catalog_mod._mean(group, 'provider_calls'):>8.1f}"
+              f"{catalog_mod._mean(group, 'failover_bounces'):>9.1f}  {summary}")
     return 0
 
 
@@ -170,11 +187,6 @@ def cmd_bundle(args) -> int:
     else:
         print(text)
     return 0
-
-
-def _mean(rows: list, key: str) -> float:
-    values = [r.get(key) or 0 for r in rows]
-    return sum(values) / len(values) if values else 0.0
 
 
 def main() -> int:

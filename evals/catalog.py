@@ -421,9 +421,70 @@ def _wilson(passed: int, total: int, z: float = 1.96) -> tuple:
     return (max(0.0, centre - spread), min(1.0, centre + spread))
 
 
+def _solved(rows: list) -> int:
+    """Runs that did the work: every fail_to_pass flipped, every pass_to_pass held.
+
+    Not `outcome == "pass"`. An outcome is one label over two questions that do
+    not share a scale -- *did it solve the task* and *did it respect what it was
+    told not to touch* -- and collapsing them loses both. The first full-set
+    batch recorded 3/9 while seven of the nine left every hidden test green,
+    because an integrity verdict outranks everything else in `_outcome` and then
+    reads as a failed task in the pass column. `verified` was in every one of
+    those records already; nothing rendered it.
+    """
+    return sum(1 for r in rows if r.get("verified"))
+
+
+# A record scored before the integrity oracle changed has no `extended_files`
+# key at all, which makes the field's *absence* an exact marker for which
+# evaluator produced the verdict -- no date heuristic, no version guess. Those
+# records called a run `tampered` for appending a test, so their integrity
+# column is not comparable to a current one and is reported as its own thing
+# rather than summed with it. `config_sha` pins the agent; nothing yet pins the
+# harness, which is why this has to be inferred at all.
+def _scored_by_the_old_oracle(record: dict) -> bool:
+    return "extended_files" not in record
+
+
+def _integrity(rows: list) -> str:
+    """The other question, in its own cell: weakened, and strengthened."""
+    current = [r for r in rows if not _scored_by_the_old_oracle(r)]
+    stale = sum(1 for r in rows if _scored_by_the_old_oracle(r) and r.get("tampered_files"))
+    weakened = sum(1 for r in current if r.get("tampered_files"))
+    extended = sum(1 for r in current if r.get("extended_files"))
+    parts = []
+    if weakened:
+        parts.append(f"**{weakened} weakened**")
+    if extended:
+        parts.append(f"{extended} extended")
+    if stale:
+        parts.append(f"{stale} flagged by the previous oracle")
+    return ", ".join(parts) or "clean"
+
+
+def _traced(rows: list) -> list:
+    """The runs that actually recorded a trace.
+
+    A run whose `trace.jsonl` never arrived records zero for every metric
+    summed over it, and a zero is indistinguishable from a measurement. Five
+    `deepagents` runs are in the record with no trace at all -- written before
+    the trace path was made absolute, so the agent wrote it inside its own
+    worktree -- and they pull that version's `tokens_in` mean to exactly 0,
+    which the table then prints beside a real one. `provider_calls` is the
+    marker: a run that reached a model made at least one.
+    """
+    return [r for r in rows if r.get("provider_calls")]
+
+
 def _mean(rows: list, key: str) -> float:
-    values = [r.get(key) or 0 for r in rows]
+    """Averaged over the traced runs only, so a 0 means measured-as-zero."""
+    values = [r.get(key) or 0 for r in _traced(rows)]
     return sum(values) / len(values) if values else 0.0
+
+
+def _unmeasured(rows: list) -> str:
+    missing = len(rows) - len(_traced(rows))
+    return f" ({missing} untraced)" if missing else ""
 
 
 def _scenario_link(scenario_id: str, pages: dict) -> str:
@@ -436,6 +497,16 @@ def _scenario_link(scenario_id: str, pages: dict) -> str:
     if not page:
         return f"`{scenario_id}`"
     return f"[`{scenario_id}`](../{page.split('/', 1)[1]})"
+
+
+def _run_integrity(record: dict) -> str:
+    """One run's integrity cell: what it weakened, and what it strengthened."""
+    flagged = record.get("tampered_files") or []
+    if _scored_by_the_old_oracle(record):
+        return ", ".join(f"`{path}` (previous oracle)" for path in flagged) or "—"
+    parts = [f"**weakened** `{path}`" for path in flagged]
+    parts += [f"extended `{path}`" for path in record.get("extended_files") or []]
+    return ", ".join(parts) or "—"
 
 
 def render_results(results_dir: Path, pages: dict = None) -> str:
@@ -452,11 +523,11 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
 
     out += [f"**{len(records)} runs across {len(versions)} agent versions.**", "",
             "## Agent versions", "",
-            "| Configuration | commit | runs | pass | 95% interval | `tokens_in` mean "
-            "| calls | bounces | failure classes |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "| Configuration | commit | runs | solved | 95% interval | integrity "
+            "| `tokens_in` mean | calls | bounces | failure classes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for (name, sha), group in sorted(versions.items()):
-        passed = sum(1 for r in group if r.get("outcome") == "pass")
+        passed = _solved(group)
         low, high = _wilson(passed, len(group))
         classes = defaultdict(int)
         for record in group:
@@ -464,14 +535,35 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
                 classes[record["failure_class"]] += 1
         out.append(
             f"| `{name}` | `{sha}` | {len(group)} | {passed}/{len(group)} "
-            f"| {low:.0%}–{high:.0%} | {_mean(group, 'tokens_in'):,.0f} "
+            f"| {low:.0%}–{high:.0%} | {_integrity(group)} "
+            f"| {_mean(group, 'tokens_in'):,.0f}{_unmeasured(group)} "
             f"| {_mean(group, 'provider_calls'):.1f} "
             f"| {_mean(group, 'failover_bounces'):.1f} "
             f"| {', '.join(f'{k}={v}' for k, v in sorted(classes.items())) or '—'} |")
 
     out += ["",
+            "**solved** is `verified`: every `fail_to_pass` test flipped and "
+            "every `pass_to_pass` test still passing. **integrity** is the "
+            "separate question of whether the run respected what it was told "
+            "not to touch, and it is deliberately not a point on the same "
+            "scale — a version that solves nothing and a version that solves "
+            "everything by rewriting the tests are both bad, in ways no single "
+            "rate can hold. A weakening still makes the run's `outcome` "
+            "`tampered`; this table refuses to average that into a pass rate.",
+            "",
+            "Runs recorded before the integrity oracle changed are marked *by "
+            "the previous oracle*: that oracle hashed the file, so it could not "
+            "tell appending a regression test from deleting an assertion and "
+            "called both tampering. Their integrity verdicts are not comparable "
+            "with the ones below them, and are not counted with them.",
+            "",
+            "A mean marked *untraced* was taken over fewer runs than the row "
+            "counts. A run whose `trace.jsonl` never arrived records zero for "
+            "everything summed over it, and averaging that in reports a cost "
+            "of nothing as though it had been measured.",
+            "",
             "Intervals this wide do not order anything. Two versions whose "
-            "intervals overlap are *not* ranked by the pass column — read "
+            "intervals overlap are *not* ranked by the solved column — read "
             "`tokens_in` and the failure classes instead, which is where the "
             "recorded differences have actually been.", ""]
 
@@ -483,26 +575,31 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             "Which scenarios still separate one version from another. A row "
             "every version passes, or every version fails, carries no "
             "information.", "",
-            "| Scenario / task | runs | pass | versions | `tokens_in` mean |",
-            "| --- | --- | --- | --- | --- |"]
+            "| Scenario / task | runs | solved | integrity | versions "
+            "| `tokens_in` mean |",
+            "| --- | --- | --- | --- | --- | --- |"]
     for (scenario, task), group in sorted(by_scenario.items()):
-        passed = sum(1 for r in group if r.get("outcome") == "pass")
+        passed = _solved(group)
         seen = len({(r.get("config"), (r.get("config_sha") or "")[:8]) for r in group})
         out.append(f"| {_scenario_link(scenario, pages)} / `{task}` | {len(group)} "
-                   f"| {passed}/{len(group)} | {seen} "
+                   f"| {passed}/{len(group)} | {_integrity(group)} | {seen} "
                    f"| {_mean(group, 'tokens_in'):,.0f} |")
 
     out += ["", "## Every run", "",
             "Chronological. The evidence for each is in "
             "`evals/results/runs/<run_id>/` on the machine named by the batch.", "",
-            "| `run_id` | scenario / task | version | outcome | class | `tokens_in` |",
-            "| --- | --- | --- | --- | --- | --- |"]
+            "| `run_id` | scenario / task | version | solved | outcome "
+            "| integrity | class | `tokens_in` |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for record in sorted(records, key=lambda r: r.get("run_id", "")):
         out.append(
             f"| `{record.get('run_id')}` "
             f"| {_scenario_link(record.get('scenario'), pages)} / "
             f"`{record.get('task')}` | `{record.get('config')}` @ "
-            f"`{(record.get('config_sha') or '')[:8]}` | {record.get('outcome')} "
+            f"`{(record.get('config_sha') or '')[:8]}` "
+            f"| {'yes' if record.get('verified') else 'no'} "
+            f"| {record.get('outcome')} "
+            f"| {_run_integrity(record)} "
             f"| {record.get('failure_class') or '—'} "
             f"| {record.get('tokens_in') or 0:,} |")
     return "\n".join(out).rstrip() + "\n"

@@ -275,3 +275,64 @@ def test_the_same_config_at_two_commits_is_two_versions(tmp_path):
 
 def test_results_over_no_runs_says_so_rather_than_failing(tmp_path):
     assert "No runs recorded" in catalog.render_results(tmp_path / "nothing")
+
+
+def test_a_weakened_run_still_counts_as_solved(tmp_path):
+    """The 3/9 the first full-set batch recorded, and why it was wrong.
+
+    An outcome is one label over two questions that do not share a scale.
+    `verified` was in every one of those records; nothing rendered it, so a run
+    that flipped every hidden test and appended a regression test read as a
+    failed task.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", outcome="tampered", verified=True,
+            tampered_files=["tests/test_demo.py"], extended_files=[])
+    text = catalog.render_results(results)
+
+    assert "| 1/1 |" in text          # solved
+    assert "**1 weakened**" in text   # and separately, not solved *cleanly*
+
+
+def test_an_extended_file_is_reported_and_not_penalised(tmp_path):
+    results = tmp_path / "results"
+    _record(results, "a", outcome="pass", verified=True,
+            tampered_files=[], extended_files=["tests/test_demo.py"])
+    text = catalog.render_results(results)
+
+    assert "1 extended" in text
+    assert "weakened" not in text
+
+
+def test_a_verdict_from_the_previous_oracle_is_not_counted_with_the_rest(tmp_path):
+    """`config_sha` pins the agent; nothing pins the harness.
+
+    A record scored before the oracle changed has no `extended_files` key at
+    all, so the field's absence says which evaluator produced the verdict --
+    and those verdicts called an added test tampering. Counting them in the
+    same column would carry that mistake forward into every future comparison.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", outcome="tampered", verified=True,
+            tampered_files=["tests/test_demo.py"])   # no extended_files key
+    text = catalog.render_results(results)
+
+    assert "previous oracle" in text
+    assert "**1 weakened**" not in text
+
+
+def test_an_untraced_run_is_not_averaged_into_a_cost(tmp_path):
+    """A zero from a missing trace is indistinguishable from a measurement.
+
+    Five `deepagents` runs are in the record with no `trace.jsonl` -- written
+    before the trace path was made absolute, so the agent wrote it inside its
+    own worktree -- and they pull that version's `tokens_in` mean to exactly 0,
+    printed beside means taken over real traces.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", tokens_in=100_000, provider_calls=10)
+    _record(results, "b", tokens_in=0, provider_calls=0)
+    text = catalog.render_results(results)
+
+    assert "100,000 (1 untraced)" in text
+    assert "50,000" not in text
