@@ -114,21 +114,50 @@ def prepare(repo: Path, scenario, work_dir: Path, dest: Path) -> Path:
     return dest
 
 
+def _imports(root: Path, entry_point: str) -> bool:
+    """Does the thing the scenario names actually import?
+
+    The first rung of the ladder: a run that produced something executable is a
+    different outcome from one that produced nothing, and on a generative task
+    that is most of what the early months have to say.
+    """
+    if not entry_point:
+        return True
+    try:
+        result = subprocess.run(["python", "-c", f"import {entry_point}"],
+                                cwd=root, capture_output=True, text=True,
+                                timeout=60)
+    except subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0
+
+
 def verify(repo: Path, scenario, work_dir: Path, dest: Path) -> dict:
     """Run both test sets against the agent's output."""
     root = prepare(repo, scenario, work_dir, dest)
     f2p_passed, f2p_total, f2p_log = run_tests(root, scenario.fail_to_pass)
     p2p_passed, p2p_total, p2p_log = run_tests(root, scenario.pass_to_pass)
 
+    # The tier ladder. Each rung is a deterministic, zero-token check, and each
+    # is recorded separately so the months before a first pass stay legible
+    # (design/generative-scenarios.md 3.2).
+    contract_passed, contract_total, contract_log = run_tests(
+        root, scenario.contract_tests)
+
     return {
         "f2p_passed": f2p_passed, "f2p_total": f2p_total,
         "p2p_passed": p2p_passed, "p2p_total": p2p_total,
         "f2p_ratio": f2p_passed / f2p_total if f2p_total else 1.0,
         "p2p_ratio": p2p_passed / p2p_total if p2p_total else 1.0,
+        "tier_imports": _imports(root, scenario.entry_point),
+        "tier_contract": contract_passed == contract_total,
+        "tier_behaviour": f2p_passed == f2p_total,
+        "tier_intact": p2p_passed == p2p_total,
         # Both conditions, not one: fixing the bug while breaking something
         # else is not a pass.
         "verified": f2p_passed == f2p_total and p2p_passed == p2p_total,
-        "log": f"== fail_to_pass ==\n{f2p_log}\n\n== pass_to_pass ==\n{p2p_log}",
+        "log": (f"== fail_to_pass ==\n{f2p_log}\n\n== pass_to_pass ==\n{p2p_log}"
+                + (f"\n\n== contract ==\n{contract_log}" if contract_log else "")),
     }
 
 
@@ -206,4 +235,37 @@ def validate(repo: Path, scenario) -> list:
                 f"reference solution does not pass: f2p "
                 f"{solved['f2p_passed']}/{solved['f2p_total']}, p2p "
                 f"{solved['p2p_passed']}/{solved['p2p_total']}")
+
+        # On a generative scenario the empty-patch gate degenerates -- the
+        # module does not exist, so every fail_to_pass test fails at import and
+        # the gate proves nothing about test quality. A second implementation,
+        # written to the same spec and deliberately different in structure,
+        # carries that weight instead: if it fails, the suite is coupled to an
+        # implementation rather than to the requirement
+        # (design/generative-scenarios.md 3.1).
+        if scenario.category == "generative":
+            problems += _check_alternative(repo, scenario, base)
     return problems
+
+
+def _check_alternative(repo: Path, scenario, base: Path) -> list:
+    """The second-implementation gate. Generative scenarios only."""
+    alt = scenario_mod.read(repo, scenario.tag, "evaluation/solution_alt.patch")
+    if not alt:
+        return ["category: generative requires evaluation/solution_alt.patch -- "
+                "a second implementation is what replaces the empty-patch gate"]
+
+    tree = base / "alt"
+    scenario_mod.materialize_code(repo, scenario.tag, tree)
+    applied = subprocess.run(["git", "apply", "-p1", "-"], cwd=tree,
+                             input=alt, text=True, capture_output=True)
+    if applied.returncode != 0:
+        return [f"alternative patch does not apply: {applied.stderr.strip()}"]
+
+    solved = verify(repo, scenario, tree, base / "alt-solved")
+    if not solved["verified"]:
+        return [f"alternative implementation does not pass: f2p "
+                f"{solved['f2p_passed']}/{solved['f2p_total']}, p2p "
+                f"{solved['p2p_passed']}/{solved['p2p_total']} -- the hidden "
+                "suite is coupled to the reference implementation"]
+    return []

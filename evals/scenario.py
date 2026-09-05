@@ -65,6 +65,12 @@ class Scenario:
     pass_to_pass: list
     timeout_s: int
     tasks: list = field(default_factory=list)
+    # The tier ladder (design/generative-scenarios.md 5.4). Both optional, so
+    # a repair scenario that declares neither records the tiers it can.
+    # `entry_point` is a module path that must import; `contract_tests` are
+    # visible node ids in the seed asserting API shape and never behaviour.
+    entry_point: str = ""
+    contract_tests: list = field(default_factory=list)
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -143,6 +149,8 @@ def load(repo: Path, tag: str) -> Scenario:
         fail_to_pass=meta.get("fail_to_pass", []),
         pass_to_pass=meta.get("pass_to_pass", []),
         timeout_s=meta.get("timeout_s", 900),
+        entry_point=meta.get("entry_point", ""),
+        contract_tests=meta.get("contract_tests", []),
     )
 
     for path in _git(repo, "ls-tree", "--name-only", tag, "tasks/").split():
