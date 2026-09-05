@@ -70,3 +70,49 @@ def test_pytest_output_is_not_mangled_by_the_locale(tmp_path):
 
     _, log = verify._pytest("test_dash.py", tmp_path)
     assert "â€" not in log
+
+
+ACCOUNT_DIFF = """diff --git a/NOTES.md b/NOTES.md
+--- a/NOTES.md
++++ b/NOTES.md
+@@ -1,3 +1,5 @@
+ # Notes
++
++## 2026-09-05 — widened the suite
+ 
+ Working journal.
+diff --git a/durations/parse.py b/durations/parse.py
+--- a/durations/parse.py
++++ b/durations/parse.py
+@@ -1,2 +1,3 @@
+ def parse(text):
++    text = text.strip()
+     return text
+"""
+
+
+def test_an_account_is_lines_added_to_the_feedback_file(tmp_path):
+    """R7: the session reads the project's notes and appends its own account."""
+    from evals import metrics
+
+    assert metrics.account_written(ACCOUNT_DIFF) is True
+    assert metrics.added_by_file(ACCOUNT_DIFF) == {
+        "NOTES.md": 2, "durations/parse.py": 1}
+
+
+def test_working_everywhere_but_the_notes_is_not_an_account(tmp_path):
+    """The silent-competence case: 26 of 40 recorded runs did exactly this."""
+    from evals import metrics
+
+    code_only = ACCOUNT_DIFF.split("diff --git a/durations")[1]
+    assert metrics.account_written("diff --git a/durations" + code_only) is False
+
+
+def test_deleting_the_notes_is_not_writing_an_account(tmp_path):
+    """`+++ /dev/null` never opens a counter, so a deletion contributes nothing."""
+    from evals import metrics
+
+    deletion = ("diff --git a/NOTES.md b/NOTES.md\n"
+                "--- a/NOTES.md\n+++ /dev/null\n@@ -1,2 +0,0 @@\n"
+                "-# Notes\n-Working journal.\n")
+    assert metrics.account_written(deletion) is False
