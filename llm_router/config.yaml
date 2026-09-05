@@ -106,13 +106,6 @@ models:
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
 
-  - name: Gemini_2_5_Flash
-    platform: gemini
-    model: gemini-2.5-flash
-    priority: 12
-    max_input_tokens: 250000
-    limits: {rpm: 5, tpm: 250000, rpd: 20}
-
   # -- Workhorse fallback: weaker, but Groq's shared request budget routinely
   # dumps whole tasks here once the upper tiers exhaust, so quality still matters.
   # See docs/03-pool-model.md#34-priority-tiers.
