@@ -70,6 +70,8 @@ output ([7.3](07-observability.md#73-the-local-trace)).
 | `failover_bounces` | Transient failures before a step succeeded — wasted quota |
 | `tokens_in` / `tokens_out` | Summed where the provider reports usage |
 | `tokens_per_call` | `tokens_in` over provider calls — what one step costs. Separates a long run from an expensive one, which `tokens_in` alone cannot ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)) |
+| `bounce_models` | Bounces per model — which member is spending the pool's time |
+| `retired_models` | Members dropped mid-run because they are gone upstream. See 10.2.3 |
 | `bounces_per_call` | Failover bounces over provider calls. A quota and latency figure, **not** a cost one: a refused call carries no input tokens |
 | `tampered_files` | Protected files the agent weakened — see [8.5](08-evaluation-method.md) for what makes a change a weakening |
 | `lost_invariants` | Documented guarantees the run deleted — `"<page>: <phrase>"`, declared per scenario in `doc_invariants` ([9.6.1](09-scenarios.md)) |
@@ -125,6 +127,25 @@ a strengthened protected file from a weakened one, the only thing the harness
 ever did with it was score it as tampering. Recorded, not scored: a count of
 tests says nothing about whether they assert anything, and rewarding the number
 is how you buy assertions of `True`.
+
+### 10.2.3 Reading `failover_bounces`
+
+The number alone says the run was long. It was recorded and never read, and what
+it hid was worth reading: in a 40-run batch, **135 of 247 bounces were one model
+answering 404** — `gemini-2.5-flash`, five times per run, once per account, in
+every run.
+
+The router handled it correctly the whole time. It recognises the wrapped 404,
+drops the member for the process, and logs at ERROR naming the model to delete,
+so the run survives — which is the point of holding a pool. Nothing read the log.
+
+That is the shape of the problem: a retirement **costs no tokens and fails no
+run**, so no metric anyone looks at moves. `bounce_models` and `retired_models`
+are recorded per run and the ledger names any retired member beside the bounce
+count, because that column is the only place this can surface.
+
+A bounce is a **quota and latency** figure, never a cost one. A refused call
+carries no input tokens: the provider turns a 429 or a 404 away at the gate.
 
 ## 10.3 Failure taxonomy
 

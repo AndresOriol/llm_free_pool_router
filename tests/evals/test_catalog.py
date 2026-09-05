@@ -374,3 +374,23 @@ def test_unprompted_tests_are_reported(tmp_path):
     _record(results, "a", added_tests=3)
     _record(results, "b", added_tests=1)
     assert "| 4 |" in catalog.render_results(results)
+
+
+def test_a_retired_member_is_named_beside_the_bounces_it_caused(tmp_path):
+    """A retirement costs no tokens and fails no run, so nothing else shows it.
+
+    One dead model owned 55% of a batch's bounces for a month while the router
+    handled it correctly and logged an ERROR into a run nobody greps.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", failover_bounces=5,
+            retired_models=["gemini-2.5-flash"])
+    text = catalog.render_results(results)
+
+    assert "retired: `gemini-2.5-flash`" in text
+
+
+def test_a_healthy_pool_names_nothing(tmp_path):
+    results = tmp_path / "results"
+    _record(results, "a", failover_bounces=2, retired_models=[])
+    assert "retired:" not in catalog.render_results(results)
