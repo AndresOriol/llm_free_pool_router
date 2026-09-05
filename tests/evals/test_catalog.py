@@ -351,3 +351,18 @@ def test_cost_per_call_is_reported_beside_cost_per_run(tmp_path):
 
     assert "tok/call" in text
     assert "30,000" in text
+
+
+def test_the_account_column_counts_only_scenarios_that_ship_notes(tmp_path):
+    """A scenario with no feedback file cannot have skipped writing one.
+
+    Counting those as failures would make the number improve every time a
+    scenario is added that does not test this at all.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", wrote_account=True)
+    _record(results, "b", wrote_account=False)
+    _record(results, "c", wrote_account=None)
+    text = catalog.render_results(results)
+
+    assert "| 1/2 |" in text
