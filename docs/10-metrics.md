@@ -70,6 +70,7 @@ output ([7.3](07-observability.md#73-the-local-trace)).
 | `failover_bounces` | Transient failures before a step succeeded — wasted quota |
 | `tokens_in` / `tokens_out` | Summed where the provider reports usage |
 | `tokens_per_call` | `tokens_in` over provider calls — what one step costs. Separates a long run from an expensive one, which `tokens_in` alone cannot ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)) |
+| `edited_nothing` | No edit tool was called all run. See 10.2.4 |
 | `stub` | Was this a stub rather than an agent — stubs are excluded from the ledger |
 | `traced` | Did `trace.jsonl` arrive. Everything summed over the trace reads 0 when it did not, which is indistinguishable from a measurement |
 | `bounce_models` | Bounces per model — which member is spending the pool's time |
@@ -149,6 +150,39 @@ count, because that column is the only place this can surface.
 
 A bounce is a **quota and latency** figure, never a cost one. A refused call
 carries no input tokens: the provider turns a 429 or a 404 away at the gate.
+
+### 10.2.4 The run that changed nothing and said otherwise
+
+Three recorded runs finished with an **empty diff** and a closing message
+reporting the work as done:
+
+> Items 1, 2, and 3 ... do not conflict and **were implemented**.
+
+> The non-conflicting part of the request ... **has been fully implemented and
+> tested**.
+
+> **Implemented Requirements**: Added `checked` ... Added `delta_total` ...
+
+No edit tool was called in any of them. One had run the project's tests, which
+passed, because the visible suite does not cover the fields it claimed to add —
+so the one check that could have caught it confirmed it instead.
+
+This is the only failure in the set that **reads as a success**. An over-decline
+leaves an empty diff and a refusal, and a refusal looks like one. This leaves an
+empty diff and a competent-sounding report of work, which is
+[C4](design/long-run-harness.md) exactly: *the review surface is the agent's own
+account of itself*, and a confidently wrong rationale reads exactly like a
+correct one. Under Phase 2, where a human reviews prose, it passes.
+
+**`edited_nothing` is the half that can be trusted.** Whether the prose claims
+completion needs a reader — a regex on it flagged two runs that were a
+declination (*"cannot be implemented"*) and a plan (*"I **will** implement"*),
+neither of which is a false claim. Whether an edit tool was called does not need
+a reader. So the harness records the mechanical fact and `bundle` puts it first
+in the evidence, where the reader is.
+
+Five of the eight empty-diff runs recorded so far were ordinary `stopping`
+failures that claimed nothing. The flag is a prompt to look, not a verdict.
 
 ## 10.3 Failure taxonomy
 

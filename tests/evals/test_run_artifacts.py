@@ -159,3 +159,22 @@ def test_removing_a_test_does_not_count_as_adding_one(tmp_path):
                "--- a/tests/test_bots.py\n+++ b/tests/test_bots.py\n@@ -1,4 +1,1 @@\n"
                "-def test_gone():\n-    assert True\n")
     assert metrics.added_tests(removal) == 0
+
+
+def test_a_run_that_edited_nothing_is_recorded_as_such():
+    """The mechanical half of a failure the harness cannot fully see.
+
+    Three recorded runs finished with an empty tree and a closing message
+    reporting the work as done. Whether prose claims completion needs a reader;
+    whether an edit tool was called does not.
+    """
+    from evals import metrics
+
+    events = [
+        {"event": "tool_start", "tool": "read_file"},
+        {"event": "tool_start", "tool": "execute"},
+    ]
+    assert metrics.from_trace(events)["edited_nothing"] is True
+
+    events.append({"event": "tool_start", "tool": "edit_file"})
+    assert metrics.from_trace(events)["edited_nothing"] is False
