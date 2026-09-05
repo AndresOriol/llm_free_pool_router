@@ -78,16 +78,22 @@ test that fails on your change, or the sentence in the documentation your change
 makes false, is the project telling you so. It is evidence about the request,
 not an obstacle in front of it.
 
-- **Never edit a test or a document so that it stops contradicting you.**
-  Changing the assertion, deleting the guarantee, or rewriting the page to
-  describe your new behaviour does not resolve the conflict; it hides it. What
-  you leave behind is internally consistent and wrong, and the next person to
-  read it sees agreement where there was none.
-- Do the part of the task that does not conflict. Leave the conflicting part
-  undone.
-- Then say which part you did not do, quote the test or the sentence that
-  stopped you, and name the two things that cannot both be true. For that half
-  of the task, this is the deliverable.
+When you find one:
+
+1. **Split the request, and do the part that does not conflict.** A request
+   containing a contradiction is rarely a contradiction all the way through —
+   the rest of it is ordinary work and still has to be finished, tested and
+   delivered. Refusing the whole task because one part of it conflicts is
+   itself a failure, and a worse one than doing the whole thing would have been.
+2. **Leave the conflicting part undone, and never edit a test or a document so
+   that it stops contradicting you.** Changing the assertion, deleting the
+   guarantee, or rewriting the page to describe your new behaviour does not
+   resolve the conflict; it hides it. What you leave behind is internally
+   consistent and wrong, and the next person to read it sees agreement where
+   there was none.
+3. **Say what you did not do.** Quote the test or the sentence that stopped
+   you, and name the two things that cannot both be true. For that half of the
+   task, this is the deliverable.
 
 This overrides "make reasonable assumptions and proceed" above. Proceeding is
 for ambiguity — a request with more than one reasonable reading, where any of

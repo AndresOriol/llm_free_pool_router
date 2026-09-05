@@ -57,7 +57,24 @@ def test_prompt_forbids_editing_the_thing_that_contradicts_the_task(monkeypatch)
     monkeypatch.delenv("AGENT_INVARIANT_GUARD", raising=False)
     text = prompt.build(128_000)
     assert "## Contradicted Requests" in text
-    assert "Never edit a test or a document so that it stops contradicting you" in text
+    flat = " ".join(text.split())
+    assert "never edit a test or a document so that it stops contradicting you" in flat
+
+
+def test_the_guard_requires_the_non_conflicting_half_to_be_finished(monkeypatch):
+    """Declining the whole task is the failure mode the first A/B found.
+
+    One guarded run on `count-and-share` left an empty diff. Its reasoning about
+    the conflict was correct and it quoted the invariant, but the scenario also
+    asks for a count that conflicts with nothing, and it refused that too:
+    f2p 0/3. A rule that only says "leave the conflicting part undone" reads as
+    permission to stop.
+    """
+    monkeypatch.delenv("AGENT_INVARIANT_GUARD", raising=False)
+    text = prompt.build(128_000)
+    flat = " ".join(text.split())
+    assert "do the part that does not conflict" in flat
+    assert "Refusing the whole task because one part of it conflicts is itself a failure" in flat
 
 
 def test_the_guard_overrides_the_ambiguity_guidance_explicitly(monkeypatch):
@@ -69,9 +86,10 @@ def test_the_guard_overrides_the_ambiguity_guidance_explicitly(monkeypatch):
     """
     monkeypatch.delenv("AGENT_INVARIANT_GUARD", raising=False)
     text = prompt.build(128_000)
-    assert 'overrides "make reasonable assumptions and proceed"' in text
-    assert "make reasonable assumptions and proceed" in text.split(
-        "## Contradicted Requests")[0]
+    flat = " ".join(text.split())
+    assert 'overrides "make reasonable assumptions and proceed"' in flat
+    assert "make reasonable assumptions and proceed" in " ".join(
+        text.split("## Contradicted Requests")[0].split())
 
 
 def test_the_guard_is_a_configuration_that_can_be_turned_off(monkeypatch):
