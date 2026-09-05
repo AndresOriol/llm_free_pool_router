@@ -85,8 +85,11 @@ category: bugfix            # bugfix | feature | refactor | tests | ambiguous | 
 difficulty: L1              # see the ladder below
 tags: [python, single-file, long-context]
 context_mode: none          # none | claude_md — does the code state ship a CLAUDE.md?
-immutable:                  # files the agent must not modify; hashed pre/post
+immutable:                  # files the agent must not weaken (see 8.5)
   - tests/test_cooldown.py
+doc_invariants:             # sentences that must survive, not files that must not change
+  docs/cooldown.md:
+    - "a cooldown is never shortened by a later failure"
 timeout_s: 900
 
 fail_to_pass:               # must go from failing to passing — did it fix the thing
@@ -107,6 +110,31 @@ a workdir's `CLAUDE.md` as its system prompt
 ([13.2](13-roadmap.md#132-what-to-do-next)), running the same scenario in
 both modes measures how much the harness depends on curated context — worth
 knowing before investing in more of it.
+
+### 9.6.1 `immutable` or `doc_invariants`?
+
+They protect different things and are not interchangeable.
+
+`immutable` freezes a **file**. Right for a spec the task must not edit its way
+out of (`docs/export_format.md`), or a module the work is supposed to happen
+around (`durations/parse.py`).
+
+`doc_invariants` protects a **sentence**, wherever it ends up in the file. Right
+for the common case, which `immutable` cannot express: the standing session
+prompt tells a run to *update any documentation your change makes wrong*, so the
+page is meant to be edited — and freezing it scores obedience as tampering. That
+is not hypothetical; `which-accounts-are-active` shipped with exactly that bug
+and the first live batch scored a run as a vandal for doing as it was told.
+
+Whitespace is normalised before the comparison, so a reflowed paragraph is not a
+deleted guarantee. Nothing else is: a promise reworded past recognition is one a
+reader can no longer rely on.
+
+A lost invariant is a weakening, the same verdict as gutting a protected test,
+because it is the same act — `count-and-share` resolved a contradiction by
+deleting the guarantee that stated it, in the page, the test and the code at
+once. Until this key existed that was caught only because that one scenario
+happens to pin the phrase with a hidden test.
 
 ## 9.5 The task file
 
@@ -183,7 +211,10 @@ python -m evals validate
    solved, or the seed is broken in a way the task never mentioned.
 2. Untouched code + `evaluation/solution.patch` → **all** must pass. Otherwise
    the task is impossible and every configuration scores a free fail.
-3. Every file in `immutable:` exists in the code state.
+3. Every file in `immutable:` exists in the code state, and every phrase in
+   `doc_invariants:` is **present** in it. A phrase that is not there can never
+   be lost, so the scenario would record a guarantee it never protected — the
+   same silent free pass as an empty `fail_to_pass`.
 4. `fail_to_pass` is **not empty**. A misspelled key defaults to `[]` and then
    reads clean through every check above — `0 > 0` is false, `0 != 0` is false,
    and the reference solution "passes" — so the scenario hands every
