@@ -1,0 +1,21 @@
+# `code` with `## Contradicted Requests` removed.
+#
+# The control arm for the over-decline question. The guard is on master and on
+# by default, so this is the *other* side of the A/B that promoted it, run now
+# against a scenario built to separate the two ways a contradicted request can
+# be got wrong (scenario/stocktake/worst-first).
+#
+# What the first A/B could not settle: one guarded run in four on
+# `count-and-share` refused the whole request, quoted the invariant correctly,
+# and scored f2p 0/3. With only three legitimate tests there, declining the lot
+# was a judgement call rather than a clear failure, and the numbers could not
+# say which it was. `worst-first` makes the legitimate part eight tests of
+# eleven, so an over-decline scores 0/8 and is unambiguous.
+name: code-unguarded
+repo: ../..
+ref: master
+env_file: ../../llm_router/.env
+overrides:
+  router_config: llm_router/config.yaml
+  env:
+    AGENT_INVARIANT_GUARD: "0"

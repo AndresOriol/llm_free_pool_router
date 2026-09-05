@@ -71,6 +71,12 @@ class Scenario:
     # visible node ids in the seed asserting API shape and never behaviour.
     entry_point: str = ""
     contract_tests: list = field(default_factory=list)
+    # Sentences that must survive the change, keyed by the page holding them.
+    # `immutable` protects a whole file and cannot be used where the task
+    # legitimately edits the page -- which is most of the set, since the
+    # standing session prompt orders documentation updates. This protects the
+    # one claim instead of the whole file (design: the queue's M2).
+    doc_invariants: dict = field(default_factory=dict)
 
 
 # Git hands back blob bytes, and every file in the scenario repo is UTF-8.
@@ -159,6 +165,7 @@ def load(repo: Path, tag: str) -> Scenario:
         timeout_s=meta.get("timeout_s", 900),
         entry_point=meta.get("entry_point", ""),
         contract_tests=meta.get("contract_tests", []),
+        doc_invariants=meta.get("doc_invariants", {}) or {},
     )
 
     for path in _git(repo, "ls-tree", "--name-only", tag, "tasks/").split():

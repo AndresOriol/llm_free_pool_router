@@ -72,7 +72,8 @@ def _git(workdir: Path, *args: str) -> Optional[str]:
     """
     try:
         done = subprocess.run(("git", *args), cwd=str(workdir),
-                              capture_output=True, text=True,
+                              capture_output=True, encoding="utf-8",
+                              errors="replace",
                               timeout=_GIT_TIMEOUT)
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug(f"git {' '.join(args)} failed: {exc!r}")

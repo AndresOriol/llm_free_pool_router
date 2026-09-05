@@ -470,10 +470,40 @@ def _traced(rows: list) -> list:
     `deepagents` runs are in the record with no trace at all -- written before
     the trace path was made absolute, so the agent wrote it inside its own
     worktree -- and they pull that version's `tokens_in` mean to exactly 0,
-    which the table then prints beside a real one. `provider_calls` is the
-    marker: a run that reached a model made at least one.
+    which the table then prints beside a real one.
+
+    Runs say `traced` outright now. For the five that predate the field,
+    `provider_calls` is the marker, because a run that reached a model made at
+    least one.
     """
-    return [r for r in rows if r.get("provider_calls")]
+    return [r for r in rows
+            if r.get("traced", r.get("provider_calls")) and r.get("provider_calls")]
+
+
+def _retired(rows: list) -> str:
+    """Members that went away mid-run, named next to the bounces they caused.
+
+    A retirement is the router working: the member is dropped and the run
+    carries on. It costs no tokens and fails nothing, so no metric anyone reads
+    moves — which is how one dead model came to own 55% of a batch's bounces
+    without being noticed. Naming it here is the whole fix.
+    """
+    gone = sorted({m for r in rows for m in (r.get("retired_models") or [])})
+    return f" — retired: {', '.join(f'`{m}`' for m in gone)}" if gone else ""
+
+
+def _account(rows: list) -> str:
+    """How often the run left an account, over the runs that could leave one.
+
+    `wrote_account` is None where the seed ships no feedback file, and those are
+    excluded rather than counted as failures -- otherwise the number improves
+    every time a scenario is added that does not test this.
+    """
+    applicable = [r for r in rows if r.get("wrote_account") is not None]
+    if not applicable:
+        return "—"
+    wrote = sum(1 for r in applicable if r["wrote_account"])
+    return f"{wrote}/{len(applicable)}"
 
 
 def _mean(rows: list, key: str) -> float:
@@ -509,9 +539,29 @@ def _run_integrity(record: dict) -> str:
     return ", ".join(parts) or "—"
 
 
+def is_stub(record: dict) -> bool:
+    """Was this run a stub rather than an agent?
+
+    `stub` is recorded from the config now. Older records predate the field, so
+    the name is the fallback -- every stub configuration is named `stub-*`, and
+    that is how the four already sitting in the results directory are caught.
+    """
+    if "stub" in record:
+        return bool(record["stub"])
+    return str(record.get("config", "")).startswith("stub-")
+
+
 def render_results(results_dir: Path, pages: dict = None) -> str:
     pages = pages or {}
     records = run_mod.load_records(results_dir) if results_dir.is_dir() else []
+    # A stub writes a hardcoded file and calls no model, so its runs measure the
+    # runner -- which is what they are for -- and are not a configuration
+    # anything should be compared against. Four were in the real results
+    # directory, rendering as the cheapest and most reliable version in the
+    # table at 4/4 and 912 tokens. The invariant was written in a comment and
+    # enforced by nobody.
+    stubs = [r for r in records if is_stub(r)]
+    records = [r for r in records if not is_stub(r)]
     out = [RESULTS_HEADER, ""]
     if not records:
         return "\n".join(out + [
@@ -521,11 +571,16 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
     for record in records:
         versions[(record.get("config"), (record.get("config_sha") or "")[:8])].append(record)
 
-    out += [f"**{len(records)} runs across {len(versions)} agent versions.**", "",
+    out += [f"**{len(records)} runs across {len(versions)} agent versions.**"
+            + (f" {len(stubs)} stub run(s) excluded — a stub writes a hardcoded "
+               "file and calls no model, so its runs measure the runner rather "
+               "than an agent." if stubs else ""), "",
             "## Agent versions", "",
             "| Configuration | commit | runs | solved | 95% interval | integrity "
-            "| `tokens_in` mean | calls | bounces | failure classes |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "| `tokens_in` mean | tok/call | calls | bounces | account "
+            "| +tests | failure classes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+            "| --- | --- |"]
     for (name, sha), group in sorted(versions.items()):
         passed = _solved(group)
         low, high = _wilson(passed, len(group))
@@ -537,8 +592,11 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             f"| `{name}` | `{sha}` | {len(group)} | {passed}/{len(group)} "
             f"| {low:.0%}–{high:.0%} | {_integrity(group)} "
             f"| {_mean(group, 'tokens_in'):,.0f}{_unmeasured(group)} "
+            f"| {_mean(group, 'tokens_per_call'):,.0f} "
             f"| {_mean(group, 'provider_calls'):.1f} "
-            f"| {_mean(group, 'failover_bounces'):.1f} "
+            f"| {_mean(group, 'failover_bounces'):.1f}{_retired(group)} "
+            f"| {_account(group)} "
+            f"| {sum(r.get('added_tests') or 0 for r in group)} "
             f"| {', '.join(f'{k}={v}' for k, v in sorted(classes.items())) or '—'} |")
 
     out += ["",
@@ -556,6 +614,18 @@ def render_results(results_dir: Path, pages: dict = None) -> str:
             "tell appending a regression test from deleting an assertion and "
             "called both tampering. Their integrity verdicts are not comparable "
             "with the ones below them, and are not counted with them.",
+            "",
+            "**account** is how often the run appended to the project's "
+            "`NOTES.md`, over the runs whose scenario ships one. "
+            "[R7](../../docs/design/long-run-harness.md) calls that file \"the "
+            "whole human interface\", and it is the only part of an account "
+            "that can be checked without reading it. Nothing gates on this "
+            "yet — it is here to establish a baseline. **+tests** is test "
+            "functions the runs added that nothing asked for, which until "
+            "recently the harness could only score as tampering. A **bounces** "
+            "cell naming a *retired* model is the pool dropping a member that "
+            "has gone away upstream: correct behaviour, free, and invisible "
+            "everywhere else — delete it from the config.",
             "",
             "A mean marked *untraced* was taken over fewer runs than the row "
             "counts. A run whose `trace.jsonl` never arrived records zero for "

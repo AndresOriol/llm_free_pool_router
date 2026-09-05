@@ -1,0 +1,38 @@
+# `code` plus one prompt rule: the project's NOTES.md is the exception to
+# "do not create summary markdown files".
+#
+# The A/B is exactly that paragraph. `AGENT_WRITE_ACCOUNT=0` on this same ref
+# reproduces the baseline.
+#
+# Why it exists: R7 in docs/design/long-run-harness.md is "notes in, notes out --
+# the session reads the project's feedback file and appends its account to it",
+# and calls that file the whole human interface. 7 of the 23 runs that solved
+# their task wrote one, and four scenarios have never produced one at all
+# (docs/10-metrics.md#1021). The agent was obeying the prompt: `## Documentation`
+# forbids exactly this, which is right for a one-shot task and wrong for a
+# standing maintainer whose deliverable is the account.
+#
+# What a run is asking:
+#
+#   1. Does `wrote_account` move? That is the direct measure and the easy half.
+#   2. **Does anything else get worse?** A rule that demands a written account
+#      costs tokens and attention on every run, including the eight scenarios
+#      where the account is not the point. Read `solved` and `tokens_in` before
+#      reading the account column -- A1 showed a prompt rule regressing two
+#      scenarios it was not written for, and only repetition said those were
+#      noise.
+#   3. **Are the accounts true?** `wrote_account` counts lines. It cannot see an
+#      entry describing a test that never ran, which is C4 in the design note --
+#      "a confidently wrong rationale reads exactly like a correct one" -- and is
+#      the failure this change can buy. Nothing automatic catches it; read the
+#      NOTES.md diffs against the code diffs.
+#
+# Interleaved against `code`, never alone.
+name: code-account
+repo: ../..
+ref: agent/write-the-account
+env_file: ../../llm_router/.env
+overrides:
+  router_config: llm_router/config.yaml
+  env:
+    AGENT_WRITE_ACCOUNT: "1"

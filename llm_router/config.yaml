@@ -61,6 +61,12 @@ accounts:
     type: gemini
     url: https://generativelanguage.googleapis.com/v1beta/models
     api_key_env: GEMINI_API_KEY_6
+  - name: gemini_7
+    user: [EMAIL_ADDRESS]
+    platform: gemini
+    type: gemini
+    url: https://generativelanguage.googleapis.com/v1beta/models
+    api_key_env: GEMINI_API_KEY_7
 
 models:
   # Retired models (Groq's Llama line, qwen3-32b) are removed, not kept as
@@ -109,13 +115,6 @@ models:
     platform: gemini
     model: gemini-3-flash-preview
     priority: 11
-    max_input_tokens: 250000
-    limits: {rpm: 5, tpm: 250000, rpd: 20}
-
-  - name: Gemini_2_5_Flash
-    platform: gemini
-    model: gemini-2.5-flash
-    priority: 12
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
 

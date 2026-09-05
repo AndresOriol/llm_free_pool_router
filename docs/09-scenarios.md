@@ -85,8 +85,11 @@ category: bugfix            # bugfix | feature | refactor | tests | ambiguous | 
 difficulty: L1              # see the ladder below
 tags: [python, single-file, long-context]
 context_mode: none          # none | claude_md — does the code state ship a CLAUDE.md?
-immutable:                  # files the agent must not modify; hashed pre/post
+immutable:                  # files the agent must not weaken (see 8.5)
   - tests/test_cooldown.py
+doc_invariants:             # sentences that must survive, not files that must not change
+  docs/cooldown.md:
+    - "a cooldown is never shortened by a later failure"
 timeout_s: 900
 
 fail_to_pass:               # must go from failing to passing — did it fix the thing
@@ -107,6 +110,43 @@ a workdir's `CLAUDE.md` as its system prompt
 ([13.2](13-roadmap.md#132-what-to-do-next)), running the same scenario in
 both modes measures how much the harness depends on curated context — worth
 knowing before investing in more of it.
+
+### 9.6.0 Where a scenario comes from
+
+A scenario invented to be testable tests what is easy to grade. Every scenario
+added since the generative batch is drawn from a request someone actually made,
+recovered from the recorded sessions with `python -m evals mine --out <dir>` —
+120 of them, 12,047 tool calls, each human turn beside the files it produced.
+
+The extractor interprets nothing: it turns an append-only log into a turn list
+so that reading a hundred sessions is a grep. The judgement — which shapes recur
+and which are worth a scenario — is a table a human maintains, in
+[evals/ARCHETYPES.md](../evals/ARCHETYPES.md).
+
+### 9.6.1 `immutable` or `doc_invariants`?
+
+They protect different things and are not interchangeable.
+
+`immutable` freezes a **file**. Right for a spec the task must not edit its way
+out of (`docs/export_format.md`), or a module the work is supposed to happen
+around (`durations/parse.py`).
+
+`doc_invariants` protects a **sentence**, wherever it ends up in the file. Right
+for the common case, which `immutable` cannot express: the standing session
+prompt tells a run to *update any documentation your change makes wrong*, so the
+page is meant to be edited — and freezing it scores obedience as tampering. That
+is not hypothetical; `which-accounts-are-active` shipped with exactly that bug
+and the first live batch scored a run as a vandal for doing as it was told.
+
+Whitespace is normalised before the comparison, so a reflowed paragraph is not a
+deleted guarantee. Nothing else is: a promise reworded past recognition is one a
+reader can no longer rely on.
+
+A lost invariant is a weakening, the same verdict as gutting a protected test,
+because it is the same act — `count-and-share` resolved a contradiction by
+deleting the guarantee that stated it, in the page, the test and the code at
+once. Until this key existed that was caught only because that one scenario
+happens to pin the phrase with a hidden test.
 
 ## 9.5 The task file
 
@@ -142,9 +182,41 @@ authoring cost.
 | **generative** | Construction from nothing — "build X". No before state, so the empty-patch gate degenerates and a second reference implementation replaces it; scored on a tier ladder rather than a boolean ([design note](design/generative-scenarios.md)). |
 | **tests** | Writing tests for existing code; verified mutation-style (the tests must fail against a seeded broken variant). |
 | **refactor** | Restraint — behaviour-preserving, hidden tests must still pass. |
-| **long-context** | A large file that exceeds small-TPM pool members. Directly probes size-based routing ([4.2](04-failover.md#42-size-aware-selection)). |
+| **long-context** | A requirement buried in a document too large to read in full — the agent must find the part that matters. **Not** a routing probe; see 9.6.2. |
 | **ambiguous** | Judge-only. Does the agent ask, or invent requirements? |
 | **trap** | The brief asks for something the code contradicts, or that would break a documented invariant. Measures over-eagerness. No auto-pass. |
+
+### 9.6.2 What `long-context` stopped meaning
+
+It used to read *"a large file that exceeds small-TPM pool members. Directly
+probes size-based routing."* That is no longer true of any run in this set, and
+the definition was measuring nothing.
+
+A coding session selects only members holding at least **128,000** input tokens
+(`CONTEXT_FLOOR` in [agent/code/session.py](../agent/code/session.py)). The
+8,000-token Groq members are therefore never candidates for this work, so no
+scenario file can be large enough to exclude them — they were excluded before
+the file was read. A category defined around a filter that never runs cannot
+probe it, whatever size the file is.
+
+**Size-aware selection is still tested, and better.**
+`tests/llm_router/test_size_routing.py` exercises it directly, against a
+constructed pool, deterministically and for free. A scenario was always the
+worse instrument for a router property: it needs an agent, a model and several
+minutes to assert something a unit test settles in milliseconds — and it can
+only assert it *indirectly*, by hoping the routing shows up in an outcome.
+
+So the category is redefined around what it actually measures, which is what
+`scenario/pipeline/model-v3-propagation` has been testing and passing all along:
+a 600-line specification with two changed rules in different places, one of them
+absent from the changelog. The probe is retrieval inside a large document, not
+the router.
+
+**What this gives up.** Nothing in the eval set now exercises the small members
+at all, and that is the honest consequence of the context floor rather than a
+gap to paper over. If those members ever serve a coding session again, the thing
+to add is a scenario whose *prompt* fits 8,000 tokens — not a large file, which
+is what the old definition confused itself with.
 
 ## 9.7 The difficulty ladder
 
@@ -183,7 +255,10 @@ python -m evals validate
    solved, or the seed is broken in a way the task never mentioned.
 2. Untouched code + `evaluation/solution.patch` → **all** must pass. Otherwise
    the task is impossible and every configuration scores a free fail.
-3. Every file in `immutable:` exists in the code state.
+3. Every file in `immutable:` exists in the code state, and every phrase in
+   `doc_invariants:` is **present** in it. A phrase that is not there can never
+   be lost, so the scenario would record a guarantee it never protected — the
+   same silent free pass as an empty `fail_to_pass`.
 4. `fail_to_pass` is **not empty**. A misspelled key defaults to `[]` and then
    reads clean through every check above — `0 > 0` is false, `0 != 0` is false,
    and the reference solution "passes" — so the scenario hands every

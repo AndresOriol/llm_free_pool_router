@@ -122,11 +122,14 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
     results_dir = Path(results_dir).resolve()
     out_dir = results_dir / "runs" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Copied now rather than at the end, so a run that dies mid-flight still
+    # Written now rather than at the end, so a run that dies mid-flight still
     # says what it was. With `config_sha` in run.json this is the whole recipe
     # for rebuilding the configuration: `git worktree add --detach <sha>` plus
     # the overrides in this file. Nothing else about the checkout is kept.
-    shutil.copyfile(config.path, out_dir / "config.yaml")
+    #
+    # From the bytes read at load time, not from the path: the file lives in a
+    # tree the operator owns and a batch runs for hours.
+    _write(out_dir / "config.yaml", config.spec_text)
 
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
@@ -142,6 +145,10 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
                 raise RuntimeError(
                     f"{scenario.tag} leaked {hidden!r} into the workdir")
         shutil.copytree(seed, workdir)
+        # Asked of the seed, before the agent can create one: a scenario that
+        # ships no feedback file records `wrote_account: null` rather than a
+        # failure to write one.
+        has_account = (seed / metrics_mod.ACCOUNT_FILE).is_file()
         before = scenario_mod.hash_files(workdir, scenario.immutable)
 
         execution = _execute(config, workdir, task.prompt,
@@ -154,14 +161,23 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
         changed = verify_mod.check_integrity(before, workdir)
         integrity = verify_mod.classify_integrity(seed, workdir, changed,
                                                   base / "integrity")
+        lost_invariants = verify_mod.check_doc_invariants(
+            workdir, scenario.doc_invariants)
         patch = verify_mod.make_diff(seed, workdir)
         verification = verify_mod.verify(repo, scenario, workdir, base / "verified")
 
-    outcome = _outcome(execution, verification, integrity["weakened"])
+    # A deleted guarantee is a weakening whether it lived in a test or in a
+    # page. `count-and-share` was only ever caught because that scenario happens
+    # to pin the sentence with a hidden test; everywhere else in the set,
+    # deleting a documented promise was invisible.
+    outcome = _outcome(execution, verification,
+                       integrity["weakened"] + lost_invariants)
     reference = scenario_mod.read(repo, scenario.tag,
                                   "evaluation/solution.patch") or ""
     measured = metrics_mod.collect(out_dir / "trace.jsonl", patch, reference,
-                                   outcome, execution["stderr"])
+                                   outcome, execution["stderr"],
+                                   has_account=has_account,
+                                   broken_files=integrity["broken"])
 
     # newline="\n" everywhere, and on diff.patch it is load-bearing: the default
     # translates each one to a CRLF pair on Windows, and a patch whose context lines
@@ -183,6 +199,17 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
         "context_mode": scenario.context_mode,
         "task": task.id, "task_tags": task.tags,
         "config": config.name, "config_sha": config.sha,
+        # Recorded rather than inferred from the name: a leaderboard mixing
+        # stubbed and measured runs is worse than no leaderboard, and until now
+        # the only thing keeping them apart was the operator remembering to
+        # pass --results.
+        "stub": config.is_stub,
+        # Whether the trace arrived, said outright rather than inferred from a
+        # zero. Five recorded runs have no trace.jsonl at all -- written before
+        # the trace path was made absolute, so the agent wrote it inside its own
+        # throwaway worktree -- and every metric summed over it reads 0, which
+        # is indistinguishable from a measurement of nothing.
+        "traced": (out_dir / "trace.jsonl").is_file(),
         "config_fingerprint": config.fingerprint,
         "rep": rep,
         "outcome": outcome,
@@ -192,6 +219,12 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
         # hold. Recorded rather than scored, so the behaviour stops being
         # invisible before anything starts rewarding it.
         "extended_files": integrity["extended"],
+        # Protected files the agent left unrunnable. Not tampering: the original
+        # assertions still hold against its code, so nothing was removed on
+        # purpose -- it wrote something that does not parse. Classified as
+        # tooling below, which is what it is.
+        "broken_files": integrity["broken"],
+        "lost_invariants": lost_invariants,
         "exit_code": execution["exit_code"],
         "wall_time_s": round(execution["wall_time_s"], 1),
         **verification,

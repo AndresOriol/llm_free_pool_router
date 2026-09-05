@@ -30,7 +30,8 @@ MAX_DEPTH = 3
 def _git(workdir: Path, *args: str) -> str:
     try:
         result = subprocess.run(["git", "-C", str(workdir), *args],
-                                capture_output=True, text=True, timeout=10)
+                                capture_output=True, encoding="utf-8",
+                                errors="replace", timeout=10)
     except (OSError, subprocess.SubprocessError):
         return ""
     return result.stdout.strip() if result.returncode == 0 else ""

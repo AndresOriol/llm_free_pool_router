@@ -10,6 +10,7 @@ One named test per behaviour, after `tests/agent/test_failover.py`.
 """
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -336,3 +337,185 @@ def test_an_untraced_run_is_not_averaged_into_a_cost(tmp_path):
 
     assert "100,000 (1 untraced)" in text
     assert "50,000" not in text
+
+
+def test_cost_per_call_is_reported_beside_cost_per_run(tmp_path):
+    """`tokens_in` cannot tell a long run from an expensive one.
+
+    The audit behind this found `tokens_in` correlating +0.95 with `steps` and
+    +0.24 with `failover_bounces` over 40 runs, so what a run spends is the
+    conversation being re-sent every step. That is only legible per call.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", tokens_in=600_000, provider_calls=20, tokens_per_call=30_000)
+    text = catalog.render_results(results)
+
+    assert "tok/call" in text
+    assert "30,000" in text
+
+
+def test_the_account_column_counts_only_scenarios_that_ship_notes(tmp_path):
+    """A scenario with no feedback file cannot have skipped writing one.
+
+    Counting those as failures would make the number improve every time a
+    scenario is added that does not test this at all.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", wrote_account=True)
+    _record(results, "b", wrote_account=False)
+    _record(results, "c", wrote_account=None)
+    text = catalog.render_results(results)
+
+    assert "| 1/2 |" in text
+
+
+def test_unprompted_tests_are_reported(tmp_path):
+    """27 of 40 recorded runs did this; the harness could only call it tampering."""
+    results = tmp_path / "results"
+    _record(results, "a", added_tests=3)
+    _record(results, "b", added_tests=1)
+    assert "| 4 |" in catalog.render_results(results)
+
+
+def test_a_retired_member_is_named_beside_the_bounces_it_caused(tmp_path):
+    """A retirement costs no tokens and fails no run, so nothing else shows it.
+
+    One dead model owned 55% of a batch's bounces for a month while the router
+    handled it correctly and logged an ERROR into a run nobody greps.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", failover_bounces=5,
+            retired_models=["gemini-2.5-flash"])
+    text = catalog.render_results(results)
+
+    assert "retired: `gemini-2.5-flash`" in text
+
+
+def test_a_healthy_pool_names_nothing(tmp_path):
+    results = tmp_path / "results"
+    _record(results, "a", failover_bounces=2, retired_models=[])
+    assert "retired:" not in catalog.render_results(results)
+
+
+def test_a_stub_run_is_kept_out_of_the_leaderboard(tmp_path):
+    """A stub writes a hardcoded file and calls no model.
+
+    Four were in the real results directory, rendering as the cheapest and most
+    reliable agent version in the table at 4/4 and 912 tokens. The invariant was
+    stated in a comment and enforced by nobody.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", config="code")
+    _record(results, "b", config="stub-fix", stub=True)
+    text = catalog.render_results(results)
+
+    assert "1 runs across 1 agent versions" in text
+    assert "1 stub run(s) excluded" in text
+    assert "stub-fix" not in text
+
+
+def test_an_older_stub_record_is_recognised_by_its_name(tmp_path):
+    """The four already recorded predate the `stub` field."""
+    results = tmp_path / "results"
+    _record(results, "a", config="stub-fix")          # no `stub` key
+    _record(results, "b", config="code")
+    assert catalog.is_stub({"config": "stub-fix"}) is True
+    assert catalog.is_stub({"config": "code"}) is False
+    assert "stub-fix" not in catalog.render_results(results)
+
+
+def test_a_config_that_says_it_is_not_a_stub_is_believed(tmp_path):
+    """The recorded field wins over the name, in both directions."""
+    assert catalog.is_stub({"config": "stub-like-name", "stub": False}) is False
+    assert catalog.is_stub({"config": "code", "stub": True}) is True
+
+
+def test_a_run_that_says_it_has_no_trace_is_not_averaged_in(tmp_path):
+    """`traced` is recorded now, rather than inferred from a zero."""
+    results = tmp_path / "results"
+    _record(results, "a", tokens_in=100_000, provider_calls=10, traced=True)
+    _record(results, "b", tokens_in=0, provider_calls=0, traced=False)
+    text = catalog.render_results(results)
+
+    assert "100,000 (1 untraced)" in text
+
+
+# --- session mining -------------------------------------------------------
+
+SESSION_LOG = """{"type":"user","timestamp":"2026-08-01T10:00:00Z","gitBranch":"topic/x","cwd":"/proj","message":{"content":"widen the suite"}}
+{"type":"assistant","timestamp":"2026-08-01T10:00:05Z","message":{"model":"claude-x","content":[{"type":"text","text":"on it"},{"type":"tool_use","name":"Edit","id":"t1","input":{"file_path":"tests/test_a.py"}}]}}
+{"type":"assistant","timestamp":"2026-08-01T10:00:09Z","message":{"model":"claude-x","content":[{"type":"tool_use","name":"Bash","id":"t2","input":{"command":"python -m pytest"}}]}}
+{"truncated line
+"""
+
+
+def test_a_session_becomes_a_turn_list(tmp_path):
+    """The corpus is the scenario factory: what was asked, beside what it became."""
+    from evals import mine
+
+    store = tmp_path / "projects" / "proj"
+    store.mkdir(parents=True)
+    (store / "abc.jsonl").write_text(SESSION_LOG, encoding="utf-8")
+
+    index = mine.mine(tmp_path / "projects", tmp_path / "out")
+
+    assert len(index) == 1
+    assert index[0]["first_prompt"] == "widen the suite"
+    assert index[0]["tool_calls"] == 2
+    assert index[0]["branches"] == ["topic/x"]
+    assert index[0]["top_files"] == ["tests/test_a.py"]
+
+
+def test_a_half_written_final_line_is_skipped(tmp_path):
+    """The log is appended to while the session runs, so the tail is routinely
+    half-written -- a session that is still open, or one that died."""
+    from evals import mine
+
+    store = tmp_path / "projects" / "proj"
+    store.mkdir(parents=True)
+    (store / "abc.jsonl").write_text(SESSION_LOG, encoding="utf-8")
+
+    records = list(mine.read_jsonl(store / "abc.jsonl"))
+    assert len(records) == 3
+
+
+def test_the_corpus_separates_edits_from_commands(tmp_path):
+    from evals import mine
+
+    turns = [
+        {"role": "tool", "name": "Edit", "input": {"file_path": "a.py"}},
+        {"role": "tool", "name": "Edit", "input": {"file_path": "a.py"}},
+        {"role": "tool", "name": "Bash", "input": {"command": "pytest"}},
+        {"role": "human", "text": "not a tool call"},
+    ]
+    files, commands = mine.work_done(turns)
+
+    assert files.most_common() == [("a.py", 2)]
+    assert commands == ["pytest"]
+
+
+# --- configuration pinning ------------------------------------------------
+
+def test_the_config_is_read_once_and_kept(tmp_path):
+    """The one part of a "pinned" configuration that was not pinned.
+
+    `ref` resolves to a SHA up front and the agent's code goes into a throwaway
+    worktree, but the config file was re-read from the live tree on every run.
+    A batch is hours long and that tree is the operator's: one died at run 6 of
+    18 because a branch was switched under it.
+    """
+    from evals import agent_config
+
+    spec = tmp_path / "demo.yaml"
+    spec.write_text("name: demo\nrepo: .\nref: HEAD\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "--allow-empty",
+                    "-m", "x"], check=True,
+                   env={**os.environ, "GIT_AUTHOR_NAME": "t",
+                        "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+                        "GIT_COMMITTER_EMAIL": "t@t"})
+
+    config = agent_config.load(spec)
+    spec.unlink()
+
+    assert "name: demo" in config.spec_text

@@ -5,6 +5,7 @@
     run --config NAME [...]                   execute runs and record them
     show [--config NAME]                      summarize recorded runs
     bundle [--config NAME] [--out FILE]       collect a batch's evidence for J2
+    mine --out DIR [--sessions DIR]           recorded sessions -> scenario material
 
 Scenarios are data and live in a separate repo (default: the `agent_evals`
 sibling of this one); point elsewhere with --scenarios or EVAL_SCENARIOS.
@@ -18,7 +19,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from evals import (agent_config, bundle as bundle_mod, catalog as catalog_mod,
-                   run as run_mod, scenario as scenario_mod, verify as verify_mod)
+                   mine as mine_mod, run as run_mod, scenario as scenario_mod,
+                   verify as verify_mod)
 
 REPO = Path(__file__).resolve().parents[1]
 CONFIGS = REPO / "evals" / "configs"
@@ -118,13 +120,34 @@ def cmd_run(args) -> int:
         for config in configs:
             trees.enter_context(config.checkout())
 
+        # A run that dies takes only itself. The runner already returns a record
+        # for a crashed *agent*; this is for the runner failing around it -- a
+        # missing file, a git error, a disk full -- and one such failure ended a
+        # batch at run 6 of 18, spending five runs of free-tier quota on no
+        # comparison. Interleaving means the arms stay balanced either way.
+        broken = []
         for index, (config, scenario, task, rep) in enumerate(plan, 1):
             print(f"[{index}/{len(plan)}] {scenario.topic}/{scenario.id}/{task.id} "
                   f"{config.name} rep{rep} ... ", end="", flush=True)
-            record = run_mod.execute_run(repo, scenario, task, config, rep, results)
+            try:
+                record = run_mod.execute_run(repo, scenario, task, config, rep,
+                                             results)
+            except Exception as exc:  # noqa: BLE001 - reported, batch continues
+                broken.append(f"{scenario.id}/{task.id} {config.name} rep{rep}: "
+                              f"{exc!r}")
+                print(f"RUNNER ERROR: {exc!r}")
+                continue
             detail = record["failure_class"] or ""
             print(f"{record['outcome']}{' (' + detail + ')' if detail else ''} "
                   f"[{record['wall_time_s']}s, {record['provider_calls']} calls]")
+
+    if broken:
+        # Loud, and a non-zero exit: these runs recorded nothing, so the batch
+        # is not the comparison it was asked for.
+        print(f"\n{len(broken)} run(s) failed in the runner and recorded nothing:")
+        for line in broken:
+            print(f"  {line}")
+        return 1
     return 0
 
 
@@ -132,6 +155,10 @@ def cmd_show(args) -> int:
     rows = run_mod.load_records(Path(args.results))
     if args.config:
         rows = [r for r in rows if r["config"] in args.config]
+    else:
+        # Named explicitly you get them; in the leaderboard you do not. A stub
+        # calls no model, so 4/4 at 912 tokens would top every column it is in.
+        rows = [r for r in rows if not catalog_mod.is_stub(r)]
     if not rows:
         sys.exit("No results yet.")
 
@@ -168,6 +195,28 @@ def cmd_show(args) -> int:
               f"{weak:>6}{extended:>5}"
               f"{catalog_mod._mean(group, 'provider_calls'):>8.1f}"
               f"{catalog_mod._mean(group, 'failover_bounces'):>9.1f}  {summary}")
+    return 0
+
+
+def cmd_mine(args) -> int:
+    """Recorded Claude Code sessions into a corpus a scenario can be drawn from."""
+    sessions = Path(args.sessions or mine_mod.DEFAULT_SESSIONS)
+    if not sessions.is_dir():
+        sys.exit(f"No session store at {sessions}. Pass --sessions.")
+    out = Path(args.out).resolve()
+    index = mine_mod.mine(sessions, out)
+    if not index:
+        sys.exit(f"No sessions found under {sessions}.")
+
+    by_project = defaultdict(int)
+    for row in index:
+        by_project[row["project"]] += 1
+    print(f"{len(index)} session(s) across {len(by_project)} project(s) -> {out}")
+    for name, count in sorted(by_project.items(), key=lambda kv: -kv[1]):
+        print(f"  {count:4}  {name}")
+    print(f"{sum(r['tool_calls'] for r in index):,} tool calls, "
+          f"{sum(r['human_turns'] for r in index):,} human turns. "
+          f"Read evals/ARCHETYPES.md next.")
     return 0
 
 
@@ -221,6 +270,12 @@ def main() -> int:
     # no leaderboard.
     run.add_argument("--results", default=str(RESULTS))
     run.set_defaults(func=cmd_run)
+
+    mine = sub.add_parser("mine", help="recorded sessions -> scenario material")
+    mine.add_argument("--out", required=True, help="directory to write the corpus into")
+    mine.add_argument("--sessions", default="",
+                      help=f"session store (default: {mine_mod.DEFAULT_SESSIONS})")
+    mine.set_defaults(func=cmd_mine)
 
     show = sub.add_parser("show", help="summarize recorded runs")
     show.add_argument("--config", action="append")
