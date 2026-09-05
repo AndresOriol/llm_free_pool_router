@@ -98,7 +98,10 @@ Four observations:
 2. **The pass column is noise, demonstrably.** `harness-v3-merged` scored 3/3 in
    one batch and 1/3 in the next on an identical configuration, hours apart. Any
    ranking read off these rates would be invented — see
-   [6.14.1](06-agent.md#642-the-pass-column-is-noise).
+   [6.14.1](06-agent.md#642-the-pass-column-is-noise). It was also, separately,
+   *wrong*: it counted an integrity verdict as a failed task, which cost
+   `context-and-gate` two runs and `deepagents` three
+   ([10.1.1](10-metrics.md#1011-why-the-ledger-counts-verified-and-not-outcome)).
 3. **The cost result is real and replicated.** 5,756 against 226,854 input
    tokens for the same task, stable across every rep and batch, with
    between-configuration spread far exceeding within-configuration variance.
