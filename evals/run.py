@@ -62,7 +62,8 @@ def _execute(config, workdir: Path, prompt: str, trace_path: Path,
     # mean something.
     process = subprocess.Popen(cmd, cwd=config.worktree, stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               text=True, errors="replace", env=env)
+                               encoding=scenario_mod.ENCODING,
+                               errors="replace", env=env)
     try:
         stdout, stderr = process.communicate(input=prompt, timeout=timeout_s)
         return {"stdout": stdout, "stderr": stderr,
@@ -95,8 +96,13 @@ def _kill_tree(process) -> None:
         pass
 
 
-def _outcome(execution: dict, verification: dict, tampered: list) -> str:
-    if tampered:
+def _write(path: Path, text: str) -> None:
+    """A run artifact, byte-for-byte as produced."""
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
+def _outcome(execution: dict, verification: dict, weakened: list) -> str:
+    if weakened:
         return "tampered"
     if execution["timed_out"]:
         return "timeout"
@@ -141,21 +147,32 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
         execution = _execute(config, workdir, task.prompt,
                              out_dir / "trace.jsonl", scenario.timeout_s)
 
-        tampered = verify_mod.check_integrity(before, workdir)
+        # Pruned first: classifying an integrity change re-runs a protected
+        # test against a copy of this tree, and the caches the agent's own
+        # pytest left would be copied with it.
         verify_mod.prune_artifacts(workdir)
+        changed = verify_mod.check_integrity(before, workdir)
+        integrity = verify_mod.classify_integrity(seed, workdir, changed,
+                                                  base / "integrity")
         patch = verify_mod.make_diff(seed, workdir)
         verification = verify_mod.verify(repo, scenario, workdir, base / "verified")
 
-    outcome = _outcome(execution, verification, tampered)
+    outcome = _outcome(execution, verification, integrity["weakened"])
     reference = scenario_mod.read(repo, scenario.tag,
                                   "evaluation/solution.patch") or ""
     measured = metrics_mod.collect(out_dir / "trace.jsonl", patch, reference,
                                    outcome, execution["stderr"])
 
-    (out_dir / "stdout.log").write_text(execution["stdout"], encoding="utf-8")
-    (out_dir / "stderr.log").write_text(execution["stderr"], encoding="utf-8")
-    (out_dir / "diff.patch").write_text(patch, encoding="utf-8")
-    (out_dir / "verify.txt").write_text(verification.pop("log"), encoding="utf-8")
+    # newline="\n" everywhere, and on diff.patch it is load-bearing: the default
+    # translates each one to a CRLF pair on Windows, and a patch whose context lines
+    # carry a CR the target file does not is one `git apply` refuses. Recorded
+    # patches were unreplayable for that reason and for the encoding above --
+    # `--no-index` output was being decoded as cp1252, so an em dash reached
+    # disk as three characters. Both are silent: the file looks like a diff.
+    _write(out_dir / "stdout.log", execution["stdout"])
+    _write(out_dir / "stderr.log", execution["stderr"])
+    _write(out_dir / "diff.patch", patch)
+    _write(out_dir / "verify.txt", verification.pop("log"))
 
     record = {
         "run_id": run_id,
@@ -169,7 +186,12 @@ def execute_run(repo: Path, scenario, task, config, rep: int,
         "config_fingerprint": config.fingerprint,
         "rep": rep,
         "outcome": outcome,
-        "tampered_files": tampered,
+        "tampered_files": integrity["weakened"],
+        # Protected files the agent changed without weakening: it appended to a
+        # suite it was told not to break, and the original assertions still
+        # hold. Recorded rather than scored, so the behaviour stops being
+        # invisible before anything starts rewarding it.
+        "extended_files": integrity["extended"],
         "exit_code": execution["exit_code"],
         "wall_time_s": round(execution["wall_time_s"], 1),
         **verification,

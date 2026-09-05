@@ -17,7 +17,7 @@ is what stops a comparison from being read as "number went up".
 | **Autonomy** | `ran_own_tests`, `self_corrected` | Closing its own loop is the difference between an agent and a code generator. |
 | **Efficiency** | `provider_calls`, `failover_bounces`, `tokens_*` | On a free pool this *is* the cost model. A run that passes but drains the pool is a weak pass. |
 | **Robustness to failover** | `models_used` vs `outcome` | Did switching model mid-task derail it? |
-| **Integrity** | `tampered` | Non-negotiable, tracked separately so it can never be averaged away. |
+| **Integrity** | `tampered`, `extended_files` | Non-negotiable, tracked separately so it can never be averaged away. Only a *weakening* counts; strengthening a protected suite is the second column. |
 | **Quality** | Judge scores | Right for the right reason, and in the right scope. |
 
 ## 10.2 Automatic metrics
@@ -35,6 +35,8 @@ output ([7.3](07-observability.md#73-the-local-trace)).
 | `provider_calls` | LLM calls, including failover retries |
 | `failover_bounces` | Transient failures before a step succeeded — wasted quota |
 | `tokens_in` / `tokens_out` | Summed where the provider reports usage |
+| `tampered_files` | Protected files the agent weakened — see [8.5](08-evaluation-method.md) for what makes a change a weakening |
+| `extended_files` | Protected files it changed *without* weakening: it appended to a suite it was told not to break, and the original assertions still hold. Recorded, never scored |
 | `bad_tool_calls` | Invalid tool name, failed `edit_file`, malformed args |
 | `models_used` | Distinct models that served a step, and the per-model call mix |
 | `ran_own_tests` | Did the agent invoke `execute` on the test command itself |

@@ -108,7 +108,7 @@ class AgentConfig:
 
 def _git(repo: Path, *args: str) -> str:
     result = subprocess.run(["git", "-C", str(repo), *args],
-                            capture_output=True, text=True)
+                            capture_output=True, encoding="utf-8")
     if result.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout.strip()
