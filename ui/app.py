@@ -93,6 +93,9 @@ def run_agent_task(combined_prompt: str, workdir: Path | None = None, placeholde
 with st.sidebar:
     st.title("💬 Agent Sessions")
     
+    workspace = st.text_input("Workspace Folder", value=".")
+    st.markdown("---")
+    
     if st.button("➕ New Task / Chat", use_container_width=True):
         new_id = storage.create_session("New Task")
         st.session_state.current_session_id = new_id
@@ -158,8 +161,12 @@ if prompt := st.chat_input("Enter your coding task..."):
 
     # Working indicator & live agent execution
     with st.chat_message("assistant"):
+        if not os.path.isdir(workspace):
+            st.error(f"Directory not found: {workspace}")
+            st.stop()
+            
         with st.status("Working...", expanded=True) as status_box:
-            st.write("Executing coding agent...")
+            st.write(f"Executing coding agent in `{workspace}`...")
             
             output_placeholder = st.empty()
             
@@ -177,7 +184,7 @@ if prompt := st.chat_input("Enter your coding task..."):
             combined_prompt = "\n\n".join(history_parts)
 
             # Run agent as subprocess with Popen streaming
-            output, returncode = run_agent_task(combined_prompt, placeholder=output_placeholder)
+            output, returncode = run_agent_task(combined_prompt, workdir=Path(workspace), placeholder=output_placeholder)
             
             if returncode == 0:
                 status_box.update(label="Complete!", state="complete", expanded=False)
