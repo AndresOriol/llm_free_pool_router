@@ -3,6 +3,7 @@ import logging
 from typing import List, Optional
 
 from .base_provider import LLMProvider
+from .quota.budget import RpdBudget
 
 logger = logging.getLogger("LLMRouter")
 
@@ -19,8 +20,17 @@ class AutonomousLLMRouter:
     the smoke test share one code path (both wrap a router in a RouterChatModel).
     """
 
-    def __init__(self, providers: List[LLMProvider]):
+    def __init__(self, providers: List[LLMProvider], quota: Optional[RpdBudget] = None):
+        """`quota` answers which members have spent their requests-per-day.
+
+        Defaults to reading this router's own usage ledger
+        ([quota/budget.py](quota/budget.py)). Pass one built over another
+        directory to point it elsewhere, or one constructed with
+        `enabled=False` to route exactly as the pool did before the filter
+        existed.
+        """
         self.providers = providers
+        self.quota = RpdBudget() if quota is None else quota
 
     def get_best_provider(self, estimated_tokens: Optional[int] = None,
                           min_context: Optional[int] = None,
@@ -55,6 +65,25 @@ class AutonomousLLMRouter:
         leave cooldown, which is the right move when time is free and a narrow
         member could never have served the request
         (docs/design/long-run-harness.md#2-constraints-facts-not-preferences).
+
+        Finally, a member the usage ledger says has spent its requests-per-day
+        is passed over silently, in `_cheapest`. That is the one exhaustion a
+        cooldown cannot express: the vendor's refusal carries a `Retry-After`
+        measured in seconds, so the member returns to the pool and is asked
+        again, and against a twenty-a-day ceiling that is a fresh refusal every
+        time round the loop until midnight. Skipping it is the difference
+        between paying for that discovery once and paying for it all day.
+
+        **It is the last word on nothing.** The count is our own, over a window
+        model we know is approximate
+        (docs/14-quota-panel.md#145-windows-and-when-they-reset), so it may not
+        overrule anything factual: it picks *among* the members that fit the
+        request and clear the floor, never across them -- a member that cannot
+        hold the job is not made preferable by having budget left. And if none
+        of the candidates has budget, they are all offered anyway and the call
+        is attempted. Being wrong that way costs one refusal on a retry path
+        that already handles it; being wrong the other way stalls a run the
+        provider would have served.
         """
         available = [p for p in self.providers if p.check_availability()]
         if not available:
@@ -69,14 +98,27 @@ class AutonomousLLMRouter:
                 return None
 
         if estimated_tokens is None:
-            return min(available, key=lambda p: p.priority)
+            return self._cheapest(available)
 
         fits = [p for p in available
                 if p.max_input_tokens is None
                 or p.max_input_tokens * _FIT_SAFETY >= estimated_tokens]
         if fits:
-            return min(fits, key=lambda p: p.priority)
+            return self._cheapest(fits)
+        # Nothing fits, so the largest window is the only thing that might: it
+        # is offered whatever the ledger says about its budget, because a member
+        # too small for the request is not an alternative to one that is spent.
         return max(available, key=lambda p: p.max_input_tokens or 0)
+
+    def _cheapest(self, candidates: List[LLMProvider]) -> LLMProvider:
+        """The highest-priority candidate, preferring ones with quota left.
+
+        `funded or candidates` is the whole tolerance rule: when the ledger says
+        every candidate is spent it says nothing useful, so priority decides as
+        it always did and the provider gets the last word.
+        """
+        funded = [p for p in candidates if self.quota.has_budget(p)]
+        return min(funded or candidates, key=lambda p: p.priority)
 
     def seconds_until_available(self,
                                 min_context: Optional[int] = None) -> Optional[float]:

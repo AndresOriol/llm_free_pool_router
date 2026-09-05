@@ -134,9 +134,11 @@ plan that ignores one of them is wrong.
   roughly nine runs a day; the lite and Gemma tiers are what make a real batch
   affordable ([5.4](05-providers.md#54-current-free-tier-limits)).
 - **Two Groq models are decommissioned** (`llama-4-scout`, `qwen3-32b`) and 404.
-  A dead model is only reached if a request is small enough to pass the size
-  filter, so cheaper agents trip landmines that token-heavy ones never reach —
-  audit the pool before reading any efficiency result.
+  The router retires each one on the attempt that discovers it and carries on,
+  but only for that process. A dead model is only reached if a request is small
+  enough to pass the size filter, so cheaper agents pay that attempt on every
+  run and token-heavy ones never do — audit the pool before reading any
+  efficiency result.
 - **Cooldown state is per process.** Two concurrent agents on the same keys each
   rediscover which accounts are hot.
 - **A full comparison costs a meaningful fraction of a day's quota**

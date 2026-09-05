@@ -17,3 +17,8 @@ evals/results/reviews/*
 # What this machine's accounts have spent, plus the pool snapshot the quota
 # panel measures it against. Local state, rewritten as the router runs.
 /llm_router/.usage/
+
+# Scratch space for reports, plans and one-off analyses produced while working
+# with an agent. Point-in-time artifacts, not maintained state -- what survives
+# is the writing that gets promoted into docs/ or evals/results/reports/.
+/.claude/artifacts/

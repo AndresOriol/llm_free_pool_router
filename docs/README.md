@@ -90,6 +90,7 @@ else on this page is design and changes rarely; this block is state.*
 **[4. Failover](04-failover.md)** — the core logic: how a request finds a working account
 &nbsp;&nbsp;&nbsp;&nbsp;[4.1](04-failover.md#41-the-lifecycle-of-one-request) Lifecycle of one request ·
 [4.2](04-failover.md#42-size-aware-selection) Size-aware selection ·
+[4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent) Skipping a spent day ·
 [4.3](04-failover.md#43-classifying-a-failure) Classifying a failure ·
 [4.4](04-failover.md#44-cooldown-and-backoff) Cooldown and backoff ·
 [4.5](04-failover.md#45-the-failover-loop) The failover loop ·
@@ -217,6 +218,15 @@ else on this page is design and changes rarely; this block is state.*
 [14.7](14-quota-panel.md#147-what-the-report-says) What the report says ·
 [14.8](14-quota-panel.md#148-reading-it) Reading it ·
 [14.9](14-quota-panel.md#149-what-it-deliberately-doesnt-do) What it doesn't do
+
+**[17. Deployment](17-deployment.md)** — where this can run unattended, why most hosting platforms cannot run it, and what to change first
+&nbsp;&nbsp;&nbsp;&nbsp;[17.1](17-deployment.md#171-the-question) The question ·
+[17.2](17-deployment.md#172-what-the-workload-actually-is) What the workload is ·
+[17.3](17-deployment.md#173-why-requestresponse-platforms-cannot-host-it) Why request/response platforms fail ·
+[17.4](17-deployment.md#174-the-ceiling-is-the-pool-not-the-compute) The ceiling is the pool ·
+[17.5](17-deployment.md#175-what-fits) What fits ·
+[17.6](17-deployment.md#176-what-has-to-change-first) What has to change first ·
+[17.7](17-deployment.md#177-provider-terms) Provider terms
 
 ---
 

@@ -45,14 +45,19 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
 ## Current state
 
 - [llm_router](llm_router/) — holds one `LLMProvider` per account×model pair,
-  filters to the ones available and large enough for the request, and returns
-  the highest-priority one. Selection only; it never makes a call.
+  filters to the ones available and large enough for the request, prefers those
+  with requests-per-day left, and returns the highest-priority one. Selection
+  only; it never makes a call.
   Configured via [llm_router/config.yaml](llm_router/config.yaml).
 - [llm_router/quota](llm_router/quota/) — answers "how much free tier is left",
   entirely from the usage ledger the router now writes: one line per model over
   every account serving it, filterable down to a single account. A terminal
-  table, `--json` for an agent, and a static HTML panel. It reports; it never
-  gates a call ([14. Quota panel](docs/14-quota-panel.md)).
+  table, `--json` for an agent, and a static HTML panel. The report gates
+  nothing; one reader of the same ledger tells the router which members have
+  spent their day, so a daily ceiling is skipped rather than rediscovered by
+  refusal — advisory, and never able to stall a run
+  ([4.2.1](docs/04-failover.md#421-skipping-a-member-whose-day-is-spent),
+  [14. Quota panel](docs/14-quota-panel.md)).
 - [agent/runtime](agent/runtime/) — the substrate: `RouterChatModel` (the
   failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
   `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows

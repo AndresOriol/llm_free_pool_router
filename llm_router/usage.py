@@ -31,10 +31,13 @@ were spent -- and a refusal carries `retry_after` instead when the provider
 sent one. `reached: false` marks an attempt that never got an answer at all,
 which spent nothing and is left out of the panel's request counts.
 
-**A provider the router skipped is not here.** Size-based selection filters a
-member out before any call is made (`get_best_provider`), and nothing is
-recorded for a member that was never asked -- the ledger holds attempts, not
-intentions.
+**A provider the router skipped is not here.** Selection filters a member out
+before any call is made -- for size, or because this ledger says its day is
+spent (`get_best_provider`) -- and nothing is recorded for a member that was
+never asked: the ledger holds attempts, not intentions. That the daily filter
+reads what this file writes is the one loop in the system, and it is a benign
+one: skipping a member appends nothing, so the count it reads can only be moved
+by an attempt that really happened.
 
 `outcome` is `ok`, `rate_limited` or `error`. A refused attempt is recorded
 rather than dropped: it still spent a request against the account's budget, and

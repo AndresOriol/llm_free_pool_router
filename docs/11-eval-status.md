@@ -132,9 +132,10 @@ Four observations:
    is built and has never been run against a real session.
 3. **Keep authoring scenarios** — `long-context` next, since size-based routing
    is half the architecture and nothing probes it.
-4. **Fix the dead-model crash properly.** The eval pool works around it; the
-   shipping pool still dies on it. A decommissioned model should be disabled
-   permanently, the way a rate-limited one is benched temporarily.
+4. **Make the dead-model retirement outlive the process.** It no longer crashes
+   a run, but `retire()` marks one provider instance, so every fresh run spends
+   an attempt rediscovering the same dead model. A decommissioned model should
+   be disabled permanently, the way a rate-limited one is benched temporarily.
 5. **P2, the judge** — worth building only once there are enough scenarios that
    reading diffs by hand hurts.
 

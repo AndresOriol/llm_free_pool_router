@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from llm_router.base_provider import estimate_tokens
+from llm_router.quota.budget import RpdBudget
 from llm_router.router import AutonomousLLMRouter
 
 
@@ -39,7 +40,10 @@ def _run():
     small = _FakeProvider("groq_small", priority=1, max_input_tokens=6000)
     mid = _FakeProvider("groq_mid", priority=5, max_input_tokens=30000)
     big = _FakeProvider("gemini_big", priority=8, max_input_tokens=250000)
-    router = AutonomousLLMRouter([small, mid, big])
+    # Size only: the daily-quota filter is switched off so this stays a unit
+    # test of the size rules rather than a reader of whatever the machine's real
+    # ledger happens to hold (it is exercised in test_rpd_filter.py).
+    router = AutonomousLLMRouter([small, mid, big], quota=RpdBudget(enabled=False))
 
     # No estimate -> pure priority, as before.
     assert router.get_best_provider() is small

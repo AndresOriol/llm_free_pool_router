@@ -89,10 +89,10 @@ Honest summary, as of the last update to [11. Evaluation status](11-eval-status.
   closed question ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). The
   blocking item is running the survivor against the scenarios that still
   discriminate ([13.2](13-roadmap.md#132-what-to-do-next)).
-- Two Groq models are decommissioned and return `404 model_not_found`, which is
-  not in the transient set, so it kills a run
-  ([4.6](04-failover.md#46-known-gaps)). Evals work around it with a trimmed
-  pool; the shipping pool does not.
+- Two Groq models are decommissioned and return `404 model_not_found`. The
+  router retires the member and the run carries on, but only for that process,
+  so every fresh run spends one attempt rediscovering each dead model
+  ([4.6](04-failover.md#46-known-gaps)).
 - The scenario repo is **not backed up**: four of five scenario tags exist only
   on the machine that authored them
   ([11.4](11-eval-status.md#114-blockers)).
