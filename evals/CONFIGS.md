@@ -34,6 +34,7 @@ the simpler configuration.
 | `harness-v7-orchestrated` | `harness/adhoc-router` | Hub and spoke; execution as an agent | L0, n=3 | 0/3, most calls | **dropped for this task shape** |
 | `harness-v8-session` | `harness/adhoc-router` | A session: briefed roles, journal, branch, docs and rationale as deliverables | L1+L2 `session`, n=2 | 2/4 | **no verdict** — ran alone, no baseline |
 | `code` (was `deepagents`) | `harness/deepagents` | A conversation instead of narrow roles: `create_deep_agent` on the pool behind a hard 128k context floor, configured like `deepagents-code` | — | **never run** | **the only configuration left** — no eval run recorded, so no verdict |
+| `code-account` | `agent/write-the-account` | `code` plus one paragraph: the project's own `NOTES.md` is the exception to "do not create summary markdown files" | session suite, n=1, 10 scenarios | solved 6/10 → 7/10; **account 2/10 → 8/10**; cost flat | **promoted** — flat success, secondary metric four-fold |
 | `code-invariant-guard` | `agent/invariant-guard` | `code` plus one prompt section, `## Contradicted Requests`: never edit a test or a document so that it stops contradicting the task; do the rest; say what you declined | session suite n=1, three contested scenarios n=3, `count-and-share` n=8 | solved 12/16 vs 10/16; **weakened 4 → 1**; `count-and-share` **0/8 → 3/4**; cost flat | **promoted** — the set-wide interval overlaps and is not the evidence; the target scenario is |
 | `code-peers` | `harness/agent-protocol` | `code` plus one `delegate` tool: it can ask the web explorer for a report mid-task, over A2A on a local transport ([16](../docs/16-agent-protocol.md)). The explorer is LangChain's deep-research agent, ported ([15.8](../docs/15-explorer.md#158-the-deep-research-port)) | — | **never run** | no verdict — read `tokens_in` and `delegated_tasks` first, and interleave against `code` |
 
@@ -90,6 +91,36 @@ original wording never produced. Reverted at `fdf1283`. Four runs an arm orders
 nothing, so this is not evidence that leading with the split is wrong; it is
 evidence that it cannot be shown to help, which is the bar. Do not re-try it
 without more reps than that.
+
+### code-account, 20 runs (2026-09-06)
+
+**Promoted.** One paragraph in `## Documentation` making the project's own
+`NOTES.md` the exception to *"do not create summary markdown files describing
+work you just did"*. `AGENT_WRITE_ACCOUNT=0` reproduces the baseline.
+
+| | `code` | `code-account` |
+| --- | --- | --- |
+| solved | 6/10 | 7/10 |
+| wrote an account | **2/10** | **8/10** |
+| `tokens_in` mean | 332,335 | 326,561 |
+
+Success holds (one task regressed by one trial, two improved), the target metric
+moves four-fold, and cost is flat — slightly lower, which is inside noise. That
+is the promotion rule's second limb.
+
+**The rule does not fire on a run that fails.** The two scenarios where no
+account appeared are `count-and-share` and `worst-first`, and in both the run
+ended early. An account is written at the end, so it is the first thing lost
+when a run does not get there — which means this metric is partly a proxy for
+finishing, and should not be read as a pure measure of discipline.
+
+**What it cannot see, demonstrated in this very batch.** On `worst-first` the
+account arm produced a final message headed ***Implemented Requirements*** with
+three bullets naming fields that do not exist, against an empty diff. It did not
+write that into `NOTES.md` — `wrote_account` was false — but the failure this
+change most risks is exactly an account describing work that did not happen, and
+one run in this batch produced the prose for it. `wrote_account` counts lines
+(`agent/claimed-work` in the repair queue).
 
 ### code-invariant-guard, confirmed on a scenario built for it (2026-09-06)
 

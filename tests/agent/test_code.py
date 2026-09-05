@@ -87,6 +87,43 @@ def test_the_guard_is_a_configuration_that_can_be_turned_off(monkeypatch):
     assert not re.findall(r"\{[a-z_]+\}", text)
 
 
+def test_the_project_notes_are_an_exception_to_the_documentation_rule(monkeypatch):
+    """R7's deliverable, against a rule that forbade exactly it.
+
+    `## Documentation` says not to create summary markdown files describing work
+    just done -- right for a one-shot task, precisely wrong for a standing
+    maintainer whose deliverable is the account. 7 of 23 runs that solved their
+    task wrote one; the agent was obeying.
+    """
+    monkeypatch.delenv("AGENT_WRITE_ACCOUNT", raising=False)
+    flat = " ".join(prompt.build(128_000).split())
+
+    assert "Do not create summary markdown files" in flat
+    assert "feedback file is the exception" in flat
+    assert "NOTES.md" in flat
+
+
+def test_the_account_rule_asks_for_what_happened_not_what_was_hoped(monkeypatch):
+    """C4: a confidently wrong rationale reads exactly like a correct one.
+
+    `wrote_account` counts lines and cannot see this, so the prompt has to.
+    """
+    monkeypatch.delenv("AGENT_WRITE_ACCOUNT", raising=False)
+    flat = " ".join(prompt.build(128_000).split())
+
+    assert "Write what happened, not what was hoped for" in flat
+    assert "anything you left undone" in flat
+
+
+def test_the_account_rule_is_a_configuration_that_can_be_turned_off(monkeypatch):
+    monkeypatch.setenv("AGENT_WRITE_ACCOUNT", "0")
+    text = prompt.build(128_000)
+
+    assert "feedback file is the exception" not in text
+    assert "Do not create summary markdown files" in text
+    assert not re.findall(r"\{[a-z_]+\}", text)
+
+
 def test_shell_allows_an_allowlisted_program():
     middleware = ShellAllowListMiddleware(["python", "pytest"])
     assert _refuse(middleware, "python -m pytest -q") is None
