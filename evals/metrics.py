@@ -236,7 +236,7 @@ def _read_gold(events: list, gold: set) -> bool:
 
 
 def classify_failure(outcome: str, events: list, gold: set, touched: set,
-                     stderr: str = "") -> str:
+                     stderr: str = "", broken_files: list = ()) -> str:
     """Why a failed run failed. Empty string for a run that passed.
 
     Ordered most-external-cause first: a run killed by the step budget never
@@ -245,6 +245,13 @@ def classify_failure(outcome: str, events: list, gold: set, touched: set,
     # Tampering is an integrity verdict, not a capability one. Giving it a
     # failure class too would average it into the taxonomy counts, which is
     # exactly what tracking it separately is meant to prevent.
+    # A protected file the agent left unrunnable is a tooling failure, and
+    # checked before the integrity short-circuit below so it is not swallowed
+    # by it. One recorded run wrote diff markers into a test body: the suite
+    # stopped collecting, the run scored `tampered`, and the one run in the
+    # batch with a textbook tooling failure recorded no failure class at all.
+    if broken_files:
+        return "tooling"
     if outcome in {"pass", "tampered"}:
         return ""
     if outcome in {"timeout", "crash"} or "GraphRecursionError" in stderr:
@@ -269,7 +276,8 @@ def classify_failure(outcome: str, events: list, gold: set, touched: set,
 
 
 def collect(trace_path: Path, patch_text: str, reference_patch: str,
-            outcome: str, stderr: str = "", has_account: bool = False) -> dict:
+            outcome: str, stderr: str = "", has_account: bool = False,
+            broken_files: list = ()) -> dict:
     events = load_trace(trace_path)
     gold = gold_files(reference_patch)
     summary = diff_summary(patch_text)
@@ -284,5 +292,6 @@ def collect(trace_path: Path, patch_text: str, reference_patch: str,
     # are added that do not test this at all.
     metrics["wrote_account"] = account_written(patch_text) if has_account else None
     metrics["added_tests"] = added_tests(patch_text)
-    metrics["failure_class"] = classify_failure(outcome, events, gold, touched, stderr)
+    metrics["failure_class"] = classify_failure(outcome, events, gold, touched,
+                                               stderr, broken_files)
     return metrics
