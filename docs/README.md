@@ -111,6 +111,7 @@ else on this page is design and changes rarely; this block is state.*
 &nbsp;&nbsp;&nbsp;&nbsp;[6.1](06-agent.md#61-one-conversation-on-the-pool) One conversation ·
 [6.1.1](06-agent.md#611-the-arm-that-was-deleted) The arm that was deleted ·
 [6.2](06-agent.md#62-the-blast-radius) The blast radius ·
+[6.2.1](06-agent.md#621-the-step-budget) The step budget ·
 [6.3](06-agent.md#63-what-failover-looks-like-in-practice) Failover in practice ·
 [6.4](06-agent.md#64-why-it-is-shaped-this-way) Why it is shaped this way ·
 [6.5](06-agent.md#65-what-makes-it-a-coding-agent) What makes it a coding agent
