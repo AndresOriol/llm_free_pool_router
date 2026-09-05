@@ -74,6 +74,22 @@ def from_trace(events: list) -> dict:
         "failover_bounces": sum(1 for e in events if e.get("event") == "llm_error"),
         "tokens_in": sum(e.get("tokens_in") or 0 for e in events),
         "tokens_out": sum(e.get("tokens_out") or 0 for e in events),
+        # The cost driver, per call rather than per run. `tokens_in` alone
+        # cannot tell a long run from an expensive one, and the audit that
+        # produced this needed exactly that split: over 40 runs `tokens_in`
+        # correlates +0.95 with `steps` and only +0.24 with `failover_bounces`,
+        # so what a run spends is the conversation being re-sent every step,
+        # not failover replaying it (docs/06-agent.md#611).
+        "tokens_per_call": round(
+            sum(e.get("tokens_in") or 0 for e in events) / len(provider_starts))
+        if provider_starts else 0,
+        # Per call, because per run it only says the run was long. A bounce
+        # spends a request against a daily budget and no input tokens: the
+        # provider refuses a 429 or a 404 at the gate, so `llm_error` carries
+        # no token count and there is none to carry.
+        "bounces_per_call": round(
+            sum(1 for e in events if e.get("event") == "llm_error")
+            / len(provider_starts), 2) if provider_starts else 0.0,
         "tool_calls": len(tool_starts),
         "bad_tool_calls": len(tool_errors) + len(soft_errors),
         "models_used": sorted({e.get("model") for e in provider_starts if e.get("model")}),

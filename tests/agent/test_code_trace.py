@@ -309,3 +309,30 @@ if __name__ == "__main__":
     _run()
     _run_condense()
     _run_failover_and_compaction()
+
+
+def test_a_refused_call_contributes_no_tokens_and_one_bounce():
+    """A bounce is a quota cost, not a token cost.
+
+    The provider refuses a 429 or a 404 at the gate, so `llm_error` carries no
+    token count -- checked across 40 runs, 247 bounces, none of them with one.
+    Reporting bounces in the same breath as `tokens_in` invited exactly the
+    wrong reading (docs/06-agent.md#611).
+    """
+    from evals import metrics
+
+    events = [
+        {"event": "llm_start", "run_id": "s1", "model": "RouterChatModel"},
+        {"event": "llm_start", "run_id": "p1", "model": "gemini-2.5-flash"},
+        {"event": "llm_error", "run_id": "p1", "ok": False, "detail": "404 NOT_FOUND"},
+        {"event": "llm_start", "run_id": "p2", "model": "gemini-3.5-flash"},
+        {"event": "llm_end", "run_id": "p2", "ok": True, "tokens_in": 30_000,
+         "tokens_out": 200},
+    ]
+    measured = metrics.from_trace(events)
+
+    assert measured["failover_bounces"] == 1
+    assert measured["tokens_in"] == 30_000
+    assert measured["provider_calls"] == 2
+    assert measured["tokens_per_call"] == 15_000
+    assert measured["bounces_per_call"] == 0.5

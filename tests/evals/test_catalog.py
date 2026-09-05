@@ -336,3 +336,18 @@ def test_an_untraced_run_is_not_averaged_into_a_cost(tmp_path):
 
     assert "100,000 (1 untraced)" in text
     assert "50,000" not in text
+
+
+def test_cost_per_call_is_reported_beside_cost_per_run(tmp_path):
+    """`tokens_in` cannot tell a long run from an expensive one.
+
+    The audit behind this found `tokens_in` correlating +0.95 with `steps` and
+    +0.24 with `failover_bounces` over 40 runs, so what a run spends is the
+    conversation being re-sent every step. That is only legible per call.
+    """
+    results = tmp_path / "results"
+    _record(results, "a", tokens_in=600_000, provider_calls=20, tokens_per_call=30_000)
+    text = catalog.render_results(results)
+
+    assert "tok/call" in text
+    assert "30,000" in text
