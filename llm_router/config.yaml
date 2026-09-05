@@ -61,6 +61,12 @@ accounts:
     type: gemini
     url: https://generativelanguage.googleapis.com/v1beta/models
     api_key_env: GEMINI_API_KEY_6
+  - name: gemini_7
+    user: [EMAIL_ADDRESS]
+    platform: gemini
+    type: gemini
+    url: https://generativelanguage.googleapis.com/v1beta/models
+    api_key_env: GEMINI_API_KEY_7
 
 models:
   # Retired models (Groq's Llama line, qwen3-32b) are removed, not kept as
