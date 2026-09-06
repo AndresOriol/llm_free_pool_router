@@ -1,7 +1,33 @@
 import { Session, Message } from '../types';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+import hljs from 'highlight.js';
+
+// Configure marked with highlight.js
+marked.use({
+  renderer: {
+    code(code: string, infostring?: string, escaped?: boolean) {
+      const lang = ((infostring || '') as string).match(/\S*/)?.[0] || '';
+      let highlighted = code;
+      if (lang && hljs.getLanguage(lang)) {
+        try {
+          highlighted = hljs.highlight(code, { language: lang }).value;
+        } catch (__) {}
+      } else {
+        try {
+          highlighted = hljs.highlightAuto(code).value;
+        } catch (__) {}
+      }
+      return `<pre><code class="hljs language-${lang || 'text'}">${highlighted}</code></pre>`;
+    }
+  }
+});
 
 let currentSessionId: string | null = null;
 let isRunning = false;
+let startTime: number | null = null;
+let timerInterval: any = null;
+let currentEventSource: EventSource | null = null;
 
 // DOM Elements
 const workspaceInput = document.getElementById('workspace-input') as HTMLInputElement;
@@ -11,7 +37,9 @@ const sessionTitle = document.getElementById('session-title') as HTMLHeadingElem
 const messagesContainer = document.getElementById('messages-container') as HTMLDivElement;
 const workingIndicator = document.getElementById('working-indicator') as HTMLDivElement;
 const indicatorText = document.getElementById('indicator-text') as HTMLSpanElement;
+const elapsedTimeSpan = document.getElementById('elapsed-time') as HTMLSpanElement;
 const liveOutput = document.getElementById('live-output') as HTMLPreElement;
+const stopBtn = document.getElementById('stop-btn') as HTMLButtonElement;
 const chatForm = document.getElementById('chat-form') as HTMLFormElement;
 const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement;
 const sendBtn = document.getElementById('send-btn') as HTMLButtonElement;
@@ -43,6 +71,20 @@ function setupEventListeners() {
     if (!content || !currentSessionId) return;
 
     await sendMessage(content);
+  });
+
+  stopBtn.addEventListener('click', async () => {
+    if (!isRunning || !currentSessionId) return;
+    try {
+      const res = await fetch(`/api/sessions/${currentSessionId}/stop`, { method: 'POST' });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Failed to stop run: ${errData.error || res.statusText}`);
+      }
+    } catch (err) {
+      console.error('Error stopping run:', err);
+      alert('Error stopping run: ' + (err as Error).message);
+    }
   });
 
   // Allow Enter to submit, Shift+Enter for newline
@@ -120,18 +162,6 @@ async function createNewSession() {
 async function selectSession(id: string) {
   currentSessionId = id;
   
-  // Update active class in sidebar
-  const items = sessionsList.querySelectorAll('.session-item');
-  items.forEach(item => {
-    item.classList.remove('active');
-  });
-  
-  // Find and highlight active item
-  const activeItem = Array.from(items).find(item => {
-    const titleText = item.querySelector('.session-title-text');
-    return titleText && titleText.textContent === sessionTitle.textContent; // simple fallback, better to re-render
-  });
-  
   await loadSessions(); // This will re-render and set active class correctly
 
   try {
@@ -146,7 +176,6 @@ async function selectSession(id: string) {
     sessionTitle.textContent = session.title;
     renderMessages(session.messages);
     
-    // If session was left in working state, we can't easily resume SSE, but we can reset UI
     if (session.status === 'working') {
       setRunningState(false);
     }
@@ -183,13 +212,39 @@ async function deleteSession(id: string) {
   }
 }
 
-// Render messages
+// Render messages with markdown support for assistant and safety sanitization
 function renderMessages(messages: Message[]) {
   messagesContainer.innerHTML = '';
+  
+  if (messages.length === 0) {
+    const emptyDiv = document.createElement('div');
+    emptyDiv.className = 'empty-state';
+    emptyDiv.innerHTML = `
+      <h2>Welcome to Coding Agent</h2>
+      <p>Enter your coding instructions below. The autonomous agent will inspect your workspace, plan, execute tools, and solve coding tasks step-by-step.</p>
+      <p><strong>Tips:</strong> Use Shift+Enter for newlines. Configure the workspace folder in the sidebar.</p>
+    `;
+    messagesContainer.appendChild(emptyDiv);
+    return;
+  }
+
   messages.forEach(msg => {
     const div = document.createElement('div');
     div.className = `message ${msg.role}`;
-    div.textContent = msg.content;
+    
+    if (msg.role === 'assistant') {
+      try {
+        const rawHtml = marked.parse(msg.content) as string;
+        div.innerHTML = DOMPurify.sanitize(rawHtml);
+      } catch (err) {
+        div.textContent = msg.content;
+      }
+    } else if (msg.role === 'user') {
+      div.textContent = msg.content;
+    } else {
+      div.textContent = msg.content;
+    }
+    
     messagesContainer.appendChild(div);
   });
   scrollToBottom();
@@ -200,7 +255,7 @@ function scrollToBottom() {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-// Set running state
+// Set running state & timer
 function setRunningState(running: boolean) {
   isRunning = running;
   chatInput.disabled = running;
@@ -210,10 +265,25 @@ function setRunningState(running: boolean) {
   
   if (running) {
     workingIndicator.classList.remove('hidden');
-    indicatorText.textContent = 'Working...';
+    indicatorText.textContent = 'Working... (Routing model...)';
     liveOutput.textContent = '';
+    startTime = Date.now();
+    elapsedTimeSpan.textContent = '0s';
+    
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      if (startTime) {
+        const secs = Math.floor((Date.now() - startTime) / 1000);
+        elapsedTimeSpan.textContent = `${secs}s`;
+      }
+    }, 1000);
   } else {
     workingIndicator.classList.add('hidden');
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    startTime = null;
   }
 }
 
@@ -242,45 +312,67 @@ async function sendMessage(content: string) {
     // Update UI with new messages
     sessionTitle.textContent = session.title;
     renderMessages(session.messages);
-    await loadSessions(); // update sidebar title if needed
+    await loadSessions();
 
-    // 2. Start streaming agent execution
+    // 2. Start streaming agent execution via SSE
     const workspace = workspaceInput.value.trim() || '.';
     const eventSourceUrl = `/api/sessions/${currentSessionId}/run?workspace=${encodeURIComponent(workspace)}`;
     
-    const eventSource = new EventSource(eventSourceUrl);
+    if (currentEventSource) {
+      currentEventSource.close();
+    }
     
-    eventSource.addEventListener('output', (e: any) => {
+    currentEventSource = new EventSource(eventSourceUrl);
+    
+    currentEventSource.addEventListener('output', (e: any) => {
       try {
         const data = JSON.parse(e.data);
-        liveOutput.textContent += data.chunk;
+        const chunk = data.chunk;
+        liveOutput.textContent += chunk;
         liveOutput.scrollTop = liveOutput.scrollHeight;
+
+        // Parse status indicators from stream output
+        if (chunk.includes('Routing to')) {
+          const match = chunk.match(/Routing to ([^. \n]+)/);
+          if (match) {
+            indicatorText.textContent = `Working via ${match[1]}...`;
+          }
+        }
+        if (chunk.includes('step') || chunk.includes('Iteration')) {
+          indicatorText.textContent = `Working (executing steps)...`;
+        }
       } catch (err) {
         console.error('Error parsing output event:', err);
       }
     });
 
-    eventSource.addEventListener('error', (e: any) => {
+    currentEventSource.addEventListener('error', (e: any) => {
       console.error('SSE Error:', e);
       try {
         const data = JSON.parse(e.data);
         liveOutput.textContent += `\n[Error: ${data.error || 'Unknown error'}]`;
       } catch (err) {
-        liveOutput.textContent += `\n[Connection Error]`;
+        liveOutput.textContent += `\n[Connection Closed]`;
       }
-      eventSource.close();
+      if (currentEventSource) {
+        currentEventSource.close();
+        currentEventSource = null;
+      }
       setRunningState(false);
       if (currentSessionId) selectSession(currentSessionId);
     });
 
-    eventSource.addEventListener('end', (e: any) => {
+    currentEventSource.addEventListener('end', (e: any) => {
       try {
         const data = JSON.parse(e.data);
         indicatorText.textContent = data.status === 'completed' ? 'Complete!' : 'Completed with errors';
       } catch (err) {
         indicatorText.textContent = 'Finished';
       }
-      eventSource.close();
+      if (currentEventSource) {
+        currentEventSource.close();
+        currentEventSource = null;
+      }
       setTimeout(() => {
         setRunningState(false);
         if (currentSessionId) selectSession(currentSessionId);

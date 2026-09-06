@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Coding Agent UI</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -42,10 +43,16 @@
       <!-- Working Indicator / Live Stream -->
       <div id="working-indicator" class="working-indicator hidden">
         <div class="indicator-header">
-          <span class="spinner">⏳</span>
-          <span id="indicator-text">Working...</span>
+          <div class="indicator-left">
+            <span class="spinner">⏳</span>
+            <span id="indicator-text">Working...</span>
+          </div>
+          <button type="button" id="stop-btn" class="btn btn-stop">Stop Run</button>
         </div>
-        <pre id="live-output" class="live-output"></pre>
+        <details class="live-output-details">
+          <summary>View Raw Execution Log (<span id="elapsed-time">0s</span>)</summary>
+          <pre id="live-output" class="live-output"></pre>
+        </details>
       </div>
 
       <div class="input-container">

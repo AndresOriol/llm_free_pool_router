@@ -241,9 +241,108 @@ body {
 .indicator-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
   font-weight: 600;
   font-size: 0.9rem;
+}
+
+.indicator-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-stop {
+  background-color: var(--error-color);
+  color: #11111b;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+}
+
+.btn-stop:hover {
+  opacity: 0.9;
+}
+
+.live-output-details {
+  margin-top: 5px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.live-output-details summary {
+  cursor: pointer;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+/* Markdown formatting inside assistant messages */
+.message.assistant {
+  align-self: flex-start;
+  background-color: var(--assistant-msg-bg);
+  color: var(--text-primary);
+  border-bottom-left-radius: 2px;
+}
+
+.message.assistant p {
+  margin-bottom: 10px;
+}
+
+.message.assistant p:last-child {
+  margin-bottom: 0;
+}
+
+.message.assistant pre {
+  background-color: #11111b;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+
+.message.assistant code {
+  font-family: "Fira Code", Consolas, Monaco, monospace;
+  font-size: 0.9em;
+}
+
+.message.assistant p code {
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.message.assistant ul, .message.assistant ol {
+  margin-left: 20px;
+  margin-bottom: 10px;
+}
+
+.message.assistant h1, .message.assistant h2, .message.assistant h3, .message.assistant h4 {
+  margin-top: 15px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+/* Empty state styling */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 40px;
+  gap: 15px;
+}
+
+.empty-state h2 {
+  color: var(--text-primary);
+  font-size: 1.5rem;
+}
+
+.empty-state p {
+  max-width: 500px;
+  line-height: 1.6;
 }
 
 .spinner {
