@@ -11,8 +11,17 @@ import markdown from 'highlight.js/lib/languages/markdown';
 import yaml from 'highlight.js/lib/languages/yaml';
 import xml from 'highlight.js/lib/languages/xml';
 import css from 'highlight.js/lib/languages/css';
+import diff from 'highlight.js/lib/languages/diff';
+import sql from 'highlight.js/lib/languages/sql';
+import rust from 'highlight.js/lib/languages/rust';
+import go from 'highlight.js/lib/languages/go';
+import cpp from 'highlight.js/lib/languages/cpp';
+import java from 'highlight.js/lib/languages/java';
+import csharp from 'highlight.js/lib/languages/csharp';
+import ruby from 'highlight.js/lib/languages/ruby';
+import dockerfile from 'highlight.js/lib/languages/dockerfile';
 
-// Register essential languages
+// Register comprehensive language support
 hljs.registerLanguage('typescript', typescript);
 hljs.registerLanguage('ts', typescript);
 hljs.registerLanguage('javascript', javascript);
@@ -30,38 +39,151 @@ hljs.registerLanguage('yml', yaml);
 hljs.registerLanguage('html', xml);
 hljs.registerLanguage('xml', xml);
 hljs.registerLanguage('css', css);
+hljs.registerLanguage('diff', diff);
+hljs.registerLanguage('patch', diff);
+hljs.registerLanguage('sql', sql);
+hljs.registerLanguage('rust', rust);
+hljs.registerLanguage('rs', rust);
+hljs.registerLanguage('go', go);
+hljs.registerLanguage('golang', go);
+hljs.registerLanguage('cpp', cpp);
+hljs.registerLanguage('c++', cpp);
+hljs.registerLanguage('java', java);
+hljs.registerLanguage('csharp', csharp);
+hljs.registerLanguage('cs', csharp);
+hljs.registerLanguage('ruby', ruby);
+hljs.registerLanguage('rb', ruby);
+hljs.registerLanguage('dockerfile', dockerfile);
+hljs.registerLanguage('docker', dockerfile);
 
-// Configure marked with highlight.js
+// File-level header lines carry no line number of their own.
+function isDiffHeader(line: string): boolean {
+  return (
+    line.startsWith('---') ||
+    line.startsWith('+++') ||
+    line.startsWith('diff --git ') ||
+    line.startsWith('index ') ||
+    line.startsWith('old mode ') ||
+    line.startsWith('new mode ') ||
+    line.startsWith('new file mode ') ||
+    line.startsWith('deleted file mode ') ||
+    line.startsWith('similarity index ') ||
+    line.startsWith('rename from ') ||
+    line.startsWith('rename to ') ||
+    line.startsWith('Binary files ') ||
+    line.startsWith('\ No newline')
+  );
+}
+
+// Helper to render unified diff with line-number gutters
+function renderUnifiedDiffHtml(diffText: string): string {
+  const lines = diffText.split('\n');
+  let oldLine = 1;
+  let newLine = 1;
+  let rowsHtml = '';
+
+  for (const line of lines) {
+    if (line.startsWith('@@')) {
+      const match = line.match(/@@\s*-(\d+)(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@/);
+      if (match) {
+        oldLine = parseInt(match[1], 10);
+        newLine = parseInt(match[2], 10);
+      }
+      const safeHunk = escapeHtml(line);
+      rowsHtml += `<div class="diff-row hunk"><span class="diff-gutter">...</span><span class="diff-content">${safeHunk}</span></div>`;
+    } else if (line.startsWith('+') && !line.startsWith('+++')) {
+      const safeContent = escapeHtml(line);
+      rowsHtml += `<div class="diff-row add"><span class="diff-gutter">+${newLine}</span><span class="diff-content">${safeContent}</span></div>`;
+      newLine++;
+    } else if (line.startsWith('-') && !line.startsWith('---')) {
+      const safeContent = escapeHtml(line);
+      rowsHtml += `<div class="diff-row remove"><span class="diff-gutter">-${oldLine}</span><span class="diff-content">${safeContent}</span></div>`;
+      oldLine++;
+    } else {
+      const safeContent = escapeHtml(line);
+      const header = isDiffHeader(line);
+      const gutterText = header ? ' ' : `${oldLine}`;
+      rowsHtml += `<div class="diff-row${header ? ' header' : ''}"><span class="diff-gutter">${gutterText}</span><span class="diff-content">${safeContent}</span></div>`;
+      if (!header) {
+        oldLine++;
+        newLine++;
+      }
+    }
+  }
+
+  return `<div class="diff-view"><div class="diff-header-bar"><span>Unified Diff View</span></div>${rowsHtml}</div>`;
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// Configure marked with syntax highlighting & custom code blocks
 marked.use({
   renderer: {
-    code(code: string, infostring?: string, escaped?: boolean) {
-      const lang = ((infostring || '') as string).match(/\S*/)?.[0] || '';
+    code(code: string, infostring?: string) {
+      const lang = ((infostring || '') as string).match(/\S*/)?.[0]?.toLowerCase() || '';
+
+      // Check for unified diff
+      if (lang === 'diff' || lang === 'patch' || (code.includes('--- ') && code.includes('+++ ') && code.includes('@@ '))) {
+        return renderUnifiedDiffHtml(code);
+      }
+
       let highlighted = code;
-      if (lang && hljs.getLanguage(lang)) {
+      const validLang = lang && hljs.getLanguage(lang) ? lang : '';
+      if (validLang) {
         try {
-          highlighted = hljs.highlight(code, { language: lang }).value;
-        } catch (__) {}
+          highlighted = hljs.highlight(code, { language: validLang }).value;
+        } catch (__) {
+          highlighted = escapeHtml(code);
+        }
       } else {
         try {
           highlighted = hljs.highlightAuto(code).value;
-        } catch (__) {}
+        } catch (__) {
+          highlighted = escapeHtml(code);
+        }
       }
-      return `<pre><code class="hljs language-${lang || 'text'}">${highlighted}</code></pre>`;
+
+      const displayLang = validLang || lang || 'code';
+      const encodedCode = encodeURIComponent(code);
+
+      return `
+        <div class="code-block-container">
+          <div class="code-block-header">
+            <span class="code-lang-tag">${displayLang}</span>
+            <button type="button" class="btn-copy-code" data-code="${encodedCode}">Copy</button>
+          </div>
+          <pre><code class="hljs language-${displayLang}">${highlighted}</code></pre>
+        </div>
+      `;
     }
   }
 });
 
+// App State
 let currentSessionId: string | null = null;
 let isRunning = false;
 let startTime: number | null = null;
 let timerInterval: any = null;
 let currentEventSource: EventSource | null = null;
+let slashSelectedIdx = -1;
 
 // DOM Elements
 const workspaceInput = document.getElementById('workspace-input') as HTMLInputElement;
 const newSessionBtn = document.getElementById('new-session-btn') as HTMLButtonElement;
 const sessionsList = document.getElementById('sessions-list') as HTMLUListElement;
+const sessionsCountBadge = document.getElementById('sessions-count') as HTMLSpanElement;
 const sessionTitle = document.getElementById('session-title') as HTMLHeadingElement;
+const agentStatusPill = document.getElementById('agent-status-pill') as HTMLDivElement;
+const agentStatusText = document.getElementById('agent-status-text') as HTMLSpanElement;
+const currentModelSpan = document.getElementById('current-model') as HTMLSpanElement;
+const clearChatBtn = document.getElementById('clear-chat-btn') as HTMLButtonElement;
 const messagesContainer = document.getElementById('messages-container') as HTMLDivElement;
 const workingIndicator = document.getElementById('working-indicator') as HTMLDivElement;
 const indicatorText = document.getElementById('indicator-text') as HTMLSpanElement;
@@ -71,8 +193,10 @@ const stopBtn = document.getElementById('stop-btn') as HTMLButtonElement;
 const chatForm = document.getElementById('chat-form') as HTMLFormElement;
 const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement;
 const sendBtn = document.getElementById('send-btn') as HTMLButtonElement;
+const slashPopup = document.getElementById('slash-popup') as HTMLDivElement;
+const slashPopupList = document.getElementById('slash-popup-list') as HTMLUListElement;
 
-// Initialize
+// Initialize Application
 async function init() {
   setupEventListeners();
   await loadSessions();
@@ -84,13 +208,31 @@ async function init() {
   }
 }
 
-// Event Listeners
+// Event Listeners setup
 function setupEventListeners() {
+  // New session button
   newSessionBtn.addEventListener('click', async () => {
     if (isRunning) return;
     await createNewSession();
   });
 
+  // Clear chat button
+  clearChatBtn.addEventListener('click', async () => {
+    if (isRunning || !currentSessionId) return;
+    if (confirm('Clear all conversation messages in this thread?')) {
+      await clearCurrentSession();
+    }
+  });
+
+  // Quick Action Chips
+  document.querySelectorAll('.btn-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cmd = (btn as HTMLElement).getAttribute('data-cmd');
+      if (cmd) handleSlashCommand(cmd);
+    });
+  });
+
+  // Form submit
   chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (isRunning) return;
@@ -98,9 +240,20 @@ function setupEventListeners() {
     const content = chatInput.value.trim();
     if (!content || !currentSessionId) return;
 
+    hideSlashPopup();
+
+    // Check for slash commands
+    if (content.startsWith('/')) {
+      handleSlashCommand(content);
+      chatInput.value = '';
+      autoResizeInput();
+      return;
+    }
+
     await sendMessage(content);
   });
 
+  // Stop button
   stopBtn.addEventListener('click', async () => {
     if (!isRunning || !currentSessionId) return;
     try {
@@ -115,13 +268,223 @@ function setupEventListeners() {
     }
   });
 
-  // Allow Enter to submit, Shift+Enter for newline
+  // Chat Input Keyboard Events & Autocomplete
+  chatInput.addEventListener('input', () => {
+    autoResizeInput();
+    checkSlashPopup();
+  });
+
   chatInput.addEventListener('keydown', (e) => {
+    // Slash popup navigation
+    if (!slashPopup.classList.contains('hidden')) {
+      const items = Array.from(slashPopupList.querySelectorAll('li'));
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        slashSelectedIdx = (slashSelectedIdx + 1) % items.length;
+        updateSlashSelection(items);
+        return;
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        slashSelectedIdx = (slashSelectedIdx - 1 + items.length) % items.length;
+        updateSlashSelection(items);
+        return;
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (slashSelectedIdx >= 0 && slashSelectedIdx < items.length) {
+          e.preventDefault();
+          const cmd = items[slashSelectedIdx].getAttribute('data-cmd');
+          if (cmd) {
+            chatInput.value = cmd;
+            hideSlashPopup();
+            chatInput.focus();
+            autoResizeInput();
+          }
+          return;
+        }
+      } else if (e.key === 'Escape') {
+        hideSlashPopup();
+        return;
+      }
+    }
+
+    // Submit on Enter (without Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       chatForm.requestSubmit();
     }
   });
+
+  // Slash popup list item clicks
+  slashPopupList.querySelectorAll('li').forEach(li => {
+    li.addEventListener('click', () => {
+      const cmd = li.getAttribute('data-cmd');
+      if (cmd) {
+        chatInput.value = cmd;
+        hideSlashPopup();
+        chatInput.focus();
+        autoResizeInput();
+      }
+    });
+  });
+
+  // Global click to close slash popup
+  document.addEventListener('click', (e) => {
+    if (!slashPopup.contains(e.target as Node) && e.target !== chatInput) {
+      hideSlashPopup();
+    }
+  });
+
+  // Delegate Copy Code block button clicks
+  messagesContainer.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target && target.classList.contains('btn-copy-code')) {
+      const rawCode = decodeURIComponent(target.getAttribute('data-code') || '');
+      if (rawCode) {
+        navigator.clipboard.writeText(rawCode).then(() => {
+          const origText = target.textContent;
+          target.textContent = '✓ Copied!';
+          setTimeout(() => {
+            target.textContent = origText;
+          }, 2000);
+        }).catch(() => {
+          target.textContent = 'Error';
+        });
+      }
+    }
+  });
+}
+
+// Auto-resize chat textarea
+function autoResizeInput() {
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
+}
+
+// Check if slash popup should be displayed
+function checkSlashPopup() {
+  const text = chatInput.value;
+  if (text.startsWith('/')) {
+    const query = text.toLowerCase();
+    let hasMatch = false;
+    slashPopupList.querySelectorAll('li').forEach(li => {
+      const cmd = li.getAttribute('data-cmd') || '';
+      if (cmd.startsWith(query)) {
+        (li as HTMLElement).style.display = 'flex';
+        hasMatch = true;
+      } else {
+        (li as HTMLElement).style.display = 'none';
+      }
+    });
+
+    if (hasMatch) {
+      slashPopup.classList.remove('hidden');
+      slashSelectedIdx = -1;
+      const items = Array.from(slashPopupList.querySelectorAll('li')).filter(li => (li as HTMLElement).style.display !== 'none');
+      if (items.length > 0) {
+        slashSelectedIdx = 0;
+        updateSlashSelection(items);
+      }
+    } else {
+      hideSlashPopup();
+    }
+  } else {
+    hideSlashPopup();
+  }
+}
+
+function hideSlashPopup() {
+  slashPopup.classList.add('hidden');
+  slashSelectedIdx = -1;
+  slashPopupList.querySelectorAll('li').forEach(li => {
+    li.classList.remove('selected');
+    (li as HTMLElement).style.display = 'flex';
+  });
+}
+
+function updateSlashSelection(items: HTMLElement[]) {
+  items.forEach((item, idx) => {
+    if (idx === slashSelectedIdx) {
+      item.classList.add('selected');
+      item.scrollIntoView({ block: 'nearest' });
+    } else {
+      item.classList.remove('selected');
+    }
+  });
+}
+
+// Slash command handling
+async function handleSlashCommand(cmdStr: string) {
+  const parts = cmdStr.trim().split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+
+  if (cmd === '/clear') {
+    await clearCurrentSession();
+    return;
+  }
+
+  if (cmd === '/help') {
+    const helpMsg: Message = {
+      role: 'assistant',
+      content: `### Commands\n\n- \`/help\` - Show this list\n- \`/diff\` - Show \`git diff\` for the workspace\n- \`/model\` - Show the model the router last routed to\n- \`/clear\` - Clear the messages in this session\n\nAnything else you type is sent to the agent as a task: inspecting files, editing code, running tests.\n\n*Commands render here only. They are not saved to the session and are never sent to the agent.*`
+    };
+    appendLocalMessage(helpMsg);
+    return;
+  }
+
+  if (cmd === '/diff') {
+    const workspace = workspaceInput.value.trim() || '.';
+    try {
+      const res = await fetch(`/api/diff?workspace=${encodeURIComponent(workspace)}`);
+      const data = await res.json();
+      let content: string;
+      if (!res.ok || data.error) {
+        content = `**No diff:** ${data.error || res.statusText}`;
+      } else if (!data.diff.trim()) {
+        content = `No uncommitted changes in \`${workspace}\`.`;
+      } else {
+        // The diff can itself contain a run of backticks (this file's source
+        // does), so the fence has to be longer than the longest run in it.
+        const longest = Math.max(0, ...(data.diff.match(/`+/g) || []).map((m: string) => m.length));
+        const fence = '`'.repeat(Math.max(3, longest + 1));
+        content = `### git diff - ${workspace}\n\n${fence}diff\n${data.diff}\n${fence}`;
+      }
+      appendLocalMessage({ role: 'assistant', content });
+    } catch (err) {
+      appendLocalMessage({ role: 'assistant', content: `**Failed to read diff:** ${(err as Error).message}` });
+    }
+    return;
+  }
+
+  if (cmd === '/model') {
+    const modelMsg: Message = {
+      role: 'assistant',
+      content: `**Last routed model:** \`${currentModelSpan.textContent}\`\n\nThe pool picks a member per request, so this is the most recent one seen in the run log, not a fixed setting.`
+    };
+    appendLocalMessage(modelMsg);
+    return;
+  }
+
+  // Unknown command fallback -> send as regular task
+  await sendMessage(cmdStr);
+}
+
+function appendLocalMessage(msg: Message) {
+  const emptyState = messagesContainer.querySelector('.empty-state');
+  if (emptyState) emptyState.remove();
+  messagesContainer.appendChild(createMessageElement(msg));
+  scrollToBottom();
+}
+
+// Clear current session messages
+async function clearCurrentSession() {
+  if (!currentSessionId) return;
+  try {
+    const res = await fetch(`/api/sessions/${currentSessionId}/clear`, { method: 'POST' });
+    if (res.ok) {
+      await selectSession(currentSessionId);
+    }
+  } catch (err) {
+    console.error('Error clearing session:', err);
+  }
 }
 
 // Load all sessions
@@ -131,6 +494,7 @@ async function loadSessions() {
     const sessions: Session[] = await res.json();
     
     sessionsList.innerHTML = '';
+    sessionsCountBadge.textContent = String(sessions.length);
     
     if (sessions.length > 0 && !currentSessionId) {
       currentSessionId = sessions[0].id;
@@ -140,10 +504,22 @@ async function loadSessions() {
       const li = document.createElement('li');
       li.className = `session-item ${session.id === currentSessionId ? 'active' : ''}`;
       
+      const sessionMain = document.createElement('div');
+      sessionMain.className = 'session-main';
+
       const titleSpan = document.createElement('span');
       titleSpan.className = 'session-title-text';
-      titleSpan.textContent = session.title;
-      titleSpan.addEventListener('click', () => {
+      titleSpan.textContent = session.title || 'Untitled Task';
+
+      const metaSpan = document.createElement('span');
+      metaSpan.className = 'session-meta-text';
+      const msgCount = session.messages ? session.messages.length : 0;
+      metaSpan.textContent = `${msgCount} msgs · ${formatRelativeTime(session.updated_at || session.created_at)}`;
+
+      sessionMain.appendChild(titleSpan);
+      sessionMain.appendChild(metaSpan);
+
+      sessionMain.addEventListener('click', () => {
         if (isRunning) return;
         selectSession(session.id);
       });
@@ -155,18 +531,28 @@ async function loadSessions() {
       deleteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         if (isRunning) return;
-        if (confirm(`Are you sure you want to delete "${session.title}"?`)) {
+        if (confirm(`Delete session "${session.title}"?`)) {
           await deleteSession(session.id);
         }
       });
 
-      li.appendChild(titleSpan);
+      li.appendChild(sessionMain);
       li.appendChild(deleteBtn);
       sessionsList.appendChild(li);
     });
   } catch (error) {
     console.error('Error loading sessions:', error);
   }
+}
+
+function formatRelativeTime(dateStr?: string): string {
+  if (!dateStr) return 'just now';
+  const time = new Date(dateStr).getTime();
+  const diff = Math.floor((Date.now() - time) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 // Create a new session
@@ -189,8 +575,7 @@ async function createNewSession() {
 // Select a session
 async function selectSession(id: string) {
   currentSessionId = id;
-  
-  await loadSessions(); // This will re-render and set active class correctly
+  await loadSessions();
 
   try {
     const res = await fetch(`/api/sessions/${id}`);
@@ -202,10 +587,9 @@ async function selectSession(id: string) {
     const session: Session = await res.json();
     
     sessionTitle.textContent = session.title;
-    renderMessages(session.messages);
+    renderMessages(session.messages || []);
     
     if (session.status === 'working') {
-      // Re-attach live stream if agent is actively running
       connectStream(id, true);
     } else {
       setRunningState(false);
@@ -243,7 +627,7 @@ async function deleteSession(id: string) {
   }
 }
 
-// Render messages with markdown support for assistant and safety sanitization
+// Render messages
 function renderMessages(messages: Message[]) {
   messagesContainer.innerHTML = '';
   
@@ -251,42 +635,101 @@ function renderMessages(messages: Message[]) {
     const emptyDiv = document.createElement('div');
     emptyDiv.className = 'empty-state';
     emptyDiv.innerHTML = `
-      <h2>Welcome to Coding Agent</h2>
-      <p>Enter your coding instructions below. The autonomous agent will inspect your workspace, plan, execute tools, and solve coding tasks step-by-step.</p>
-      <p><strong>Tips:</strong> Use Shift+Enter for newlines. Configure the workspace folder in the sidebar.</p>
+      <pre class="banner-ascii">
+     _                   _       
+  __| |  ___   ___    __| |  ___ 
+ / _\` | / __| / _ \\  / _\` | / _ \\
+| (_| || (__ | (_) || (_| ||  __/
+ \\__,_| \\___| \\___/  \\__,_| \\___|
+      </pre>
+      <h2>Deep Agents Coding Harness (dcode)</h2>
+      <p class="empty-state-desc">
+        Autonomous coding agent powered by LangChain & LangGraph. Specify a workspace folder, provide tasks or bugs to fix, and dcode will inspect, plan, write code, and run tests.
+      </p>
+
+      <div class="suggestion-grid">
+        <div class="suggestion-card" data-prompt="Inspect this workspace and explain the repository structure.">
+          <div class="suggestion-title">🔍 Inspect Workspace</div>
+          <div class="suggestion-desc">Analyze files, architecture, and dependencies.</div>
+        </div>
+        <div class="suggestion-card" data-prompt="Find any syntax or typecheck issues in the codebase and fix them.">
+          <div class="suggestion-title">🛠️ Fix Code Issues</div>
+          <div class="suggestion-desc">Run typecheck and resolve compiler errors.</div>
+        </div>
+        <div class="suggestion-card" data-prompt="Implement unit tests for edge cases in the project modules.">
+          <div class="suggestion-title">🧪 Add Unit Tests</div>
+          <div class="suggestion-desc">Generate test suites and verify assertions.</div>
+        </div>
+        <div class="suggestion-card" data-prompt="Refactor the codebase with clean typings, comments, and style.">
+          <div class="suggestion-title">✨ Code Refactoring</div>
+          <div class="suggestion-desc">Improve code quality and maintainability.</div>
+        </div>
+      </div>
     `;
+
+    // Suggestion card clicks
+    emptyDiv.querySelectorAll('.suggestion-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const prompt = card.getAttribute('data-prompt');
+        if (prompt) {
+          chatInput.value = prompt;
+          autoResizeInput();
+          chatInput.focus();
+        }
+      });
+    });
+
     messagesContainer.appendChild(emptyDiv);
     return;
   }
 
   messages.forEach(msg => {
-    const div = document.createElement('div');
-    div.className = `message ${msg.role}`;
-    
-    if (msg.role === 'assistant') {
-      try {
-        const rawHtml = marked.parse(msg.content) as string;
-        div.innerHTML = DOMPurify.sanitize(rawHtml);
-      } catch (err) {
-        div.textContent = msg.content;
-      }
-    } else if (msg.role === 'user') {
-      div.textContent = msg.content;
-    } else {
-      div.textContent = msg.content;
-    }
-    
-    messagesContainer.appendChild(div);
+    messagesContainer.appendChild(createMessageElement(msg));
   });
+
   scrollToBottom();
 }
 
-// Scroll messages to bottom
+// Build one message element. Assistant content is markdown; user content is not.
+function createMessageElement(msg: Message): HTMLDivElement {
+  const wrapper = document.createElement('div');
+  wrapper.className = `message-wrapper ${msg.role}`;
+
+  const header = document.createElement('div');
+  header.className = 'message-header';
+
+  if (msg.role === 'assistant') {
+    header.innerHTML = `<span class="message-author dcode">🤖 dcode</span>`;
+  } else if (msg.role === 'user') {
+    header.innerHTML = `<span class="message-author user">👤 You</span>`;
+  } else {
+    header.innerHTML = `<span class="message-author system">⚙️ System</span>`;
+  }
+
+  const body = document.createElement('div');
+  body.className = 'message-body';
+
+  if (msg.role === 'assistant') {
+    try {
+      const rawHtml = marked.parse(msg.content) as string;
+      body.innerHTML = DOMPurify.sanitize(rawHtml);
+    } catch (err) {
+      body.textContent = msg.content;
+    }
+  } else {
+    body.textContent = msg.content;
+  }
+
+  wrapper.appendChild(header);
+  wrapper.appendChild(body);
+  return wrapper;
+}
+
 function scrollToBottom() {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-// Set running state & timer
+// Running state management
 function setRunningState(running: boolean) {
   isRunning = running;
   chatInput.disabled = running;
@@ -295,8 +738,10 @@ function setRunningState(running: boolean) {
   newSessionBtn.disabled = running;
   
   if (running) {
+    agentStatusPill.className = 'agent-status-pill working';
+    agentStatusText.textContent = 'Executing...';
     workingIndicator.classList.remove('hidden');
-    indicatorText.textContent = 'Working... (Routing model...)';
+    indicatorText.textContent = 'Planning strategy & routing tools...';
     liveOutput.textContent = '';
     startTime = Date.now();
     elapsedTimeSpan.textContent = '0s';
@@ -309,6 +754,8 @@ function setRunningState(running: boolean) {
       }
     }, 1000);
   } else {
+    agentStatusPill.className = 'agent-status-pill ready';
+    agentStatusText.textContent = 'Agent Ready';
     workingIndicator.classList.add('hidden');
     if (timerInterval) {
       clearInterval(timerInterval);
@@ -318,7 +765,7 @@ function setRunningState(running: boolean) {
   }
 }
 
-// Connect streaming agent execution via SSE
+// Connect live SSE streaming
 function connectStream(sessionId: string, isReconnect = false) {
   setRunningState(true);
   if (!isReconnect) {
@@ -326,7 +773,9 @@ function connectStream(sessionId: string, isReconnect = false) {
   }
 
   const workspace = workspaceInput.value.trim() || '.';
-  const eventSourceUrl = `/api/sessions/${sessionId}/run?workspace=${encodeURIComponent(workspace)}`;
+  const eventSourceUrl =
+    `/api/sessions/${sessionId}/run?workspace=${encodeURIComponent(workspace)}` +
+    (isReconnect ? '' : '&start=1');
 
   if (currentEventSource) {
     currentEventSource.close();
@@ -341,15 +790,25 @@ function connectStream(sessionId: string, isReconnect = false) {
       liveOutput.textContent += chunk;
       liveOutput.scrollTop = liveOutput.scrollHeight;
 
-      // Parse status indicators from stream output
-      if (chunk.includes('Routing to')) {
+      // Intelligent status phase updates
+      if (chunk.includes('read_file') || chunk.includes('glob') || chunk.includes('grep')) {
+        indicatorText.textContent = '🔍 Inspecting files & searching codebase...';
+      } else if (chunk.includes('edit_file') || chunk.includes('write_file')) {
+        indicatorText.textContent = '🛠️ Modifying files & applying diffs...';
+      } else if (chunk.includes('execute') || chunk.includes('pytest') || chunk.includes('npm')) {
+        indicatorText.textContent = '⚡ Running sandboxed shell command...';
+      } else if (chunk.includes('write_todos') || chunk.includes('todos')) {
+        indicatorText.textContent = '📋 Planning tasks & goal rubric...';
+      } else if (chunk.includes('task(')) {
+        indicatorText.textContent = '👥 Delegating subagent task...';
+      } else if (chunk.includes('Routing to')) {
         const match = chunk.match(/Routing to ([^. \n]+)/);
         if (match) {
           indicatorText.textContent = `Working via ${match[1]}...`;
+          currentModelSpan.textContent = match[1];
         }
-      }
-      if (chunk.includes('step') || chunk.includes('Iteration')) {
-        indicatorText.textContent = `Working (executing steps)...`;
+      } else if (chunk.includes('step') || chunk.includes('Iteration')) {
+        indicatorText.textContent = '🧠 Executing agent step...';
       }
     } catch (err) {
       console.error('Error parsing output event:', err);
@@ -360,7 +819,7 @@ function connectStream(sessionId: string, isReconnect = false) {
     console.error('SSE Error:', e);
     try {
       const data = JSON.parse(e.data);
-      liveOutput.textContent += `\n[Error: ${data.error || 'Unknown error'}]`;
+      liveOutput.textContent += `\n[Error: ${data.error || 'Execution interrupted'}]`;
     } catch (err) {
       liveOutput.textContent += `\n[Connection Closed]`;
     }
@@ -375,7 +834,7 @@ function connectStream(sessionId: string, isReconnect = false) {
   currentEventSource.addEventListener('end', (e: any) => {
     try {
       const data = JSON.parse(e.data);
-      indicatorText.textContent = data.status === 'completed' ? 'Complete!' : 'Completed with errors';
+      indicatorText.textContent = data.status === 'completed' ? '✨ Complete!' : 'Completed with errors';
     } catch (err) {
       indicatorText.textContent = 'Finished';
     }
@@ -390,15 +849,15 @@ function connectStream(sessionId: string, isReconnect = false) {
   });
 }
 
-// Send message and run agent
+// Send user message
 async function sendMessage(content: string) {
   if (!currentSessionId) return;
   
   setRunningState(true);
   chatInput.value = '';
+  autoResizeInput();
 
   try {
-    // 1. Add message to session
     const res = await fetch(`/api/sessions/${currentSessionId}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -412,12 +871,10 @@ async function sendMessage(content: string) {
     const data = await res.json();
     const session: Session = data.session;
     
-    // Update UI with new messages
     sessionTitle.textContent = session.title;
-    renderMessages(session.messages);
+    renderMessages(session.messages || []);
     await loadSessions();
 
-    // 2. Start streaming agent execution via SSE
     connectStream(currentSessionId, false);
 
   } catch (error) {
@@ -427,5 +884,5 @@ async function sendMessage(content: string) {
   }
 }
 
-// Start the app
+// Initialize on DOM load
 window.addEventListener('DOMContentLoaded', init);

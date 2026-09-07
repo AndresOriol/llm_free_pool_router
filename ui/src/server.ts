@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
+import { execFile } from 'child_process';
 import {
   getAllSessions,
   getSession,
@@ -124,6 +125,22 @@ app.delete('/api/sessions/:id', (req: Request, res: Response) => {
   }
 });
 
+// Clear messages in a session
+app.post('/api/sessions/:id/clear', (req: Request, res: Response) => {
+  try {
+    const session = getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    updateSession(req.params.id, [], 'idle', 'New Task');
+    const updated = getSession(req.params.id);
+    res.json({ success: true, session: updated });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
 // Add a message to a session
 app.post('/api/sessions/:id/messages', (req: Request, res: Response) => {
   try {
@@ -155,6 +172,25 @@ app.post('/api/sessions/:id/messages', (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
+});
+
+// Unified diff of the workspace, for the /diff command
+app.get('/api/diff', (req: Request, res: Response) => {
+  const workspace = (req.query.workspace as string) || '.';
+  const cwd = path.isAbsolute(workspace) ? workspace : path.join(process.cwd(), workspace);
+
+  if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
+    res.status(400).json({ error: `Directory not found: ${workspace}` });
+    return;
+  }
+
+  execFile('git', ['diff'], { cwd, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+    if (err && !stdout) {
+      res.json({ diff: '', error: 'Not a git repository, or git is unavailable.' });
+      return;
+    }
+    res.json({ diff: stdout });
+  });
 });
 
 // Run the agent and stream output via SSE
@@ -190,6 +226,25 @@ app.get('/api/sessions/:id/run', (req: Request, res: Response) => {
   // If session is not in working status (e.g., already completed or error), send end event
   if (session.status !== 'working') {
     res.write(`event: end\ndata: ${JSON.stringify({ code: 0, output: '', status: session.status })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // A session marked 'working' with no live run is an orphan: the server was
+  // restarted, or stopped, while the agent was mid-run. Only an explicit start
+  // may spawn a process -- reconnecting to an orphan must report it, never
+  // silently launch a second run of the same prompt.
+  if (req.query.start !== '1') {
+    const errMsg =
+      'The previous run was interrupted before it finished (the server stopped while the agent was working). Send the task again to retry.';
+    const latest = getSession(sessionId) || session;
+    const orphanMessages = [...latest.messages];
+    orphanMessages.push({ role: 'assistant', content: errMsg });
+    updateSession(sessionId, orphanMessages, 'error');
+    res.write(`event: end
+data: ${JSON.stringify({ code: null, output: errMsg, status: 'error' })}
+
+`);
     res.end();
     return;
   }
