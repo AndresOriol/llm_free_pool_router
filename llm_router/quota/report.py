@@ -7,7 +7,9 @@ blind spot is the report's: a key used outside this router is under-counted.
 Two assumptions carry the arithmetic, both argued in
 [14. Quota panel](../../docs/14-quota-panel.md):
 
-- a window opens with its first attempt and ends one length later (14.5), and
+- a window is a bucket on the *vendor's* clock -- Gemini's day ends at midnight
+  Pacific, its minute when the wall clock's does ([windows.py](windows.py),
+  14.5) -- and
 - a refused attempt spent a request and no tokens; one that got no answer spent
   neither (14.6).
 
@@ -20,20 +22,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-MINUTE_SECONDS = 60
-DAY_SECONDS = 86_400
+from .windows import (MINUTE_SECONDS, WINDOWS, day_start, minute_start,
+                      resets_in, tokens_metered)
 
-#: Which window each declared limit is measured over.
-WINDOWS = {"rpm": MINUTE_SECONDS, "tpm": MINUTE_SECONDS,
-           "rpd": DAY_SECONDS, "tpd": DAY_SECONDS}
 _LIMIT_NAMES = ("rpm", "tpm", "rpd", "tpd")
-
-
-def _earlier(mine: Optional[float], theirs: Optional[float]) -> Optional[float]:
-    """The older of two window starts, either of which may be missing."""
-    if mine is None or theirs is None:
-        return mine if theirs is None else theirs
-    return min(mine, theirs)
 
 
 @dataclass
@@ -50,18 +42,23 @@ class Usage:
     #: Attempts that never got an answer -- a timeout, a connection that failed.
     #: Counted nowhere else: the account was never asked, so it paid nothing.
     unanswered: int = 0
-    #: The attempt that opened this window, and the oldest that spent tokens.
-    #: They differ because a refusal spends a request and no tokens.
-    opened: Optional[float] = None
-    opened_tokens: Optional[float] = None
 
     @property
     def tokens(self) -> int:
-        """Prompt and reply together: every free tier meters both as one."""
+        """Prompt and reply together, for a platform that meters both as one."""
         return self.tokens_in + self.tokens_out
 
+    def metered_tokens(self, platform: Optional[str]) -> int:
+        """The tokens this platform's meter actually counts.
+
+        Gemini publishes its tokens-per-minute over *input* tokens, so charging
+        the reply against that ceiling inflates every token gauge on the
+        platform the pool leans on hardest ([windows.py](windows.py)).
+        """
+        return (self.tokens_in if tokens_metered(platform) == "input"
+                else self.tokens)
+
     def add(self, call: dict) -> None:
-        timestamp = call.get("ts") or 0.0
         # An attempt the provider never answered spent nothing and opens no
         # window. The router also never records a member it skipped on size --
         # the ledger holds attempts, not intentions -- so what is counted here
@@ -72,14 +69,8 @@ class Usage:
             return
 
         self.requests += 1
-        self.opened = timestamp if self.opened is None else min(self.opened, timestamp)
-
-        spent = (call.get("tokens_in") or 0) + (call.get("tokens_out") or 0)
         self.tokens_in += call.get("tokens_in") or 0
         self.tokens_out += call.get("tokens_out") or 0
-        if spent:
-            self.opened_tokens = (timestamp if self.opened_tokens is None
-                                  else min(self.opened_tokens, timestamp))
 
         if call.get("outcome") == "rate_limited":
             self.rate_limited += 1
@@ -93,8 +84,6 @@ class Usage:
         self.rate_limited += other.rate_limited
         self.errors += other.errors
         self.unanswered += other.unanswered
-        self.opened = _earlier(self.opened, other.opened)
-        self.opened_tokens = _earlier(self.opened_tokens, other.opened_tokens)
 
 
 @dataclass
@@ -110,7 +99,8 @@ class Gauge:
     #: the sum as what it is -- 2 x 5, not a mystery 10.
     sources: int = 0
     ratio: Optional[float] = None
-    #: Seconds until this window's budget resets, or None if nothing is in it.
+    #: Seconds until the vendor's own window turns over, or None if this one
+    #: holds nothing to clear. Read off the calendar, not off our history.
     resets_in: Optional[float] = None
     #: How much of `used` was attempts the provider refused.
     refused: int = 0
@@ -219,23 +209,25 @@ def declared_limits(entries) -> tuple:
                         if gauge.name == name))
 
 
-def _gauges_for(limits: dict, minute: Usage, day: Usage, now: float) -> List[Gauge]:
+def _gauges_for(limits: dict, minute: Usage, day: Usage,
+                platform: Optional[str], now: float) -> List[Gauge]:
     """A gauge per metered quantity, declared ceiling or not.
 
     An undeclared limit still has consumption worth showing -- dropping the
     gauge would leave Gemma's token use nowhere on the page.
+
+    Both of a window's gauges clear together, because they are the same bucket
+    on the vendor's clock: a refusal and a served call sit in the same clock
+    minute whatever either one spent. What differs is what they *count* -- a
+    refusal spends a request and no tokens (14.6).
     """
     gauges = []
     for name in _LIMIT_NAMES:
-        window = WINDOWS[name]
-        usage = minute if window == MINUTE_SECONDS else day
+        usage = minute if WINDOWS[name] == MINUTE_SECONDS else day
         counts_requests = name.startswith("r")
 
-        used = usage.requests if counts_requests else usage.tokens
-        # A refusal opens the request window (it spent a request) but not the
-        # token window (it spent none), so each asks the clock it belongs to.
-        opened = usage.opened if counts_requests else usage.opened_tokens
-
+        used = (usage.requests if counts_requests
+                else usage.metered_tokens(platform))
         declared = limits.get(name)
         limit = declared if isinstance(declared, int) and declared > 0 else None
         gauges.append(Gauge(
@@ -244,7 +236,7 @@ def _gauges_for(limits: dict, minute: Usage, day: Usage, now: float) -> List[Gau
             limit=limit,
             sources=1 if limit is not None else 0,
             ratio=None if limit is None else used / limit,
-            resets_in=None if opened is None else max(0.0, opened + window - now),
+            resets_in=None if not used else resets_in(name, platform, now),
             refused=usage.rate_limited if counts_requests else 0,
         ))
     return gauges
@@ -266,8 +258,8 @@ def _fold_models(rows: List[Row]) -> List[ModelSummary]:
     declares is not summed into a total -- an unknown ceiling anywhere makes the
     total unknown, and a made-up number here would be worse than none.
 
-    The reset is the *soonest* of the accounts' windows, because that is when
-    capacity next appears, whichever key it appears on.
+    Every row in a summary is one platform, so they share a reset: the vendor's
+    clock turns for all its keys at once.
     """
     folded: Dict[tuple, ModelSummary] = {}
     for row in sorted(rows, key=lambda row: row.account):
@@ -301,9 +293,8 @@ def _fold_models(rows: List[Row]) -> List[ModelSummary]:
             existing.sources += gauge.sources
             existing.limit = (None if existing.limit is None or gauge.limit is None
                               else existing.limit + gauge.limit)
-            if gauge.resets_in is not None and gauge.used:
-                existing.resets_in = (gauge.resets_in if existing.resets_in is None
-                                      else min(existing.resets_in, gauge.resets_in))
+            if existing.resets_in is None:
+                existing.resets_in = gauge.resets_in
 
     for summary in folded.values():
         for gauge in summary.gauges:
@@ -373,17 +364,22 @@ def build_report(calls: List[dict], pool: Optional[dict],
         row_for(provider)
 
     since: Optional[float] = None
+    # The edges the vendors put their meters on: this clock minute, and each
+    # platform's day as it turns in the vendor's own timezone (windows.py).
+    this_minute = minute_start(now)
+    today: Dict[Optional[str], float] = {}
     for call in calls:
         timestamp = call.get("ts") or 0.0
         if since is None or timestamp < since:
             since = timestamp
         provider = call.get("provider", "unknown")
         row = row_for(provider, call)
-        age = now - timestamp
         row.total.add(call)
-        if age <= DAY_SECONDS:
+        if row.platform not in today:
+            today[row.platform] = day_start(row.platform, now)
+        if timestamp >= today[row.platform]:
             row.day.add(call)
-        if age <= MINUTE_SECONDS:
+        if timestamp >= this_minute:
             row.minute.add(call)
         if row.last_call is None or timestamp > row.last_call:
             row.last_call = timestamp
@@ -392,7 +388,8 @@ def build_report(calls: List[dict], pool: Optional[dict],
 
     accounts: Dict[str, AccountSummary] = {}
     for row in rows.values():
-        row.gauges = _gauges_for(limits[row.provider], row.minute, row.day, now)
+        row.gauges = _gauges_for(limits[row.provider], row.minute, row.day,
+                                 row.platform, now)
         with_limits = [gauge for gauge in row.gauges if gauge.ratio is not None]
         row.tightest = max(with_limits, key=lambda gauge: gauge.ratio, default=None)
         row.blocked_for = _blocked_for(refusals.get(row.provider, []), now)
@@ -438,7 +435,7 @@ def _notes(report: Report, pool: Optional[dict]) -> List[str]:
 
     refused = sum(row.day.rate_limited for row in report.rows)
     if refused:
-        notes.append(f"{refused} attempt(s) were refused for quota in the last 24h.")
+        notes.append(f"{refused} attempt(s) were refused for quota today.")
 
     orphans = [row.provider for row in report.rows if not row.configured]
     if orphans:
@@ -449,4 +446,5 @@ def _notes(report: Report, pool: Optional[dict]) -> List[str]:
     if unbounded:
         notes.append(f"{len(unbounded)} member(s) declare no limits in config.yaml, "
                      "so they are shown without a ceiling.")
+
     return notes

@@ -48,7 +48,8 @@ def _resets_text(entry) -> str:
     return duration(min(live)) if live else "-"
 
 
-_WINDOW_LABEL = {"rpm": "RPM 60s", "tpm": "TPM 60s", "rpd": "RPD 24h", "tpd": "TPD 24h"}
+_WINDOW_LABEL = {"rpm": "RPM/min", "tpm": "TPM/min",
+                 "rpd": "RPD/day", "tpd": "TPD/day"}
 
 
 def _table_for(entries, label, now: float) -> str:
@@ -89,8 +90,10 @@ def _header(report: Report) -> None:
     header = ("no calls recorded yet" if report.since is None
               else f"{report.calls} calls recorded since {stamp(report.since)}")
     print(f"Pool quota @ {stamp(report.generated)} -- {header}")
-    print("Counted from this router's ledger. A window opens with its first "
-          "attempt and RESETS one length later (60s / 24h).")
+    print("Counted from this router's ledger, against the vendor's own clock: "
+          "the minute the wall clock is in, and the day as it turns where the "
+          "vendor turns it (Gemini: midnight Pacific). RESETS is when that "
+          "happens next.")
     print()
     for note in report.notes:
         print(f"! {note}")
@@ -105,7 +108,7 @@ def print_models(report: Report) -> None:
         models = [model for model in report.models if model.platform == platform.platform]
         keys = ", ".join(platform.accounts) or "no accounts"
         print(f"{platform.platform} -- {platform.models} model(s) over {keys}; "
-              f"last 24h: {platform.day.requests} req, "
+              f"today: {platform.day.requests} req, "
               f"{compact(platform.day.tokens)} tok, "
               f"{platform.day.rate_limited} refused, {platform.day.errors} errored")
 
@@ -123,7 +126,7 @@ def print_account(report: Report) -> None:
     for account in report.accounts:
         rows = [row for row in report.rows
                 if row.account == account.account and row.platform == account.platform]
-        print(f"{account.account} ({account.platform}) -- last 24h: "
+        print(f"{account.account} ({account.platform}) -- today: "
               f"{account.day.requests} req, {compact(account.day.tokens)} tok, "
               f"{account.day.rate_limited} refused, {account.day.errors} errored")
         print(_table_for(rows, lambda row: row.model + ("" if row.configured

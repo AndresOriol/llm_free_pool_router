@@ -17,8 +17,10 @@ what a cooldown already is.
 
 **Wrong in the tolerable direction, by construction.** The count is this
 router's own ([14.4](../../docs/14-quota-panel.md#144-one-source-and-what-it-misses)),
-the window model is approximate ([14.5](../../docs/14-quota-panel.md#145-windows-and-when-they-reset)),
-and a reading is reused for `ttl` seconds, so a burst can spend past a ceiling
+the day it counts over is the vendor's calendar day and not ours -- Gemini's
+turns at midnight Pacific ([14.5](../../docs/14-quota-panel.md#145-windows-and-when-they-reset),
+[windows.py](windows.py)) -- and a reading is reused for `ttl` seconds, so a
+burst can spend past a ceiling
 this still calls open. Every one of those errors ends in an attempt the provider
 refuses, which is exactly the path that already worked. The opposite error --
 refusing to route to a member the vendor would have served -- is the one that
@@ -43,7 +45,7 @@ logger = logging.getLogger("LLMRouter")
 #: How long one reading of the ledger is reused. The router asks once per
 #: attempt and the ledger only grows, so re-parsing it every time would put a
 #: file read in front of every model call for a number that moves slowly: a
-#: daily budget measured over 24 hours. Overspend inside the window is bounded
+#: daily budget measured over a calendar day. Overspend inside it is bounded
 #: by what the pool can issue in `ttl` seconds, and lands on the retry path.
 DEFAULT_TTL_SECONDS = 30.0
 

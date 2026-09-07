@@ -17,10 +17,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from llm_router.quota import budget
 from llm_router.quota.budget import RpdBudget, exhausted_rpd
+from llm_router.quota.windows import day_start
 from llm_router.router import AutonomousLLMRouter
 
-NOW = 1_800_000_000
+#: Midday Pacific, mid-minute -- the same instant test_quota uses. A `NOW` on a
+#: day boundary would put every default call in yesterday.
+NOW = 1_800_045_045
 DAY = 86_400
+#: When Gemini's day last turned. Everything before it is spent budget the
+#: vendor has already forgiven.
+MIDNIGHT = day_start("gemini", NOW)
 
 # Two accounts serving one wide model on a 20-a-day ceiling -- the shape that
 # motivated the filter -- plus a workhorse with a thousand, and one member
@@ -104,6 +110,23 @@ def _check_exhaustion():
     # Yesterday is out of the window: the budget has rolled.
     stale = usage_dir([call("Flash_gemini_1", ts=NOW - DAY - 60) for _ in range(30)])
     assert exhausted_rpd(stale, NOW) == set()
+
+    # And "yesterday" is the vendor's, not a rolling twenty-four hours. A day
+    # spent right up to midnight Pacific is forgiven the moment it passes, so a
+    # member is available again hours before a rolling window would say so --
+    # the error this filter must not make is refusing to route to a member
+    # Google would have served.
+    turned = usage_dir([call("Flash_gemini_1", ts=MIDNIGHT - 60)
+                        for _ in range(30)])
+    assert exhausted_rpd(turned, NOW) == set(), "midnight Pacific cleared it"
+    assert exhausted_rpd(turned, MIDNIGHT - 1) == {"Flash_gemini_1"},         "and a second earlier it was spent"
+
+    # Groq turns its day eight hours later, so the same ledger reads differently
+    # for the two platforms. Nothing here has one day of its own.
+    groq_midnight = day_start("groq", NOW)
+    across = usage_dir([call("GptOss_groq_1", ts=groq_midnight - 60)
+                        for _ in range(1000)])
+    assert exhausted_rpd(across, NOW) == set()
 
     # A member that publishes no daily ceiling can never be filtered out, no
     # matter how much it has served.

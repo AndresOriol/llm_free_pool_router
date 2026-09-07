@@ -8,6 +8,11 @@ By default a model is one line, summed over every account that serves it — *ho
 much Gemini is left*, rather than a tour of one console per key. Filter to an
 account to see its members apart.
 
+Windows are the vendor's own, not ours: Gemini's day ends at midnight Pacific
+and its tokens-per-minute counts the prompt alone, so `resets in` is read off
+the calendar rather than off when we happened to start
+([windows.py](windows.py)).
+
 The concepts are in [14. Quota panel](../../docs/14-quota-panel.md); this file is
 how to run it.
 
@@ -42,6 +47,7 @@ python -m tests.llm_router.test_usage    # the ledger the report reads
 | File | What it answers |
 | --- | --- |
 | [ledger.py](ledger.py) | *What is on disk?* — the two files, and how a torn line is treated |
+| [windows.py](windows.py) | *Whose clock?* — where each vendor puts a window's edges, and which tokens its minute meter counts |
 | [report.py](report.py) | *How close is each account to the wall?* — the windows, when they reset, and how a refusal is counted |
 | [html.py](html.py) | *What does a person see?* — the panel, as one file, filters included |
 | [cli.py](cli.py) | *How is it asked?* — `status`, `status --json`, `panel`, `--account` |

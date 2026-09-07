@@ -23,8 +23,26 @@ A ledger line:
      "platform": "groq", "model": "openai/gpt-oss-120b",
      "tokens_in": 812, "tokens_out": 96, "outcome": "ok"}
 
-`ts` is what the panel measures windows with; `at` is the same instant written
-out in local time, for reading the file by eye.
+`ts` is **when the request was issued**, which is the instant the vendor meters
+it against; `at` is the same instant in local time, for reading the file by eye.
+
+That distinction is the whole of `started`. `record` is only reachable once the
+provider has answered, so writing down "now" recorded the moment the reply
+arrived -- a call taking thirty seconds landed thirty seconds after the window
+it was actually charged to. The daily windows never noticed. The per-minute ones
+did: a burst smeared across the boundary and a single minute could read far
+above the declared ceiling. Eleven requests in one clock minute against a
+published five were read off this file and were an artifact of that line, not a
+stale limit -- they dissolved when the same span was read over five minutes.
+
+So the caller passes the moment it made the request and `record` prefers it.
+Callers that cannot say fall back to now, which is the old behaviour and still
+right for anything instantaneous.
+
+**Lines written before this carry the completion time.** Nothing rewrites them,
+so a ledger spanning the change is mixed, and a per-minute figure over its older
+half is still smeared. Days are unaffected either way, which is the only window
+[budget.py](quota/budget.py) routes on.
 
 `tokens_in`/`tokens_out` are absent when the attempt was refused -- no tokens
 were spent -- and a refusal carries `retry_after` instead when the provider
@@ -98,8 +116,16 @@ def _message_tokens(message: Any) -> Tuple[Optional[int], Optional[int]]:
 
 def record(provider: Any, tokens_in: Optional[int] = None,
            tokens_out: Optional[int] = None, outcome: str = "ok",
-           retry_after: Optional[int] = None, reached: bool = True) -> None:
+           retry_after: Optional[int] = None, reached: bool = True,
+           started: Optional[float] = None) -> None:
     """Append one attempt against `provider` to the ledger.
+
+    `started` is when the request was *issued*, and becomes the line's `ts`.
+    Every caller here is on the far side of the provider's answer, so without it
+    the ledger dates an attempt by when it came back rather than by when the
+    vendor began charging for it -- which puts a slow call in the wrong minute.
+    Omitted, it falls back to now: right for an attempt that failed before it
+    left, and the behaviour every line written before this had.
 
     `retry_after` is the provider's own Retry-After, when it sent one with a
     refusal. It is the only statement about when a window clears that does not
@@ -110,14 +136,14 @@ def record(provider: Any, tokens_in: Optional[int] = None,
     because it cost the account nothing, so the panel can leave it out of the
     request count.
     """
-    now = time.time()
+    issued = time.time() if started is None else float(started)
     entry = {
-        "ts": round(now, 3),
+        "ts": round(issued, 3),
         # The same instant, in the timezone of whoever is reading the file.
         # Every window in the panel is computed from `ts`; this is here so a
         # human scanning the ledger can tell which run a line belongs to
         # without converting epoch seconds in their head.
-        "at": datetime.fromtimestamp(now).astimezone().isoformat(timespec="seconds"),
+        "at": datetime.fromtimestamp(issued).astimezone().isoformat(timespec="seconds"),
         "provider": getattr(provider, "name", "unknown"),
         "account": getattr(provider, "account", "") or "unknown",
         "platform": getattr(provider, "platform", "") or "unknown",
@@ -135,10 +161,15 @@ def record(provider: Any, tokens_in: Optional[int] = None,
     _append(entry)
 
 
-def record_call(provider: Any, message: Any, outcome: str = "ok") -> None:
-    """Record a served call, reading the token counts off the reply."""
+def record_call(provider: Any, message: Any, outcome: str = "ok",
+                started: Optional[float] = None) -> None:
+    """Record a served call, reading the token counts off the reply.
+
+    `started` is the moment the request went out; see `record`. A served call is
+    the one that most needs it, because it is the one that took time.
+    """
     tokens_in, tokens_out = _message_tokens(message)
-    record(provider, tokens_in, tokens_out, outcome)
+    record(provider, tokens_in, tokens_out, outcome, started=started)
 
 
 def _append(entry: dict) -> None:
