@@ -211,6 +211,52 @@ def looks_decommissioned(message: str, status: Optional[int] = None) -> bool:
                 and ("not_found" in message or "not found" in message))
 
 
+def is_unauthorized(exc: Exception) -> bool:
+    """Is this member's *key* dead, rather than the model or the quota?
+
+    A free plan can be withdrawn between one call and the next. Mid-session a
+    Gemini account came back `401 UNAUTHENTICATED -- The bound service account
+    is deleted or disabled`, `is_transient` read it as "a clear client error,
+    so surface the bug", and the exception killed a run that still had six
+    working accounts underneath it. That is the exact stall this pool exists to
+    absorb: one member is gone, the others are fine.
+
+    Auth was classed as fatal on the reasoning that a bad key is a
+    misconfiguration the operator has to see. It still is -- so this is loud,
+    and the run carries on. Only the account whose key it is loses anything.
+    """
+    return looks_unauthorized(str(getattr(exc, "message", "") or exc),
+                              _status_of(exc))
+
+
+def looks_unauthorized(message: str, status: Optional[int] = None) -> bool:
+    """The same question asked of text, for the same reason as
+    `looks_decommissioned`: the eval harness classifies recorded details, and
+    one definition cannot drift from another that does not exist.
+    """
+    message = message.lower()
+    for signal in ("unauthenticated",
+                   "api key not valid",
+                   "api_key_invalid",
+                   "invalid api key",
+                   "invalid_api_key",
+                   "service account is deleted or disabled",
+                   "permission_denied",
+                   "account is not active",
+                   "account deactivated"):
+        if signal in message:
+            return True
+    if status in (401, 403):
+        return True
+    # A wrapped status, read out of the text -- `langchain_google_genai`
+    # re-raises its own plain exception, so `_status_of` finds nothing. Both
+    # halves are required: a bare 401 or 403 shows up in ids and token counts.
+    return bool(re.search(r"\b(401|403)\b", message)
+                and ("unauthenticated" in message or "unauthorized" in message
+                     or "permission denied" in message
+                     or "forbidden" in message))
+
+
 def reached_provider(exc: Exception) -> bool:
     """Did this failed attempt actually get an answer from the provider?
 
@@ -328,17 +374,22 @@ class LLMProvider(ABC):
 
         return self.is_available
 
-    def retire(self, reason: str = "") -> None:
+    def retire(self, reason: str = "", remedy: str = "") -> None:
         """Drop this member from the pool for the rest of the process.
 
-        Not a cooldown. Nothing brings it back, because nothing upstream is
-        going to un-retire the model -- the fix is to delete it from the config,
-        which is why this logs at ERROR naming the model to delete.
+        Not a cooldown. Nothing brings it back, so this logs at ERROR with the
+        thing a human has to go and do. `remedy` says what that is, because
+        there are now two ways to end up here and they want opposite actions: a
+        model retired upstream should be deleted from the config, while an
+        account whose key died should have its key replaced and its models left
+        alone. Telling the operator to delete the config entry for a dead key
+        would cost them nine working models when the key is renewed.
         """
         self.decommissioned = True
         self.is_available = False
-        logger.error(f"{self.name} is gone upstream (model={self.model}); dropping it "
-                     f"from the pool for this process. Remove it from the config. "
+        logger.error(f"{self.name} dropped from the pool for this process "
+                     f"(model={self.model}). "
+                     f"{remedy or 'It is gone upstream; remove it from the config.'} "
                      f"{reason}".rstrip())
 
     def trigger_cooldown(self, retry_after: Optional[int] = None):

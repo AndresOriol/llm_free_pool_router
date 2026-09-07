@@ -92,6 +92,7 @@ else on this page is design and changes rarely; this block is state.*
 [4.2](04-failover.md#42-size-aware-selection) Size-aware selection ·
 [4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent) Skipping a spent day ·
 [4.3](04-failover.md#43-classifying-a-failure) Classifying a failure ·
+[4.3.1](04-failover.md#431-the-two-ways-a-member-dies-for-good) When a member dies for good ·
 [4.4](04-failover.md#44-cooldown-and-backoff) Cooldown and backoff ·
 [4.5](04-failover.md#45-the-failover-loop) The failover loop ·
 [4.6](04-failover.md#46-known-gaps) Known gaps ·

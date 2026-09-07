@@ -20,6 +20,7 @@ from pydantic import ConfigDict
 from llm_router import usage
 from llm_router.base_provider import (estimate_tokens, is_decommissioned,
                                       is_rate_limited, is_transient,
+                                      is_unauthorized,
                                       provider_error_detail, reached_provider)
 
 logger = logging.getLogger("LLMRouter")
@@ -124,6 +125,20 @@ class RouterChatModel(BaseChatModel):
 
         raise RuntimeError("All providers exhausted across the pool.") from last_exc
 
+    def _retire_account(self, provider, reason: str) -> None:
+        """Drop every pool member whose key is the one that just failed."""
+        account = getattr(provider, "account", "") or ""
+        kin = [p for p in self.router.providers
+               if account and getattr(p, "account", None) == account
+               and not getattr(p, "decommissioned", False)]
+        for member in kin or [provider]:
+            member.retire(reason, remedy=f"Its account ({account or provider.name}) "
+                                         f"rejected the key; replace the key rather "
+                                         f"than the model.")
+        logger.error("Account %r is unusable (%d member(s) dropped). Replace its "
+                     "key; the run continues on the rest of the pool.",
+                     account or provider.name, len(kin or [provider]))
+
     def _handle_failure(self, provider, exc: Exception, run_manager=None) -> bool:
         """Cooldown + reroute on transient errors; return False to re-raise.
 
@@ -160,6 +175,16 @@ class RouterChatModel(BaseChatModel):
         # because a cooldown is a wait and there is nothing to wait for.
         if is_decommissioned(exc):
             provider.retire(detail or repr(exc))
+            return True
+
+        # Same shape as a retirement, one level up: the *key* is dead, so every
+        # member drawing on that account is dead with it, and benching them one
+        # 401 at a time would spend a failed call on each of the nine models the
+        # account serves. Checked before `not transient`, which would call this
+        # a fatal 4xx and end a run that still had six working accounts under it
+        # (llm_router/base_provider.py#is_unauthorized).
+        if is_unauthorized(exc):
+            self._retire_account(provider, detail or repr(exc))
             return True
 
         if not transient:
