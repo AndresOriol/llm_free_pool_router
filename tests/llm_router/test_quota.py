@@ -1,5 +1,5 @@
-"""Checks for the quota report: the windows, when they reset, how a refused
-attempt is counted, and that two accounts never share either.
+"""Checks for the quota report: the vendor's windows, when they reset, how a
+refused attempt is counted, and that two accounts never share either.
 
 No framework: `python -m tests.llm_router.test_quota` (or run the file).
 """
@@ -9,12 +9,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from llm_router.quota.report import (DAY_SECONDS, MINUTE_SECONDS, build_report,
-                                     declared_limits)
+from llm_router.quota.report import build_report, declared_limits
+from llm_router.quota.windows import (DAY_SECONDS, MINUTE_SECONDS, day_start,
+                                      minute_start)
 
-NOW = 1_800_000_000
+#: Midday, mid-minute: 2027-01-15 12:30:45 Pacific, which is 20:30:45 UTC. Both
+#: matter -- the two platforms in this pool turn their day on different clocks,
+#: and a `NOW` sitting on a boundary would hide which one a window came from.
+NOW = 1_800_045_045
+GEMINI_DAY = NOW - day_start("gemini", NOW)      # 12h30m45s into the Pacific day
+GROQ_DAY = NOW - day_start("groq", NOW)          # 20h30m45s into the UTC day
+INTO_MINUTE = NOW - minute_start(NOW)            # 45s
 
 GROQ_LIMITS = {"rpm": 30, "tpm": 8000, "rpd": 1000, "tpd": 100000}
+GEMINI_LIMITS = {"rpm": 5, "tpm": 250000, "rpd": 20}
 
 POOL = {
     "generated": NOW,
@@ -27,6 +35,9 @@ POOL = {
         {"provider": "GptOss120b_groq_2", "account": "groq_2", "platform": "groq",
          "model": "openai/gpt-oss-120b", "priority": 2, "max_input_tokens": 8000,
          "limits": GROQ_LIMITS},
+        {"provider": "Gemini_3_5_Flash_gemini_1", "account": "gemini_1",
+         "platform": "gemini", "model": "gemini-3.5-flash", "priority": 4,
+         "max_input_tokens": 250000, "limits": GEMINI_LIMITS},
         {"provider": "Gemma4_31b_gemini_1", "account": "gemini_1", "platform": "gemini",
          "model": "gemma-4-31b-it", "priority": 31, "max_input_tokens": 128000,
          "limits": {"rpm": 15, "rpd": 1500}},
@@ -62,7 +73,7 @@ def _check_windows():
     row = row_of(report, "GptOss120b_groq_1")
 
     assert row.minute.requests == 1, row.minute
-    assert row.day.requests == 2, "the 25h-old call is outside the rolling day"
+    assert row.day.requests == 2, "the 25h-old call fell before Groq's midnight"
     assert row.total.requests == 3, "but it is still on record"
 
     # Three calls in a minute: 3 requests against 30 RPM (10%), 3600 tokens
@@ -76,31 +87,82 @@ def _check_windows():
 
 
 def _check_resets():
-    # The window belongs to the attempt that opened it: the oldest one still
-    # inside it. Here that is 40s ago, so the minute clears in 20s -- not in 60.
+    # A window is the vendor's bucket, not a span our first attempt opened: it
+    # clears when the clock says so, however long we have been spending into it.
     report = build_report([call(ts=NOW - 40), call(ts=NOW - 5)], POOL, NOW)
     row = row_of(report, "GptOss120b_groq_1")
 
-    assert gauge_of(row, "rpm").resets_in == 20, gauge_of(row, "rpm")
-    assert gauge_of(row, "tpm").resets_in == 20, "tokens were spent at the same moment"
-    assert gauge_of(row, "rpd").resets_in == DAY_SECONDS - 40, gauge_of(row, "rpd")
+    assert gauge_of(row, "rpm").resets_in == MINUTE_SECONDS - INTO_MINUTE
+    assert gauge_of(row, "tpm").resets_in == MINUTE_SECONDS - INTO_MINUTE, (
+        "both halves of a minute are the same minute")
+    assert gauge_of(row, "rpd").resets_in == DAY_SECONDS - GROQ_DAY, "Groq's UTC day"
 
-    # An empty window has no reset, because it has not started. It will start
-    # whenever the next attempt is made.
+    # An empty window has nothing to clear, so it is shown without a reset --
+    # the renderers hide the clock on a gauge nobody has spent into.
     idle = row_of(build_report([], POOL, NOW), "GptOss120b_groq_1")
     assert all(gauge.resets_in is None for gauge in idle.gauges), idle.gauges
 
-    # A call exactly one window old is still inside it, and clears now.
-    edge = row_of(build_report([call(ts=NOW - MINUTE_SECONDS)], POOL, NOW),
+    # The edge is the clock's, not ours: the first instant of this minute is in,
+    # the second before it is out.
+    edge = row_of(build_report([call(ts=minute_start(NOW))], POOL, NOW),
                   "GptOss120b_groq_1")
-    assert edge.minute.requests == 1 and gauge_of(edge, "rpm").resets_in == 0
+    assert edge.minute.requests == 1, "the minute began at that instant"
+    before = row_of(build_report([call(ts=minute_start(NOW) - 1)], POOL, NOW),
+                    "GptOss120b_groq_1")
+    assert before.minute.requests == 0, "one second earlier is the minute before"
+    assert before.day.requests == 1, "still inside the day, though"
 
-    # A refusal opens the request window -- it spent a request -- but not the
-    # token window, which no refusal ever touches. So the two clocks differ.
-    report = build_report([refusal(ts=NOW - 50), call(ts=NOW - 20)], POOL, NOW)
+    # A refusal and a served call share the minute they landed in. What differs
+    # is what each one counts, not when either clears.
+    report = build_report([refusal(ts=NOW - 40), call(ts=NOW - 20)], POOL, NOW)
     row = row_of(report, "GptOss120b_groq_1")
-    assert gauge_of(row, "rpm").resets_in == 10, "the refusal at -50s opened it"
-    assert gauge_of(row, "tpm").resets_in == 40, "the served call at -20s opened it"
+    assert gauge_of(row, "rpm").resets_in == gauge_of(row, "tpm").resets_in
+    assert (gauge_of(row, "rpm").used, gauge_of(row, "tpm").used) == (2, 1200)
+
+
+def _check_calendar_day():
+    """The daily budget turns over on the vendor's clock, not on ours.
+
+    This is the one that stalls a run when it is wrong: a rolling day keeps
+    counting yesterday evening into this morning, and the requests-per-day
+    filter then skips a member Google has already forgiven.
+    """
+    gemini = dict(provider="Gemini_3_5_Flash_gemini_1", account="gemini_1",
+                  platform="gemini", model="gemini-3.5-flash")
+
+    # A call from just before midnight Pacific is yesterday's, however few hours
+    # old it is.
+    midnight = day_start("gemini", NOW)
+    report = build_report([call(ts=midnight - 1, **gemini),
+                           call(ts=midnight, **gemini),
+                           call(ts=NOW - 30)], POOL, NOW)
+    row = row_of(report, "Gemini_3_5_Flash_gemini_1")
+    assert row.day.requests == 1, "only the one on this side of midnight"
+    assert row.total.requests == 2, "both are still on record"
+    assert gauge_of(row, "rpd").resets_in == DAY_SECONDS - GEMINI_DAY
+
+    # The two platforms turn their days at different moments, so the pool never
+    # has one day of its own. Groq's UTC midnight is 8 hours before Gemini's.
+    groq = row_of(report, "GptOss120b_groq_1")
+    assert gauge_of(groq, "rpd").resets_in == DAY_SECONDS - GROQ_DAY
+    assert GROQ_DAY - GEMINI_DAY == 8 * 3600, "Pacific standard time is UTC-8"
+
+
+def _check_token_metering():
+    """Gemini publishes its tokens-per-minute over the prompt alone."""
+    served = dict(tokens_in=1000, tokens_out=200)
+    report = build_report([
+        call(ts=NOW - 5, provider="Gemini_3_5_Flash_gemini_1", account="gemini_1",
+             platform="gemini", model="gemini-3.5-flash", **served),
+        call(ts=NOW - 5, **served),
+    ], POOL, NOW)
+
+    gemini = row_of(report, "Gemini_3_5_Flash_gemini_1")
+    assert gauge_of(gemini, "tpm").used == 1000, "the reply is not charged to TPM"
+    assert gemini.minute.tokens == 1200, "though it was spent, and is counted"
+
+    groq = row_of(report, "GptOss120b_groq_1")
+    assert gauge_of(groq, "tpm").used == 1200, "Groq meters the whole exchange"
 
 
 def _check_refusals():
@@ -173,9 +235,10 @@ def _check_model_fold():
     # ceiling nobody recognises from the config.
     assert gauge_of(model, "rpd").sources == 2
     assert model.max_input_tokens == 8000, "the window both accounts offer"
-    # The soonest window to clear is the one that frees capacity first, whichever
-    # key it sits on: groq_2 opened its minute at -50s.
-    assert gauge_of(model, "rpm").resets_in == 10, gauge_of(model, "rpm")
+    # Both keys are on one platform, so one clock turns for both: a fold has a
+    # single reset, not the soonest of several.
+    assert gauge_of(model, "rpm").resets_in == MINUTE_SECONDS - INTO_MINUTE
+    assert gauge_of(model, "rpm").used == 2, "the -50s attempt was last minute" 
 
     # Gemma declares no TPM on either account, so the total has no ceiling --
     # summing what is known with what is not would invent a number.
@@ -201,9 +264,9 @@ def _check_declared_columns():
 
     assert declared_limits(groq) == ("rpm", "tpm", "rpd", "tpd"), declared_limits(groq)
     # Gemini publishes no tokens-per-day for anything in this pool, and Gemma no
-    # tokens-per-minute either -- so the platform keeps TPM (others declare it
-    # elsewhere in the real pool) but never TPD.
-    assert declared_limits(gemini) == ("rpm", "rpd"), declared_limits(gemini)
+    # tokens-per-minute either -- so the platform keeps TPM, which the flash
+    # models declare, but never TPD.
+    assert declared_limits(gemini) == ("rpm", "tpm", "rpd"), declared_limits(gemini)
     assert declared_limits([]) == ()
 
 
@@ -216,9 +279,12 @@ def _check_accounts_are_separate():
 
     first = row_of(report, "GptOss120b_groq_1")
     second = row_of(report, "GptOss120b_groq_2")
-    assert (first.minute.requests, second.minute.requests) == (2, 1), "one model, two budgets"
-    assert gauge_of(first, "rpm").resets_in == 30, "opened by its own oldest call"
-    assert gauge_of(second, "rpm").resets_in == 10, "and so was the other account's"
+    assert (first.day.requests, second.day.requests) == (2, 1), "one model, two budgets"
+    # The clock is shared and the spending is not: what separates two accounts
+    # is what each has used, never when either one clears.
+    assert gauge_of(first, "rpm").used == 2 and gauge_of(second, "rpm").used == 0
+    assert gauge_of(first, "rpm").resets_in == MINUTE_SECONDS - INTO_MINUTE
+    assert gauge_of(second, "rpm").resets_in is None, "nothing in it to clear"
 
     # Rollups are per account, never per platform: both Groq accounts are Groq,
     # and neither lends the other any budget.
@@ -237,11 +303,12 @@ def _check_limits_and_notes():
     assert [g.name for g in gemma.gauges] == ["rpm", "tpm", "rpd", "tpd"], gemma.gauges
     tpm = gauge_of(gemma, "tpm")
     assert tpm.limit is None, "Gemma's TPM is unlimited, not zero"
-    assert tpm.ratio is None and tpm.used == 1200, "consumption is still counted"
+    assert tpm.ratio is None and tpm.used == 1000, "consumption is still counted"
+    assert gemma.day.tokens == 1200, "the reply was spent, just not metered"
     assert gemma.tightest.name == "rpm", "only a gauge with a ceiling can be tightest"
 
     empty = build_report([], POOL, NOW)
-    assert len(empty.rows) == 3 and empty.calls == 0
+    assert len(empty.rows) == 4 and empty.calls == 0
     assert all(row.configured and row.last_call is None for row in empty.rows)
 
     # A member that has left the config is reported, not dropped.
@@ -260,6 +327,8 @@ def _check_limits_and_notes():
 def _run():
     _check_windows()
     _check_resets()
+    _check_calendar_day()
+    _check_token_metering()
     _check_refusals()
     _check_unanswered()
     _check_model_fold()

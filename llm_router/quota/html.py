@@ -234,7 +234,7 @@ def _section(platform, models, rows: List[Row], now: float) -> str:
     return f"""<section data-platform="{escape(platform.platform)}">
       <div class="head"><h2>{escape(platform.platform)}</h2>
         <span class="badge">{platform.models} models over
-          {len(platform.accounts)} account(s) &middot; last 24h
+          {len(platform.accounts)} account(s) &middot; today
           <b>{platform.day.requests}</b> requests, <b>{compact(platform.day.tokens)}</b>
           tokens, <b>{platform.day.rate_limited}</b> refused</span></div>
       {_controls(platform.accounts)}
@@ -269,10 +269,12 @@ def render_panel(report: Report) -> str:
 <footer>
 {footnotes}
 <p>Counted from this router's ledger, so a key used elsewhere is under-counted
-here. A window opens with its first attempt and resets one length later, which
-reads pessimistically against a budget that refills continuously. A refused
-attempt counts as a request and as no tokens; one that never got an answer
-counts as neither. Ceilings shown for several accounts are their ceilings added
+here. Windows are the vendor's own: the clock minute, and the day as it turns
+where the vendor turns it &mdash; midnight Pacific for Gemini, midnight UTC for
+Groq &mdash; so <em>resets in</em> is a fact about the calendar, not about when
+we started. Gemini meters its tokens per minute over the prompt only, so replies
+are not charged against it. A refused attempt counts as a request and as no
+tokens; one that never got an answer counts as neither. Ceilings shown for several accounts are their ceilings added
 together. Rebuild with <code>python -m llm_router.quota panel</code>.</p>
 </footer>
 </main>

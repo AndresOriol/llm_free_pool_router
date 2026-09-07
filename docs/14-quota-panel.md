@@ -88,28 +88,62 @@ What is kept from that experiment is the part the vendor gives away for free: a
 
 ## 14.5 Windows, and when they reset
 
-A budget is assumed to work like this: **the first attempt opens the window, and
-the window ends one length later**, whatever happens in between. So to find the
-window in progress, look back one length from now and take the oldest attempt in
-that span — that one opened it, and the budget resets one length after *it*.
+**A window is a bucket on the vendor's clock, not a span our first call opened.**
+Google states it plainly: *"Requests per day (RPD) quotas reset at midnight
+Pacific time."* That moment is fixed before anyone makes a request, and nothing
+the pool does that afternoon moves it. Per-minute quota turns over the same way,
+when the wall clock's minute does.
 
-That is also why `used` and `resets in` are read off the same span: every attempt
-in the last minute belongs to one minute-window, because the oldest of them
-opened it no earlier than a minute ago.
+So `used` is what landed inside the bucket the clock is currently in, and
+`resets in` is the time left on the clock — a fact about the calendar, and no
+longer a fact about our history. [windows.py](../llm_router/quota/windows.py)
+holds the two vendor facts this needs, both declared rather than measured
+because a ledger cannot see them:
 
-The assumption is not free, and it is wrong in one direction on purpose:
+| Platform | The day turns at | The minute meter counts |
+| --- | --- | --- |
+| Gemini | midnight `America/Los_Angeles` | **input tokens** (Google's TPM is "tokens per minute (input)") |
+| Groq | midnight UTC | the whole exchange |
+| anything else | midnight UTC | the whole exchange |
 
-- A vendor running a **leaky bucket** (Groq's request budget refills
-  continuously) clears earlier than this predicts.
-- A vendor running a **calendar day** (Gemini resets at midnight Pacific) clears
-  at a moment this cannot know.
+### The model this replaced, and why it had to go
 
-Both make the panel say a budget is still spent when it may not be. It will not
-promise headroom that isn't there, which is the only safe way to be wrong when
-something unattended is about to start.
+The panel used to assume the first attempt opened the window and the window
+ended one length later. Against a calendar-day vendor that is not an
+approximation, it is the wrong shape: a rolling day keeps counting yesterday
+evening into this morning and never clears at all while a run keeps spending.
+The ledger caught it doing exactly that — **50 calls Gemini served at moments
+when the rolling count already read *spent***, and a single rolling 24-hour span
+holding **35** served requests against a member declared at 20 a day.
 
-Where the provider told us better, that wins: a refusal carrying `Retry-After`
-puts a **blocked for 33s** on the row, and no arithmetic of ours overrides it.
+That is not a harmless pessimism. [4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent)
+skips a member the ledger calls spent, so an arithmetic that says *spent* when
+Google says *served* takes a working account out of the pool for hours — the one
+error [14.9](#149-what-it-deliberately-doesnt-do) says this may never make.
+
+Counting the vendor's day instead takes that 50 down to 26. It does not reach
+zero, and it is not meant to: the rest is the filter's own 30-second cache
+letting a burst through a ceiling it last read as open, which is
+[budget.py](../llm_router/quota/budget.py)'s deliberate overspend and lands on
+the retry path. A calendar window errs the same way — at worst it forgets a
+spent day slightly early and the next attempt is refused, which is the path
+failover already handles.
+
+Where the provider told us better, that still wins: a refusal carrying
+`Retry-After` puts a **blocked for 33s** on the row, and no arithmetic of ours
+overrides it.
+
+### What the ledger still cannot see
+
+`ts` is written when a call **returns**; a vendor meters it when it **arrives**.
+For the day that is noise. For a minute it is not: a call taking thirty seconds
+is recorded in a bucket it may not have been charged to, so per-minute figures
+are smeared across the boundary and a single minute's peak can read high. Peaks
+of eleven requests in one clock minute against a declared five dissolve when the
+same ledger is read over five minutes, which is how far you have to stand back
+before the smear stops mattering. **Do not read a stale published limit off a
+one-minute spike here.** Recording the issue time instead is the fix, and it
+belongs in [usage.py](../llm_router/usage.py) rather than in the reader.
 
 **Accounts do not share windows.** A model is fanned across every account on its
 platform ([3.3](03-pool-model.md#33-the-fan-out)), so `gemini-3.5-flash` may be
@@ -129,7 +163,7 @@ dropped, and then counted asymmetrically:
 | --- | --- | --- |
 | Request gauges (RPM, RPD) | **yes**, and shown as *n refused* | It spent a request to be told no |
 | Token gauges (TPM, TPD) | **no** | No tokens were spent being refused, and none are recorded |
-| The window's start | requests only | A refusal opens the request window; the token window is opened by the oldest attempt that actually spent tokens |
+| The window it lands in | both | A refusal and a served call sit in the same clock minute; what differs is what each one counts, not when either clears ([14.5](#145-windows-and-when-they-reset)) |
 | `Retry-After` | kept verbatim | The one statement about the future that isn't ours |
 
 **Only an attempt the provider answered counts at all.** Two things that look
@@ -237,7 +271,11 @@ spent their requests-per-day, and selection skips those
 The original objection was that routing off a stored count means trusting our own
 arithmetic, over a window model we know is approximate
 ([14.5](#145-windows-and-when-they-reset)), against the provider's live answer —
-and being wrong in the direction that stalls a run. The objection was right and
+and being wrong in the direction that stalls a run. That last risk was real and
+was being taken: the rolling day this used to count over held members out of the
+pool that Google had already forgiven at midnight Pacific, fifty times over in
+one recorded fortnight. Counting the vendor's day removes that particular way of
+being wrong; it does not remove the objection, which is answered below. The objection was right and
 is answered by construction rather than by better arithmetic: the count may only
 *narrow* a choice, never make one. It picks among the members that already fit
 the request; if it claims every candidate is spent it is ignored and the call

@@ -102,7 +102,9 @@ spends its afternoon rediscovering a fact it recorded the first time.
 So selection reads it back. `RpdBudget`
 ([quota/budget.py](../llm_router/quota/budget.py)) folds the usage ledger into
 one set — the members whose `rpd` in [config.yaml](../llm_router/config.yaml) is
-already spent in the last 24 hours — and step 3 passes over them silently. It is
+already spent since the vendor's own midnight
+([14.5](14-quota-panel.md#145-windows-and-when-they-reset)) — and step 3 passes
+over them silently. It is
 one reading of a file the router already writes, reused for 30 seconds, so a
 daily number is not re-parsed in front of every model call.
 
