@@ -9,86 +9,33 @@
 <body>
   <div class="app-container">
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="brand">
-          <div class="brand-icon">⚡</div>
           <div class="brand-info">
             <div class="brand-title">deepagents <span class="badge badge-accent">code</span></div>
             <div class="brand-subtitle">Autonomous Coding Agent Harness</div>
           </div>
         </div>
       </div>
-      
-      <div class="workspace-section">
-        <div class="section-label">
-          <span>📁 Workspace Folder</span>
-        </div>
-        <button type="button" id="workspace-picker-btn" class="workspace-picker-btn"
-                title="Choose the folder the agent works in">
-          <span id="workspace-display" class="workspace-display">.</span>
-          <span class="workspace-browse">Browse</span>
-        </button>
-      </div>
 
       <button id="new-session-btn" class="btn btn-primary" title="Start a fresh task (Ctrl+N)">
-        <span class="btn-icon">➕</span> New Task / Session
+        New Task / Session
       </button>
-
-      <!-- Quick Commands Bar -->
-      <div class="quick-commands-section">
-        <div class="section-label">⚡ Quick Actions</div>
-        <div class="quick-commands-grid">
-          <button type="button" class="btn-chip" data-cmd="/help" title="Show command overview">/help</button>
-          <button type="button" class="btn-chip" data-cmd="/diff" title="Show git diff for the workspace">/diff</button>
-          <button type="button" class="btn-chip" data-cmd="/clear" title="Clear chat messages">/clear</button>
-        </div>
-      </div>
 
       <div class="sessions-list-container">
         <div class="sessions-header">
-          <span class="section-label">💬 History & Threads</span>
+          <span class="section-label">History & Threads</span>
           <span id="sessions-count" class="badge badge-muted">0</span>
         </div>
         <ul id="sessions-list" class="sessions-list">
           <!-- Sessions will be populated dynamically -->
         </ul>
       </div>
-
-      <div class="sidebar-footer">
-        <div class="key-hints-title">⌨️ Keyboard Shortcuts</div>
-        <div class="key-hints-grid">
-          <div class="key-hint-item"><kbd>↵</kbd> <span>Send</span></div>
-          <div class="key-hint-item"><kbd>⇧↵</kbd> <span>Newline</span></div>
-          <div class="key-hint-item"><kbd>/</kbd> <span>Commands</span></div>
-          <div class="key-hint-item"><kbd>Esc</kbd> <span>Close</span></div>
-        </div>
-      </div>
     </aside>
 
     <!-- Main Chat Area -->
     <main class="chat-area">
-      <!-- Top Bar Header -->
-      <header class="chat-header">
-        <div class="header-left">
-          <div class="agent-status-pill ready" id="agent-status-pill">
-            <span class="status-dot"></span>
-            <span id="agent-status-text">Agent Ready</span>
-          </div>
-          <h1 id="session-title">New Task</h1>
-        </div>
-        
-        <div class="header-right">
-          <div class="model-pill" id="model-pill" title="Model the router last selected from the pool">
-            <span class="pill-label">Model:</span>
-            <span class="pill-value" id="current-model">router pool</span>
-          </div>
-          <button type="button" id="clear-chat-btn" class="btn-icon-action" title="Clear current thread messages">
-            🧹 Clear
-          </button>
-        </div>
-      </header>
-
       <!-- Message History Container -->
       <div id="messages-container" class="messages-container">
         <!-- Messages will be populated dynamically -->
@@ -98,7 +45,6 @@
       <div id="working-indicator" class="working-indicator hidden">
         <div class="indicator-header">
           <div class="indicator-left">
-            <span class="pulse-spinner">⚡</span>
             <div class="indicator-meta">
               <span id="indicator-text" class="indicator-title">Planning task & executing tools...</span>
               <span class="indicator-sub">Deep Agent Harness Stream · Elapsed <strong id="elapsed-time">0s</strong></span>
@@ -106,14 +52,14 @@
           </div>
           <div class="indicator-actions">
             <button type="button" id="stop-btn" class="btn btn-stop" title="Interrupt and stop execution">
-              🛑 Stop Run
+              Stop Run
             </button>
           </div>
         </div>
         
         <details class="live-output-details" open>
           <summary>
-            <span>📟 Telemetry & Output Logs</span>
+            <span>Telemetry & Output Logs</span>
             <span class="log-badge">Live Terminal</span>
           </summary>
           <pre id="live-output" class="live-output"></pre>
@@ -124,7 +70,7 @@
       <div class="input-container">
         <!-- Slash Command Autocomplete Popup -->
         <div id="slash-popup" class="slash-popup hidden">
-          <div class="slash-popup-header">⚡ Slash Commands</div>
+          <div class="slash-popup-header">Slash Commands</div>
           <ul id="slash-popup-list" class="slash-popup-list">
             <li data-cmd="/help"><span class="cmd-name">/help</span><span class="cmd-desc">Show available commands and usage guide</span></li>
             <li data-cmd="/diff"><span class="cmd-name">/diff</span><span class="cmd-desc">Show git diff for the workspace</span></li>
@@ -144,11 +90,13 @@
             
             <div class="input-controls">
               <div class="input-hints">
-                <span class="hint-tag">⚡ dcode harness</span>
-                <span class="hint-tag">Autonomous run</span>
+                <button type="button" id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="Toggle sidebar">≡</button>
+                <button type="button" id="workspace-picker-btn" class="workspace-picker-btn" title="Choose the folder the conversation works on">
+                  <span class="workspace-pin-label">Folder:</span>
+                  <span id="workspace-display" class="workspace-display">.</span>
+                </button>
               </div>
               <button type="submit" id="send-btn" class="btn btn-send">
-                <span class="send-icon">🚀</span>
                 <span>Send</span>
               </button>
             </div>
@@ -162,7 +110,7 @@
   <div id="folder-modal" class="modal-overlay hidden">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title">
       <div class="modal-header">
-        <h2 id="folder-modal-title">📁 Select Workspace Folder</h2>
+        <h2 id="folder-modal-title">Select Workspace Folder</h2>
         <button type="button" id="folder-close-btn" class="modal-close" title="Close (Esc)">✕</button>
       </div>
       <div id="folder-roots" class="folder-roots"></div>
