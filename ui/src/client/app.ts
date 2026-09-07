@@ -174,8 +174,24 @@ let timerInterval: any = null;
 let currentEventSource: EventSource | null = null;
 let slashSelectedIdx = -1;
 
+// The folder the agent is pointed at. It used to live in a text box; now the
+// picker owns it, and localStorage carries it across reloads.
+const WORKSPACE_KEY = 'dcode.workspace';
+let workspace = '.';
+// Where the picker is currently looking, which is also what it would select.
+let browsePath = '';
+
 // DOM Elements
-const workspaceInput = document.getElementById('workspace-input') as HTMLInputElement;
+const workspacePickerBtn = document.getElementById('workspace-picker-btn') as HTMLButtonElement;
+const workspaceDisplay = document.getElementById('workspace-display') as HTMLSpanElement;
+const folderModal = document.getElementById('folder-modal') as HTMLDivElement;
+const folderRoots = document.getElementById('folder-roots') as HTMLDivElement;
+const folderBreadcrumb = document.getElementById('folder-breadcrumb') as HTMLElement;
+const folderList = document.getElementById('folder-list') as HTMLUListElement;
+const folderSelectionPath = document.getElementById('folder-selection-path') as HTMLSpanElement;
+const folderCloseBtn = document.getElementById('folder-close-btn') as HTMLButtonElement;
+const folderCancelBtn = document.getElementById('folder-cancel-btn') as HTMLButtonElement;
+const folderSelectBtn = document.getElementById('folder-select-btn') as HTMLButtonElement;
 const newSessionBtn = document.getElementById('new-session-btn') as HTMLButtonElement;
 const sessionsList = document.getElementById('sessions-list') as HTMLUListElement;
 const sessionsCountBadge = document.getElementById('sessions-count') as HTMLSpanElement;
@@ -198,6 +214,7 @@ const slashPopupList = document.getElementById('slash-popup-list') as HTMLUListE
 
 // Initialize Application
 async function init() {
+  restoreWorkspace();
   setupEventListeners();
   await loadSessions();
   
@@ -326,6 +343,28 @@ function setupEventListeners() {
     });
   });
 
+  // Workspace folder picker
+  workspacePickerBtn.addEventListener('click', openFolderPicker);
+  folderCloseBtn.addEventListener('click', closeFolderPicker);
+  folderCancelBtn.addEventListener('click', closeFolderPicker);
+  folderSelectBtn.addEventListener('click', () => {
+    if (browsePath) setWorkspace(browsePath);
+    closeFolderPicker();
+  });
+  folderModal.addEventListener('click', (e) => {
+    // Only the backdrop closes; a click inside the dialog must not.
+    if (e.target === folderModal) closeFolderPicker();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (folderModal.classList.contains('hidden')) return;
+    if (e.key === 'Escape') {
+      closeFolderPicker();
+    } else if (e.key === 'Enter' && browsePath) {
+      setWorkspace(browsePath);
+      closeFolderPicker();
+    }
+  });
+
   // Global click to close slash popup
   document.addEventListener('click', (e) => {
     if (!slashPopup.contains(e.target as Node) && e.target !== chatInput) {
@@ -431,7 +470,6 @@ async function handleSlashCommand(cmdStr: string) {
   }
 
   if (cmd === '/diff') {
-    const workspace = workspaceInput.value.trim() || '.';
     try {
       const res = await fetch(`/api/diff?workspace=${encodeURIComponent(workspace)}`);
       const data = await res.json();
@@ -644,7 +682,7 @@ function renderMessages(messages: Message[]) {
       </pre>
       <h2>Deep Agents Coding Harness (dcode)</h2>
       <p class="empty-state-desc">
-        Autonomous coding agent powered by LangChain & LangGraph. Specify a workspace folder, provide tasks or bugs to fix, and dcode will inspect, plan, write code, and run tests.
+        Autonomous coding agent powered by LangChain & LangGraph. Pick a workspace folder, provide tasks or bugs to fix, and dcode will inspect, plan, write code, and run tests.
       </p>
 
       <div class="suggestion-grid">
@@ -734,7 +772,7 @@ function setRunningState(running: boolean) {
   isRunning = running;
   chatInput.disabled = running;
   sendBtn.disabled = running;
-  workspaceInput.disabled = running;
+  workspacePickerBtn.disabled = running;
   newSessionBtn.disabled = running;
   
   if (running) {
@@ -772,7 +810,6 @@ function connectStream(sessionId: string, isReconnect = false) {
     liveOutput.textContent = '';
   }
 
-  const workspace = workspaceInput.value.trim() || '.';
   const eventSourceUrl =
     `/api/sessions/${sessionId}/run?workspace=${encodeURIComponent(workspace)}` +
     (isReconnect ? '' : '&start=1');
@@ -885,4 +922,188 @@ async function sendMessage(content: string) {
 }
 
 // Initialize on DOM load
+// ==========================================================================
+// Workspace folder picker
+//
+// A browser cannot hand a server an absolute path -- a native folder dialog
+// gives the page a name and a sandboxed handle, never a location on disk. So
+// the picker walks the filesystem server-side over /api/browse, and what the
+// user clicks through is the machine the agent actually runs on.
+// ==========================================================================
+
+const MAX_PATH_CHARS = 34;
+
+function shortenPath(full: string): string {
+  if (full.length <= MAX_PATH_CHARS) return full;
+  const sep = full.includes('\\') ? '\\' : '/';
+  const parts = full.split(/[\\/]/).filter(Boolean);
+  const kept: string[] = [];
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const candidate = [parts[i], ...kept];
+    if (candidate.join(sep).length + 2 > MAX_PATH_CHARS && kept.length) break;
+    kept.unshift(parts[i]);
+  }
+  return '…' + sep + kept.join(sep);
+}
+
+function setWorkspace(dir: string) {
+  workspace = dir;
+  workspaceDisplay.textContent = shortenPath(dir);
+  workspacePickerBtn.title = `Workspace: ${dir}\nClick to choose another folder`;
+  try {
+    localStorage.setItem(WORKSPACE_KEY, dir);
+  } catch {
+    // Private browsing, or storage is full: the choice just will not persist.
+  }
+}
+
+function restoreWorkspace() {
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem(WORKSPACE_KEY);
+  } catch {
+    saved = null;
+  }
+  setWorkspace(saved || '.');
+}
+
+function openFolderPicker() {
+  if (isRunning) return;
+  folderModal.classList.remove('hidden');
+  // '.' has no meaning to the picker, so start it wherever the server is.
+  void browseTo(workspace === '.' ? '' : workspace);
+}
+
+function closeFolderPicker() {
+  folderModal.classList.add('hidden');
+}
+
+async function browseTo(dir: string) {
+  folderList.innerHTML = '<li class="folder-empty">Loading…</li>';
+  try {
+    const res = await fetch(`/api/browse?path=${encodeURIComponent(dir)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      folderList.innerHTML = '';
+      const li = document.createElement('li');
+      li.className = 'folder-empty error';
+      li.textContent = data.error || 'Could not open that folder.';
+      folderList.appendChild(li);
+      return;
+    }
+    renderBrowse(data);
+  } catch (error) {
+    folderList.innerHTML = '';
+    const li = document.createElement('li');
+    li.className = 'folder-empty error';
+    li.textContent = `Could not reach the server: ${(error as Error).message}`;
+    folderList.appendChild(li);
+  }
+}
+
+interface BrowseResponse {
+  path: string;
+  parent: string | null;
+  separator: string;
+  roots: string[];
+  dirs: { name: string; path: string }[];
+}
+
+function renderBrowse(data: BrowseResponse) {
+  browsePath = data.path;
+  folderSelectionPath.textContent = data.path;
+
+  // Drives (Windows) or '/' (everywhere else)
+  folderRoots.innerHTML = '';
+  for (const root of data.roots) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'folder-root-chip';
+    if (data.path.toLowerCase().startsWith(root.toLowerCase())) {
+      chip.classList.add('active');
+    }
+    chip.textContent = root;
+    chip.addEventListener('click', () => void browseTo(root));
+    folderRoots.appendChild(chip);
+  }
+
+  renderBreadcrumb(data.path, data.separator);
+
+  folderList.innerHTML = '';
+  if (data.parent) {
+    const up = document.createElement('li');
+    up.className = 'folder-row up';
+    up.innerHTML = '<span class="folder-icon">⬆</span><span class="folder-name">..</span>';
+    up.addEventListener('click', () => void browseTo(data.parent as string));
+    folderList.appendChild(up);
+  }
+
+  for (const dir of data.dirs) {
+    const li = document.createElement('li');
+    li.className = 'folder-row';
+    const icon = document.createElement('span');
+    icon.className = 'folder-icon';
+    icon.textContent = '\u{1F4C1}';
+    const name = document.createElement('span');
+    name.className = 'folder-name';
+    // A directory name is not ours to trust as markup.
+    name.textContent = dir.name;
+    li.appendChild(icon);
+    li.appendChild(name);
+    li.addEventListener('click', () => void browseTo(dir.path));
+    folderList.appendChild(li);
+  }
+
+  if (!data.dirs.length && !data.parent) {
+    const li = document.createElement('li');
+    li.className = 'folder-empty';
+    li.textContent = 'No sub-folders here.';
+    folderList.appendChild(li);
+  }
+  folderList.scrollTop = 0;
+}
+
+function renderBreadcrumb(full: string, sep: string) {
+  folderBreadcrumb.innerHTML = '';
+
+  const crumbs: { label: string; path: string }[] = [];
+  if (full.startsWith('\\\\')) {
+    // A UNC share has no useful segments to climb through.
+    crumbs.push({ label: full, path: full });
+  } else {
+    const parts = full.split(/[\\/]/).filter(Boolean);
+    if (sep === '/') {
+      crumbs.push({ label: '/', path: '/' });
+      let acc = '';
+      for (const part of parts) {
+        acc += '/' + part;
+        crumbs.push({ label: part, path: acc });
+      }
+    } else {
+      parts.forEach((part, i) => {
+        crumbs.push({
+          label: i === 0 ? part + sep : part,
+          path: i === 0 ? part + sep : parts.slice(0, i + 1).join(sep),
+        });
+      });
+    }
+  }
+
+  crumbs.forEach((crumb, i) => {
+    if (i > 0 && !crumbs[i - 1].label.endsWith(sep)) {
+      const caret = document.createElement('span');
+      caret.className = 'crumb-sep';
+      caret.textContent = sep;
+      folderBreadcrumb.appendChild(caret);
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'crumb';
+    if (i === crumbs.length - 1) btn.classList.add('current');
+    btn.textContent = crumb.label;
+    btn.addEventListener('click', () => void browseTo(crumb.path));
+    folderBreadcrumb.appendChild(btn);
+  });
+}
+
 window.addEventListener('DOMContentLoaded', init);
