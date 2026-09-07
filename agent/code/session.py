@@ -126,8 +126,12 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
         tools.append(make_delegate_tool(transport))
         sections.append(directory_section(transport.registry))
 
-    system_prompt = prompt.build(floor, members=members,
-                                 extra_sections=[s for s in sections if s])
+    # The prompt names the same programs the middleware and the backend
+    # enforce, from the one constant all three read, so the model is told the
+    # shape of `execute` before it spends a step discovering it.
+    system_prompt = prompt.build(
+        floor, members=members, extra_sections=[s for s in sections if s],
+        programs=() if allow_shell else ALLOWED_PROGRAMS)
 
     middleware = list(extra_middleware or [])
     # Only meaningful while the backend still has an allowlist to mirror. With

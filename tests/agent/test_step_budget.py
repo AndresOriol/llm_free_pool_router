@@ -142,3 +142,19 @@ def test_the_summary_finds_the_last_message_that_has_words():
     assert _text(AIMessage(content="", tool_calls=[])) == ""
     assert _text(AIMessage(content="  the account  ")) == "the account"
     assert _text(AIMessage(content=[{"type": "text", "text": "blocks"}])) == "blocks"
+
+
+def test_the_prompt_names_the_programs_execute_can_run():
+    """Every recorded run spent a step discovering this by being refused."""
+    from agent.code.prompt import build
+    text = build(128_000, members=70, programs=("python", "pytest", "git"))
+    assert "python, pytest, git" in text
+    assert "`&&`" in text
+    # And it must say what to do instead, not only what is forbidden.
+    assert "python -c" in text
+
+
+def test_the_prompt_says_nothing_about_a_shell_it_does_not_restrict():
+    """With HARNESS_SHELL the backend runs anything; a rule here would lie."""
+    from agent.code.prompt import build
+    assert "## Running commands" not in build(128_000, members=70)
