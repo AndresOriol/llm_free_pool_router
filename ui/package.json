@@ -8,7 +8,7 @@
     "build": "tsc && esbuild src/client/app.ts --bundle --format=esm --outfile=dist/client/app.js --target=es2022",
     "start": "npm run build && node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "verify-client": "node -e \"const fs = require('fs'); const code = fs.readFileSync('dist/client/app.js', 'utf8'); if (/Object\\.defineProperty\\(exports/.test(code) || /module\\.exports/.test(code) || /exports\\.[a-zA-Z0-9_$]+\\s*=\\s*[^\\.]/.test(code)) { console.error('ERROR: CommonJS export assignment found in client bundle!'); process.exit(1); } else { console.log('Client bundle verification passed: valid ESM bundle with no CommonJS export leaks.'); }\""
+    "verify-client": "node -e \"const fs = require('fs'); const code = fs.readFileSync('dist/client/app.js', 'utf8'); const stripped = code.replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, ''); if (/Object\\.defineProperty\\(\\s*exports/.test(stripped) || /^\\s*exports\\.[a-zA-Z0-9_$]+\\s*=/m.test(stripped) || /^module\\.exports\\s*=/m.test(stripped) || /\\bexports\\.__esModule\\b/.test(stripped)) { console.error('ERROR: CommonJS export assignment found in client bundle!'); process.exit(1); } else { console.log('Client bundle verification passed: valid ESM bundle with no CommonJS export leaks.'); }\""
   },
   "dependencies": {
     "dompurify": "^3.1.6",

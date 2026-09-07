@@ -1,7 +1,35 @@
 import { Session, Message } from '../types';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import hljs from 'highlight.js';
+import hljs from 'highlight.js/lib/core';
+import typescript from 'highlight.js/lib/languages/typescript';
+import javascript from 'highlight.js/lib/languages/javascript';
+import python from 'highlight.js/lib/languages/python';
+import bash from 'highlight.js/lib/languages/bash';
+import json from 'highlight.js/lib/languages/json';
+import markdown from 'highlight.js/lib/languages/markdown';
+import yaml from 'highlight.js/lib/languages/yaml';
+import xml from 'highlight.js/lib/languages/xml';
+import css from 'highlight.js/lib/languages/css';
+
+// Register essential languages
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('ts', typescript);
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('js', javascript);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('py', python);
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('sh', bash);
+hljs.registerLanguage('shell', bash);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('markdown', markdown);
+hljs.registerLanguage('md', markdown);
+hljs.registerLanguage('yaml', yaml);
+hljs.registerLanguage('yml', yaml);
+hljs.registerLanguage('html', xml);
+hljs.registerLanguage('xml', xml);
+hljs.registerLanguage('css', css);
 
 // Configure marked with highlight.js
 marked.use({
@@ -177,6 +205,9 @@ async function selectSession(id: string) {
     renderMessages(session.messages);
     
     if (session.status === 'working') {
+      // Re-attach live stream if agent is actively running
+      connectStream(id, true);
+    } else {
       setRunningState(false);
     }
   } catch (error) {
@@ -287,6 +318,78 @@ function setRunningState(running: boolean) {
   }
 }
 
+// Connect streaming agent execution via SSE
+function connectStream(sessionId: string, isReconnect = false) {
+  setRunningState(true);
+  if (!isReconnect) {
+    liveOutput.textContent = '';
+  }
+
+  const workspace = workspaceInput.value.trim() || '.';
+  const eventSourceUrl = `/api/sessions/${sessionId}/run?workspace=${encodeURIComponent(workspace)}`;
+
+  if (currentEventSource) {
+    currentEventSource.close();
+  }
+
+  currentEventSource = new EventSource(eventSourceUrl);
+
+  currentEventSource.addEventListener('output', (e: any) => {
+    try {
+      const data = JSON.parse(e.data);
+      const chunk = data.chunk;
+      liveOutput.textContent += chunk;
+      liveOutput.scrollTop = liveOutput.scrollHeight;
+
+      // Parse status indicators from stream output
+      if (chunk.includes('Routing to')) {
+        const match = chunk.match(/Routing to ([^. \n]+)/);
+        if (match) {
+          indicatorText.textContent = `Working via ${match[1]}...`;
+        }
+      }
+      if (chunk.includes('step') || chunk.includes('Iteration')) {
+        indicatorText.textContent = `Working (executing steps)...`;
+      }
+    } catch (err) {
+      console.error('Error parsing output event:', err);
+    }
+  });
+
+  currentEventSource.addEventListener('error', (e: any) => {
+    console.error('SSE Error:', e);
+    try {
+      const data = JSON.parse(e.data);
+      liveOutput.textContent += `\n[Error: ${data.error || 'Unknown error'}]`;
+    } catch (err) {
+      liveOutput.textContent += `\n[Connection Closed]`;
+    }
+    if (currentEventSource) {
+      currentEventSource.close();
+      currentEventSource = null;
+    }
+    setRunningState(false);
+    if (currentSessionId) selectSession(currentSessionId);
+  });
+
+  currentEventSource.addEventListener('end', (e: any) => {
+    try {
+      const data = JSON.parse(e.data);
+      indicatorText.textContent = data.status === 'completed' ? 'Complete!' : 'Completed with errors';
+    } catch (err) {
+      indicatorText.textContent = 'Finished';
+    }
+    if (currentEventSource) {
+      currentEventSource.close();
+      currentEventSource = null;
+    }
+    setTimeout(() => {
+      setRunningState(false);
+      if (currentSessionId) selectSession(currentSessionId);
+    }, 1000);
+  });
+}
+
 // Send message and run agent
 async function sendMessage(content: string) {
   if (!currentSessionId) return;
@@ -315,69 +418,7 @@ async function sendMessage(content: string) {
     await loadSessions();
 
     // 2. Start streaming agent execution via SSE
-    const workspace = workspaceInput.value.trim() || '.';
-    const eventSourceUrl = `/api/sessions/${currentSessionId}/run?workspace=${encodeURIComponent(workspace)}`;
-    
-    if (currentEventSource) {
-      currentEventSource.close();
-    }
-    
-    currentEventSource = new EventSource(eventSourceUrl);
-    
-    currentEventSource.addEventListener('output', (e: any) => {
-      try {
-        const data = JSON.parse(e.data);
-        const chunk = data.chunk;
-        liveOutput.textContent += chunk;
-        liveOutput.scrollTop = liveOutput.scrollHeight;
-
-        // Parse status indicators from stream output
-        if (chunk.includes('Routing to')) {
-          const match = chunk.match(/Routing to ([^. \n]+)/);
-          if (match) {
-            indicatorText.textContent = `Working via ${match[1]}...`;
-          }
-        }
-        if (chunk.includes('step') || chunk.includes('Iteration')) {
-          indicatorText.textContent = `Working (executing steps)...`;
-        }
-      } catch (err) {
-        console.error('Error parsing output event:', err);
-      }
-    });
-
-    currentEventSource.addEventListener('error', (e: any) => {
-      console.error('SSE Error:', e);
-      try {
-        const data = JSON.parse(e.data);
-        liveOutput.textContent += `\n[Error: ${data.error || 'Unknown error'}]`;
-      } catch (err) {
-        liveOutput.textContent += `\n[Connection Closed]`;
-      }
-      if (currentEventSource) {
-        currentEventSource.close();
-        currentEventSource = null;
-      }
-      setRunningState(false);
-      if (currentSessionId) selectSession(currentSessionId);
-    });
-
-    currentEventSource.addEventListener('end', (e: any) => {
-      try {
-        const data = JSON.parse(e.data);
-        indicatorText.textContent = data.status === 'completed' ? 'Complete!' : 'Completed with errors';
-      } catch (err) {
-        indicatorText.textContent = 'Finished';
-      }
-      if (currentEventSource) {
-        currentEventSource.close();
-        currentEventSource = null;
-      }
-      setTimeout(() => {
-        setRunningState(false);
-        if (currentSessionId) selectSession(currentSessionId);
-      }, 1000);
-    });
+    connectStream(currentSessionId, false);
 
   } catch (error) {
     console.error('Error sending message:', error);

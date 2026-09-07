@@ -20,16 +20,59 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'client')));
 app.use(express.static(path.join(__dirname, '../src/client')));
 
-// Active child processes mapped by session ID
-const activeRuns = new Map<string, any>();
+// Active child process state mapped by session ID
+interface ActiveRun {
+  sessionId: string;
+  child: any;
+  output: string;
+  userStopped: boolean;
+  listeners: Set<Response>;
+  startTime: number;
+}
+
+const activeRuns = new Map<string, ActiveRun>();
+
+// Helper to extract clean reply from raw stdout log
+function extractReply(raw: string): string {
+  const trimmed = raw.trim();
+  // Check for === DONE ... === or === STOPPED ... ===
+  const doneMatch = trimmed.match(/===\s*(?:DONE|STOPPED)[^=]*===\s*([\s\S]*)$/i);
+  if (doneMatch && doneMatch[1].trim()) {
+    return doneMatch[1].trim();
+  }
+  // If no marker, return last non-empty significant section or fallback
+  return trimmed || '(Agent completed with no output)';
+}
+
+// Helper to extract meaningful error summary from crash logs without full router debug output
+function extractErrorReply(raw: string, code: number | null, signal: string | null): string {
+  const trimmed = raw.trim();
+  // Check for Python Traceback
+  const tbMatch = trimmed.match(/(?:Traceback \(most recent call last\)[\s\S]*)/);
+  if (tbMatch) {
+    return `Agent failed with error:\n\`\`\`\n${tbMatch[0].trim()}\n\`\`\``;
+  }
+  // Check for error lines
+  const lines = trimmed.split('\n').filter((l) => l.trim().length > 0);
+  const errorLines = lines.filter((l) => /error|exception|failed|fatal|cannot|could not/i.test(l));
+  if (errorLines.length > 0) {
+    const snippet = errorLines.slice(-5).join('\n');
+    return `Agent failed (exit code ${code !== null ? code : signal}):\n${snippet}`;
+  }
+  if (lines.length > 0) {
+    const snippet = lines.slice(-3).join('\n');
+    return `Agent exited with code ${code !== null ? code : signal}:\n${snippet}`;
+  }
+  return `Agent exited unexpectedly with code ${code !== null ? code : signal}.`;
+}
 
 // API Endpoints - Stop route registered ONCE globally
 app.post('/api/sessions/:id/stop', (req: Request, res: Response) => {
   const sessionId = req.params.id;
-  const child = activeRuns.get(sessionId);
-  if (child && child.exitCode === null) {
-    child.kill();
-    activeRuns.delete(sessionId);
+  const run = activeRuns.get(sessionId);
+  if (run && run.child && run.child.exitCode === null) {
+    run.userStopped = true;
+    run.child.kill();
     res.json({ success: true });
   } else {
     res.status(400).json({ error: 'No active run for this session' });
@@ -131,6 +174,26 @@ app.get('/api/sessions/:id/run', (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  // If there is already an active run for this session, re-attach listener and catch up
+  const existingRun = activeRuns.get(sessionId);
+  if (existingRun && existingRun.child && existingRun.child.exitCode === null) {
+    if (existingRun.output) {
+      res.write(`event: output\ndata: ${JSON.stringify({ chunk: existingRun.output })}\n\n`);
+    }
+    existingRun.listeners.add(res);
+    req.on('close', () => {
+      existingRun.listeners.delete(res);
+    });
+    return;
+  }
+
+  // If session is not in working status (e.g., already completed or error), send end event
+  if (session.status !== 'working') {
+    res.write(`event: end\ndata: ${JSON.stringify({ code: 0, output: '', status: session.status })}\n\n`);
+    res.end();
+    return;
+  }
+
   // Verify workspace directory exists
   const absoluteWorkspace = path.isAbsolute(workspace)
     ? workspace
@@ -141,7 +204,8 @@ app.get('/api/sessions/:id/run', (req: Request, res: Response) => {
     res.write(`event: error\ndata: ${JSON.stringify({ error: errMsg })}\n\n`);
     
     // Update session status to error
-    const messages = [...session.messages];
+    const latestSession = getSession(sessionId) || session;
+    const messages = [...latestSession.messages];
     messages.push({ role: 'assistant', content: errMsg });
     updateSession(sessionId, messages, 'error');
     res.end();
@@ -149,64 +213,78 @@ app.get('/api/sessions/:id/run', (req: Request, res: Response) => {
   }
 
   const combinedPrompt = formatCombinedPrompt(session.messages);
-  let output = '';
 
-  // Helper to extract clean reply from raw stdout log
-  function extractReply(raw: string): string {
-    const trimmed = raw.trim();
-    // Check for === DONE ... === or === STOPPED ... ===
-    const doneMatch = trimmed.match(/===\s*(?:DONE|STOPPED)[^=]*===\s*([\s\S]*)$/i);
-    if (doneMatch && doneMatch[1].trim()) {
-      return doneMatch[1].trim();
-    }
-    // If no marker, return last non-empty significant section or fallback
-    return trimmed || '(Agent completed with no output)';
-  }
+  const currentRun: ActiveRun = {
+    sessionId,
+    child: null,
+    output: '',
+    userStopped: false,
+    listeners: new Set<Response>([res]),
+    startTime: Date.now(),
+  };
+  activeRuns.set(sessionId, currentRun);
+
+  // When this SSE connection drops, remove listener but keep the child process running
+  req.on('close', () => {
+    currentRun.listeners.delete(res);
+  });
 
   const child = runAgent({
     workspace,
     combinedPrompt,
     onData: (chunk) => {
-      output += chunk;
-      res.write(`event: output\ndata: ${JSON.stringify({ chunk })}\n\n`);
+      currentRun.output += chunk;
+      for (const listener of currentRun.listeners) {
+        listener.write(`event: output\ndata: ${JSON.stringify({ chunk })}\n\n`);
+      }
     },
-    onExit: (code) => {
+    onExit: (code, signal) => {
       activeRuns.delete(sessionId);
-      const isStopped = child && (child.killed || code !== 0 && output.includes('Stopped'));
-      const status: SessionStatus = code === 0 ? 'completed' : 'error';
-      const cleanReply = isStopped || code !== 0 && !output.includes('=== DONE') ? 'Stopped by the user.' : extractReply(output);
+      const isStopped = currentRun.userStopped;
+      const status: SessionStatus = code === 0 && !isStopped ? 'completed' : 'error';
       
-      const messages = [...session.messages];
+      let cleanReply: string;
+      if (isStopped) {
+        cleanReply = 'Stopped by the user.';
+      } else if (code === 0) {
+        cleanReply = extractReply(currentRun.output);
+      } else {
+        cleanReply = extractErrorReply(currentRun.output, code, signal);
+      }
+      
+      const latestSession = getSession(sessionId) || session;
+      const messages = [...latestSession.messages];
       messages.push({ role: 'assistant', content: cleanReply });
       updateSession(sessionId, messages, status);
 
-      res.write(`event: end\ndata: ${JSON.stringify({ code, output: cleanReply, rawOutput: output, status })}\n\n`);
-      res.end();
+      for (const listener of currentRun.listeners) {
+        listener.write(`event: end\ndata: ${JSON.stringify({ code, output: cleanReply, rawOutput: currentRun.output, status })}\n\n`);
+        listener.end();
+      }
+      currentRun.listeners.clear();
     },
     onError: (err) => {
       activeRuns.delete(sessionId);
-      const errMsg = `Error executing agent: ${err.message}`;
-      output += errMsg;
-      res.write(`event: error\ndata: ${JSON.stringify({ error: errMsg })}\n\n`);
+      const errMsg = `Agent failed to start: ${err.message}`;
+      currentRun.output += errMsg;
 
-      const messages = [...session.messages];
-      messages.push({ role: 'assistant', content: 'Stopped by the user.' });
+      const latestSession = getSession(sessionId) || session;
+      const messages = [...latestSession.messages];
+      messages.push({ role: 'assistant', content: errMsg });
       updateSession(sessionId, messages, 'error');
-      res.end();
+
+      for (const listener of currentRun.listeners) {
+        listener.write(`event: error\ndata: ${JSON.stringify({ error: errMsg })}\n\n`);
+        listener.end();
+      }
+      currentRun.listeners.clear();
     },
   });
 
-  if (child) {
-    activeRuns.set(sessionId, child);
+  currentRun.child = child;
+  if (!child) {
+    activeRuns.delete(sessionId);
   }
-
-  // If client disconnects, we can optionally kill the child process
-  req.on('close', () => {
-    if (child && child.exitCode === null) {
-      child.kill();
-      activeRuns.delete(sessionId);
-    }
-  });
 });
 
 // Fallback to index.html for SPA routing if needed

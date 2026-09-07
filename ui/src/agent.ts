@@ -20,7 +20,7 @@ export interface RunAgentOptions {
   workspace: string;
   combinedPrompt: string;
   onData: (data: string) => void;
-  onExit: (code: number | null) => void;
+  onExit: (code: number | null, signal: string | null) => void;
   onError: (err: Error) => void;
 }
 
@@ -38,7 +38,7 @@ export function runAgent({
   const projectRoot = path.resolve(__dirname, '..', '..');
   const env = { ...process.env };
   const pythonPath = env.PYTHONPATH 
-    ? `${projectRoot}${path.delimiter}${env.PYTHONPATH}`
+    ? `${env.PYTHONPATH}${path.delimiter}${projectRoot}`
     : projectRoot;
   env.PYTHONPATH = pythonPath;
 
@@ -65,8 +65,8 @@ export function runAgent({
       onError(err);
     });
 
-    child.on('exit', (code) => {
-      onExit(code);
+    child.on('exit', (code, signal) => {
+      onExit(code, signal ? signal.toString() : null);
     });
 
     return child;
