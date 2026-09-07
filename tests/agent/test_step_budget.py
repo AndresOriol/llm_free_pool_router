@@ -158,3 +158,17 @@ def test_the_prompt_says_nothing_about_a_shell_it_does_not_restrict():
     """With HARNESS_SHELL the backend runs anything; a rule here would lie."""
     from agent.code.prompt import build
     assert "## Running commands" not in build(128_000, members=70)
+
+
+def test_the_prompt_warns_that_a_python_wrapper_masks_the_exit_code():
+    """A run read `[Command succeeded with exit code 0]` over a failing build.
+
+    `python -c "subprocess.run(...)"` is how this agent reaches any tool that
+    is not on its allowlist, and it exits 0 whatever the child did -- so the
+    harness's own success marker lied, and the session reported a broken
+    verification gate as passing.
+    """
+    from agent.code.prompt import build
+    text = build(128_000, members=70, programs=("python", "pytest", "git"))
+    assert "exit code" in text
+    assert "sys.exit(res.returncode)" in text

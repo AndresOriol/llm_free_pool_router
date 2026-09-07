@@ -99,6 +99,15 @@ the model is told the shape of `execute` before it spends a step discovering
 it: every recorded run before that spent at least one being refused, usually
 on `&&`.
 
+Because `python` is on that list, the way round every other restriction is
+`python -c "subprocess.run([...])"`, and agents find it immediately. It has one
+sharp edge: the wrapper exits 0 whatever the child did, so `execute` reports a
+**failing** build as `[Command succeeded with exit code 0]`. A recorded run
+read that line over its own broken verification script and reported the gate as
+passing. The prompt now says to carry the child's code out with
+`sys.exit(res.returncode)` — the harness cannot tell the difference itself,
+because as far as it is concerned the program it launched succeeded.
+
 **Git, by subcommand.** A session commits its own work incrementally on its own
 branch, so the human's gate is the **merge**, not the commit. `push`, `merge`,
 `rebase`, `reset` and `clean` are refused
