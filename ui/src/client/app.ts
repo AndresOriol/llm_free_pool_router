@@ -182,6 +182,8 @@ let workspace = '.';
 let browsePath = '';
 
 // DOM Elements
+const sidebar = document.getElementById('sidebar') as HTMLElement;
+const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn') as HTMLButtonElement;
 const workspacePickerBtn = document.getElementById('workspace-picker-btn') as HTMLButtonElement;
 const workspaceDisplay = document.getElementById('workspace-display') as HTMLSpanElement;
 const folderModal = document.getElementById('folder-modal') as HTMLDivElement;
@@ -195,11 +197,6 @@ const folderSelectBtn = document.getElementById('folder-select-btn') as HTMLButt
 const newSessionBtn = document.getElementById('new-session-btn') as HTMLButtonElement;
 const sessionsList = document.getElementById('sessions-list') as HTMLUListElement;
 const sessionsCountBadge = document.getElementById('sessions-count') as HTMLSpanElement;
-const sessionTitle = document.getElementById('session-title') as HTMLHeadingElement;
-const agentStatusPill = document.getElementById('agent-status-pill') as HTMLDivElement;
-const agentStatusText = document.getElementById('agent-status-text') as HTMLSpanElement;
-const currentModelSpan = document.getElementById('current-model') as HTMLSpanElement;
-const clearChatBtn = document.getElementById('clear-chat-btn') as HTMLButtonElement;
 const messagesContainer = document.getElementById('messages-container') as HTMLDivElement;
 const workingIndicator = document.getElementById('working-indicator') as HTMLDivElement;
 const indicatorText = document.getElementById('indicator-text') as HTMLSpanElement;
@@ -227,6 +224,11 @@ async function init() {
 
 // Event Listeners setup
 function setupEventListeners() {
+  // Sidebar toggle
+  sidebarToggleBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('collapsed');
+  });
+
   // New session button
   newSessionBtn.addEventListener('click', async () => {
     if (isRunning) return;
@@ -234,12 +236,12 @@ function setupEventListeners() {
   });
 
   // Clear chat button
-  clearChatBtn.addEventListener('click', async () => {
-    if (isRunning || !currentSessionId) return;
-    if (confirm('Clear all conversation messages in this thread?')) {
-      await clearCurrentSession();
-    }
-  });
+  // clearChatBtn.addEventListener('click', async () => {
+  //   if (isRunning || !currentSessionId) return;
+  //   if (confirm('Clear all conversation messages in this thread?')) {
+  //     await clearCurrentSession();
+  //   }
+  // });
 
   // Quick Action Chips
   document.querySelectorAll('.btn-chip').forEach(btn => {
@@ -495,7 +497,7 @@ async function handleSlashCommand(cmdStr: string) {
   if (cmd === '/model') {
     const modelMsg: Message = {
       role: 'assistant',
-      content: `**Last routed model:** \`${currentModelSpan.textContent}\`\n\nThe pool picks a member per request, so this is the most recent one seen in the run log, not a fixed setting.`
+      content: `**Last routed model:** router pool\n\nThe pool picks a member per request.`
     };
     appendLocalMessage(modelMsg);
     return;
@@ -624,7 +626,7 @@ async function selectSession(id: string) {
     }
     const session: Session = await res.json();
     
-    sessionTitle.textContent = session.title;
+    // sessionTitle.textContent = session.title;
     renderMessages(session.messages || []);
     
     if (session.status === 'working') {
@@ -776,8 +778,6 @@ function setRunningState(running: boolean) {
   newSessionBtn.disabled = running;
   
   if (running) {
-    agentStatusPill.className = 'agent-status-pill working';
-    agentStatusText.textContent = 'Executing...';
     workingIndicator.classList.remove('hidden');
     indicatorText.textContent = 'Planning strategy & routing tools...';
     liveOutput.textContent = '';
@@ -792,8 +792,6 @@ function setRunningState(running: boolean) {
       }
     }, 1000);
   } else {
-    agentStatusPill.className = 'agent-status-pill ready';
-    agentStatusText.textContent = 'Agent Ready';
     workingIndicator.classList.add('hidden');
     if (timerInterval) {
       clearInterval(timerInterval);
@@ -842,7 +840,6 @@ function connectStream(sessionId: string, isReconnect = false) {
         const match = chunk.match(/Routing to ([^. \n]+)/);
         if (match) {
           indicatorText.textContent = `Working via ${match[1]}...`;
-          currentModelSpan.textContent = match[1];
         }
       } else if (chunk.includes('step') || chunk.includes('Iteration')) {
         indicatorText.textContent = '🧠 Executing agent step...';
@@ -908,7 +905,7 @@ async function sendMessage(content: string) {
     const data = await res.json();
     const session: Session = data.session;
     
-    sessionTitle.textContent = session.title;
+    // sessionTitle.textContent = session.title;
     renderMessages(session.messages || []);
     await loadSessions();
 
