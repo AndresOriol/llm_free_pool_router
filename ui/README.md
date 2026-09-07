@@ -1,46 +1,82 @@
-# Coding Agent UI (TypeScript)
+# Deep Agents Coding UI (`dcode`)
 
-A TypeScript-based web User Interface (UI) for interacting with the coding agent, providing a modern chat experience with a session sidebar, local chat history, markdown rendering, code syntax highlighting, live streaming progress with stop control, and separated raw run logs.
+A web UI for the coding agent in [`agent/code`](../agent/code/), styled after
+[`deepagents-code`](https://github.com/langchain-ai/deepagents/tree/main/libs/code).
+It runs one agent at a time against a workspace folder, streams the run, and
+keeps the conversation as a session on disk.
 
-## Chat UI & Rendering Library Choice
+The server spawns `python -m agent.code <workspace>` with the conversation on
+stdin, so the agent — and the router pool behind it — is unchanged by anything
+here.
 
-As researched and documented in `/research/final_report.md` (delegated to the `explore` agent), introducing heavy React component libraries would violate the zero-bundler ESM setup or require complex build tooling. Therefore, we utilize:
-- **`marked`** (v12.x) for high-performance markdown parsing.
-- **`highlight.js`** (v11.x) for syntax highlighting in code blocks.
-- **`DOMPurify`** (v3.4.x) for robust XSS sanitization of rendered HTML.
-- **`esbuild`** (v0.21.5) to bundle TypeScript modules into a native browser ESM bundle (`dist/client/app.js`), preventing any `exports is not defined` runtime errors.
+## Tech stack
+
+- **`marked`** (v12.x) for markdown rendering of agent replies.
+- **`highlight.js`** (v11.x), core build with languages registered explicitly:
+  TypeScript, JavaScript, Python, Bash, JSON, Markdown, YAML, HTML/XML, CSS,
+  diff, SQL, Rust, Go, C++, Java, C#, Ruby, Dockerfile.
+- **`DOMPurify`** (v3.1.x) sanitises every rendered markdown output.
+- **`esbuild`** (v0.21.5) bundles the client to browser ESM (`dist/client/app.js`).
+- **`express`** (v4.19.x) serves the REST endpoints and the SSE run stream.
+
+No framework and no CDN: the page loads only its own `style.css` and bundle, so
+it works offline. Colours are Catppuccin Macchiato tokens defined in `:root`,
+including the `highlight.js` token colours.
 
 ## Features
 
-- **Sidebar**: View, select, create, or delete past coding sessions and tasks.
-- **Workspace Selector**: Specify the working directory for the agent.
-- **Main Chat Window**: Chat interface for submitting tasks and viewing agent responses.
-- **Markdown & Syntax Highlighting**: Assistant responses render formatted markdown with highlighted code blocks.
-- **Live Streaming & Metrics**: Live execution stream displaying elapsed time, active model routing, and step progress, with a **Stop** button.
-- **Separated Run Logs**: Raw agent execution stdout/stderr is stored separately and can be toggled via an expandable log drawer, keeping message history clean.
-- **Local History**: Stored automatically in `.ui_data/sessions.json`.
+- **Sessions** — sidebar list with message counts and relative timestamps;
+  create, select, clear and delete. Stored in `.ui_data/sessions.json`.
+- **Workspace selector** — the folder the agent is pointed at.
+- **Live run stream** — elapsed timer, a collapsible drawer of raw
+  stdout/stderr, and a status line that follows the run by matching the tool
+  names and router lines that appear in that output.
+- **Model indicator** — shows the pool member the router last routed to, read
+  from the run log. It reads `router pool` until a run reports one.
+- **Stop** — `POST /api/sessions/:id/stop` kills the child; only an explicit
+  stop records "Stopped by the user."
+- **Runs survive their viewer** — closing the tab or refreshing leaves the child
+  running; reopening the session re-attaches to it and catches up on the output
+  it missed.
+- **Markdown, code and diffs** — copyable code blocks with syntax highlighting,
+  and a unified-diff viewer with line-number gutters used for any ` ```diff `
+  block.
+- **Slash commands** — `/help`, `/diff`, `/model`, `/clear`, with an
+  autocomplete popup and sidebar chips. Except for `/clear`, these render in the
+  transcript locally: they are never stored in the session and never sent to the
+  agent.
+  - `/diff` runs `git diff` in the workspace and renders it in the diff viewer.
 
-## Installation
+## Installation & running
 
-1. Ensure you have Node.js and Python installed.
-2. Install UI dependencies and build:
+1. Install dependencies:
    ```bash
-   cd ui
    npm install
    ```
-   *(Ensure main project requirements are also installed: `pip install -r requirements.txt`)*
 
-## Running the UI
+2. Build the client bundle:
+   ```bash
+   npm run build
+   ```
 
-1. Build and start the server:
+3. Start the server:
    ```bash
    npm start
    ```
-2. Open your browser to [http://localhost:3000](http://localhost:3000).
+   Open [http://localhost:3000](http://localhost:3000).
+
+The Python side must be importable from the repository root — the server puts
+the root on `PYTHONPATH` and calls `python`, overridable with
+`PYTHON_EXECUTABLE`.
 
 ## Verification
 
-To verify that the client bundle is correctly formatted as an ES module without CommonJS artifacts (`exports`/`require`):
+That the client bundle is browser ESM with no CommonJS leaking into it:
 ```bash
 npm run verify-client
+```
+
+Types:
+```bash
+npm run typecheck
 ```
