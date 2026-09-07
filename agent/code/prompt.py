@@ -48,6 +48,37 @@ FS_TOOL_GUIDANCE = (
     "- `write_file` over `echo`/heredoc"
 )
 
+
+# Not from dcode: dcode's agent has a real shell and this one does not. The
+# refusal is well worded, but the model only ever reads it *after* spending a
+# step on the command it refused -- and it spent one on `&&` in every recorded
+# run, twice in some. Saying it before the first command turns a recurring
+# wasted step into none.
+def shell_shape_section(programs: Sequence[str]) -> str:
+    if not programs:
+        return ""
+    return (
+        "## Running commands\n\n"
+        "`execute` is not a shell. It launches one program directly, so:\n\n"
+        f"- Only these run, named bare with no path: {', '.join(programs)}.\n"
+        "- No `&&`, `||`, `;`, `|`, `>` or heredocs -- there is nothing to "
+        "interpret them. Run one command per call, or make several calls in "
+        "one response when they do not depend on each other.\n"
+        "- No `cd`. Paths are relative to the project root.\n"
+        "- Anything else you need to run, you run *through* Python: "
+        "`python -c \"...\"` for a one-liner, or `write_file` plus "
+        "`python <file>` for more. That is also how you reach a toolchain "
+        "that is not on the list above.\n"
+        "- **When you run a program that way, make its exit code yours.** "
+        "`subprocess.run(...)` returns non-zero into a variable and the "
+        "Python wrapper still exits 0, so a failing build or test is "
+        "reported to you as `[Command succeeded with exit code 0]`. Finish "
+        "such a command with `sys.exit(res.returncode)`, or check "
+        "`res.returncode` yourself before you believe it passed. Reading "
+        "the output is not enough -- the success line is the thing that "
+        "misleads you."
+    )
+
 HEADLESS_PREAMBLE = (
     "You received a single task and must complete it fully and autonomously. "
     "There is no human available to answer follow-up questions, so do NOT ask "
@@ -188,7 +219,8 @@ def workdir_section() -> str:
 
 
 def build(floor: int, members: int = 0,
-          extra_sections: Optional[Sequence[str]] = None) -> str:
+          extra_sections: Optional[Sequence[str]] = None,
+          programs: Sequence[str] = ()) -> str:
     """The full system prompt for one session."""
     template = _TEMPLATE.read_text(encoding="utf-8")
 
@@ -199,7 +231,9 @@ def build(floor: int, members: int = 0,
                  "monitoring your output in real time")
         .replace("{interactive_preamble}", HEADLESS_PREAMBLE)
         .replace("{ambiguity_guidance}", HEADLESS_AMBIGUITY)
-        .replace("{filesystem_tool_guidance}", FS_TOOL_GUIDANCE)
+        .replace("{filesystem_tool_guidance}",
+                 ("\n\n").join(s for s in (FS_TOOL_GUIDANCE,
+                                     shell_shape_section(programs)) if s))
         .replace("{invariant_guard_section}", invariant_guard_section())
         .replace("{account_section}", account_section())
         .replace("{model_identity_section}", pool_identity_section(floor, members))

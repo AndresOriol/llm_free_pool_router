@@ -196,7 +196,8 @@ automatically from the trace — no transcript reading.
 | `retrieval` | Never read a file the gold patch touches | Couldn't find the code | Better search/navigation tools, or context injection |
 | `tooling` | Read it, but `edit_file` calls failed to apply, or `tool_use_failed` | Knew what to change, couldn't express the edit | Change the edit format — line-anchored or whole-file rewrite instead of exact-string match |
 | `reasoning` | Edits applied cleanly, tests still fail | Wrong fix | Stronger model tier; better prompt |
-| `stopping` | Hit the recursion limit, or declared done without running tests | Loop problem | Step budget, prompt, forcing a self-test before finishing |
+| `stopping` | Declared done without running tests, or repeated the same failing step | Loop problem | Prompt, forcing a self-test before finishing |
+| `budget` | Ended `STOPPED (step budget spent)` without repeating itself | Ran out of steps doing real work, not looping | Raise `AGENT_STEP_BUDGET`, or split the task |
 
 **Why it matters most here specifically.** On small models the `tooling` class
 is likely to dominate. Groq already returns `tool_use_failed` carrying the

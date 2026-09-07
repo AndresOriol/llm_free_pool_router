@@ -94,7 +94,19 @@ bare with no path, `shell=False`, secrets stripped from the child environment,
 and a 300s timeout ([backend.py](../agent/runtime/backend.py)).
 Shell syntax is *refused* rather than passed through as a literal argument —
 accepting it silently once cost a run 900 seconds in heredocs that hung until
-the timeout.
+the timeout. The *prompt* names the same programs, from the same constant, so
+the model is told the shape of `execute` before it spends a step discovering
+it: every recorded run before that spent at least one being refused, usually
+on `&&`.
+
+Because `python` is on that list, the way round every other restriction is
+`python -c "subprocess.run([...])"`, and agents find it immediately. It has one
+sharp edge: the wrapper exits 0 whatever the child did, so `execute` reports a
+**failing** build as `[Command succeeded with exit code 0]`. A recorded run
+read that line over its own broken verification script and reported the gate as
+passing. The prompt now says to carry the child's code out with
+`sys.exit(res.returncode)` — the harness cannot tell the difference itself,
+because as far as it is concerned the program it launched succeeded.
 
 **Git, by subcommand.** A session commits its own work incrementally on its own
 branch, so the human's gate is the **merge**, not the commit. `push`, `merge`,
@@ -104,6 +116,28 @@ branch, so the human's gate is the **merge**, not the commit. `push`, `merge`,
 This is a **small blast radius, not a sandbox**. `python` is arbitrary code
 execution. For real isolation, run the whole thing inside a container — which
 becomes a prerequisite the day sessions run unattended overnight.
+
+### 6.2.1 The step budget
+
+A session gets **400 supersteps** (`AGENT_STEP_BUDGET`), of which the last 40
+are held back. Spending them is an ordinary way for a run to end, not a crash:
+when the first 360 are gone the session is told so and gets the reserve to
+commit what is on disk and write a handover, and the run finishes normally with
+`=== STOPPED (step budget spent) ===` in place of `=== DONE ===`.
+
+This used to be 120 supersteps, described as a guard against a loop that never
+settles, on the reasoning that the pool's daily request quota would bind first.
+It does not. A recorded run reached 120 in **220 seconds** of entirely ordinary
+work — reading the tree, writing five files, installing a Node toolchain
+through `python -c`, compiling it — and the error came straight out of
+`agent.invoke`, taking the summary and the run record with it. A session whose
+code compiled reported nothing and left it uncommitted.
+
+So the limit is a **budget**, and running out of it says nothing about whether
+the session was looping. The two are separate rows in the failure taxonomy
+([10. Metrics](10-metrics.md)): a loop repeats itself, a spent budget does not.
+The reserve exists because a run that cannot see its own budget cannot choose
+to land its work before it goes — being told is the only thing that lets it.
 
 ## 6.3 What failover looks like in practice
 

@@ -9,6 +9,8 @@ Environment:
   AGENT_TRACE_FILE    where to write the run tree; unset writes none
   EVAL_TRACE_FILE    set by the eval runner; the run tree lands beside it
   AGENT_CONTEXT_FLOOR override the input-token floor (default 128,000)
+  AGENT_STEP_BUDGET  override the superstep budget (default 400); the last
+                     few are reserved so a stopped run can still commit
   AGENT_PEERS        comma-separated agents this one may delegate to; unset
                      means `explore`, and an empty value means none
                      (docs/16-agent-protocol.md)
@@ -20,6 +22,8 @@ import logging
 import os
 import sys
 from pathlib import Path
+
+from langchain_core.messages import AIMessage
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
 from agent.code.session import (CONTEXT_FLOOR, RECURSION_LIMIT, check_floor,
@@ -70,6 +74,7 @@ def main() -> None:
         raise SystemExit("No task given.")
 
     floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
+    budget = int(os.environ.get("AGENT_STEP_BUDGET") or RECURSION_LIMIT)
     model, members, router = build(floor)
 
     shell = os.environ.get("HARNESS_SHELL") == "1"
@@ -102,7 +107,8 @@ def main() -> None:
     # 43 minutes on a socket that had died while it slept.
     with keep_awake():
         final, written = run_session(
-            model, task, workdir, floor=floor, members=members,
+            model, task, workdir, config={"recursion_limit": budget},
+            floor=floor, members=members,
             allow_shell=shell, transport=transport,
             trace_path=Path(trace_file) if trace_file else None)
 
@@ -114,16 +120,31 @@ def main() -> None:
     sys.exit(0)
 
 
+def _text(message) -> str:
+    content = getattr(message, "content", "")
+    if isinstance(content, list):  # content blocks
+        content = " ".join(str(b.get("text", "")) for b in content
+                           if isinstance(b, dict))
+    return str(content).strip()
+
+
 def _summary(final, written) -> None:
     messages = (final or {}).get("messages") or []
-    print(f"\n=== DONE after {len(messages)} message(s) ===")
-    if messages:
-        last = messages[-1]
-        text = getattr(last, "content", "")
-        if isinstance(text, list):  # content blocks
-            text = " ".join(str(b.get("text", "")) for b in text
-                            if isinstance(b, dict))
-        print(f"\n{str(text)[:2000]}")
+    # Spending the step budget is an ordinary end, not a crash, but it is not
+    # the same end as finishing -- whoever reads this has to know the session
+    # was stopped rather than done (agent/code/session.py).
+    how = ("STOPPED (step budget spent)"
+           if (final or {}).get("step_budget_spent") else "DONE")
+    print(f"\n=== {how} after {len(messages)} message(s) ===")
+    # The last *message* is not always the last thing the model said: a run
+    # stopped mid-turn ends on a tool call whose content is empty, and
+    # printing that reported nothing at all about a session that had done
+    # real work. Walk back to the last thing the *model* said -- a tool's
+    # own output is not this session's account of itself.
+    said = [m for m in messages if isinstance(m, AIMessage)]
+    text = next((t for t in map(_text, reversed(said)) if t), "")
+    if text:
+        print(f"\n{text[:2000]}")
     todos = (final or {}).get("todos") or []
     if todos:
         print(f"\ntodos: {len(todos)}")

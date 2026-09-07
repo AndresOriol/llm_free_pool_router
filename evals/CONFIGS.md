@@ -36,8 +36,69 @@ the simpler configuration.
 | `code` (was `deepagents`) | `harness/deepagents` | A conversation instead of narrow roles: `create_deep_agent` on the pool behind a hard 128k context floor, configured like `deepagents-code` | — | **never run** | **the only configuration left** — no eval run recorded, so no verdict |
 | `code-account` | `agent/write-the-account` | `code` plus one paragraph: the project's own `NOTES.md` is the exception to "do not create summary markdown files" | session suite, n=1, 10 scenarios | solved 6/10 → 7/10; **account 2/10 → 8/10**; cost flat | **promoted** — flat success, secondary metric four-fold |
 | `code-invariant-guard` | `agent/invariant-guard` | `code` plus one prompt section, `## Contradicted Requests`: never edit a test or a document so that it stops contradicting the task; do the rest; say what you declined | session suite n=1, three contested scenarios n=3, `count-and-share` n=8 | solved 12/16 vs 10/16; **weakened 4 → 1**; `count-and-share` **0/8 → 3/4**; cost flat | **promoted** — the set-wide interval overlaps and is not the evidence; the target scenario is |
+| `code-step-budget` | `harness/step-budget` | `code` plus three changes shipped together: the step limit becomes a 400-superstep budget with 40 reserved for a wrap-up turn instead of a 120-step loop guard that raised `GraphRecursionError`; the prompt names the programs `execute` can run; the prompt warns that a `python -c subprocess.run(...)` wrapper exits 0 whatever the child did | `session` suite, n=1, 10 scenarios, interleaved | solved **8/10 both**; same two failures; `tokens_in` 692k → 616k (**-11%**), cheaper in 8/10; calls 22.1 → 18.8; bounces 3.2 → 2.3 | **draw on the evidence collected** — flat success and a material secondary gain, but **the budget was never exercised** (see below) |
 | `code-peers` | `harness/agent-protocol` | `code` plus one `delegate` tool: it can ask the web explorer for a report mid-task, over A2A on a local transport ([16](../docs/16-agent-protocol.md)). The explorer is LangChain's deep-research agent, ported ([15.8](../docs/15-explorer.md#158-the-deep-research-port)) | — | **never run** | no verdict — read `tokens_in` and `delegated_tasks` first, and interleave against `code` |
 
+
+### code-step-budget, 20 runs (2026-09-07)
+
+**A draw on the evidence collected, and the evidence does not cover the change
+that matters.** Interleaved against `code` on the `session` suite, n=1.
+
+| | `code` | `code-step-budget` |
+| --- | --- | --- |
+| solved | 8/10 | 8/10 |
+| failures | `model-v3-propagation`, `which-accounts-are-active` | the same two |
+| `tokens_in` / run | 692,227 | **616,415 (-11.0%)** |
+| `provider_calls` / run | 22.1 | 18.8 |
+| `failover_bounces` / run | 3.2 | 2.3 |
+| steps / run | 18.9 | 16.5 |
+| **max steps, any run** | **30** | **23** |
+
+**The budget was never reached, so this batch did not test it.** The longest run
+in either arm took 30 supersteps against an *old* limit of 120. Every scenario in
+the `session` suite finishes in about twenty steps, so the change that motivated
+the branch — 120 → 400, and the reserved wrap-up turn — is structurally outside
+what this suite can observe. Nothing here argues for it or against it.
+
+What the batch did measure is the other two thirds: the prompt now names the
+programs `execute` can run, and warns that a `python -c subprocess.run(...)`
+wrapper reports a failing child as `[Command succeeded with exit code 0]`. Both
+are aimed at wasted steps, and wasted steps is what moved — calls down 15%,
+bounces down 28%, `tokens_in` down 11%, cheaper in 8 of 10 scenarios.
+
+**Read the two exceptions before believing the mean.** `which-accounts-are-active`
+went the other way by +142.7% (403k → 977k), which is most of the aggregate's
+variance on its own; it is one of the two scenarios both arms fail, and it is the
+`ambiguous` category, where a run wanders. At n=1 the honest summary is a
+consistent direction (8/10) with one large contrary outlier, not a measured 11%.
+
+**The promotion rule is satisfied on its face** — no task regressed, success held
+flat, a secondary metric improved materially — but promoting on it would credit a
+budget change this batch never ran. Two ways forward, and they are not
+exclusive:
+
+1. **Split the branch.** The two prompt paragraphs are what earned the -11% and
+   can be promoted on their own evidence. The budget change should be measured
+   separately or promoted on different grounds.
+2. **The budget's evidence is operational, not from evals.** A real session
+   (rewriting `/ui`, 2026-09-07) spent all 360 supersteps, hit the reserve, and
+   committed its work with a written handover. On the old limit the identical
+   run raised `GraphRecursionError` out of `agent.invoke` and lost the summary,
+   the run record and the commit. That is one observation, not a batch, and no
+   scenario in `agent_evals` reproduces it — **a suite whose longest task is 30
+   steps cannot see a failure that begins at 120.**
+
+The gap is the finding: there was no long-running scenario, so anything about
+sustained sessions was unmeasurable here.
+
+**Closed the same day.** `scenario/ui-port/ui-port-to-typescript` (L3, refactor)
+is built to be long: three Python modules ported to TypeScript, a toolchain that
+is not on the execution allowlist, a package to delete and a README to rewrite.
+It is graded by running the built modules under `node`, so a port that compiles
+and misbehaves fails. Re-run this comparison against it before deciding anything
+about the budget -- the two prompt paragraphs are already decided, and the budget
+still is not.
 
 ### code-invariant-guard, 40 runs (2026-09-05)
 
