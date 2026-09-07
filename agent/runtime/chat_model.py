@@ -109,6 +109,12 @@ class RouterChatModel(BaseChatModel):
             logger.info(f"Routing to {provider.name} (model={provider.model}, "
                         f"~{estimated} tok).")
             try:
+                # The instant the request goes out, which is the one the vendor
+                # meters it against. Recording when the reply landed instead put
+                # a slow call in the wrong minute (llm_router/usage.py), and
+                # every path out of this block reports it: the served call
+                # below, and the refusal or error in _handle_failure.
+                issued = time.time()
                 # No explicit config: the provider call inherits the ambient run
                 # context, so each attempt is traced under the current agent step
                 # (showing which model served it, and any failed attempts before
@@ -116,10 +122,10 @@ class RouterChatModel(BaseChatModel):
                 # nesting and trips the tracer's run_map ("No indexed run ID").
                 message = self._underlying(provider).invoke(
                     messages, config=self.provider_config, stop=stop, **kwargs)
-                usage.record_call(provider, message)
+                usage.record_call(provider, message, started=issued)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
-                if not self._handle_failure(provider, exc, run_manager):
+                if not self._handle_failure(provider, exc, run_manager, issued):
                     raise
                 last_exc = exc
 
@@ -139,7 +145,8 @@ class RouterChatModel(BaseChatModel):
                      "key; the run continues on the rest of the pool.",
                      account or provider.name, len(kin or [provider]))
 
-    def _handle_failure(self, provider, exc: Exception, run_manager=None) -> bool:
+    def _handle_failure(self, provider, exc: Exception, run_manager=None,
+                        started: Optional[float] = None) -> bool:
         """Cooldown + reroute on transient errors; return False to re-raise.
 
         A model retired upstream is dropped from the pool permanently rather
@@ -167,7 +174,8 @@ class RouterChatModel(BaseChatModel):
         usage.record(provider,
                      outcome="rate_limited" if rate_limited else "error",
                      retry_after=retry_after if rate_limited else None,
-                     reached=reached_provider(exc))
+                     reached=reached_provider(exc),
+                     started=started)
 
         # Checked before the `not transient` branch below, which would call this
         # a fatal 4xx and kill the run. The model is gone, so the pool stops

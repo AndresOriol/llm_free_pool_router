@@ -8,6 +8,8 @@ import json
 import os
 import sys
 import tempfile
+import time
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -77,6 +79,32 @@ def _check_loader_snapshot():
         del os.environ["TEST_QUOTA_KEY"]
 
 
+def _check_issue_time(ledger):
+    """`ts` dates an attempt by when it was issued, not by when it came back.
+
+    Everything that records is on the far side of the provider's answer, so
+    without this a call taking half a minute lands in a minute the vendor never
+    charged it to -- and the per-minute gauges read a burst that never happened
+    (llm_router/quota/windows.py).
+    """
+    issued = time.time() - 40
+    usage.record_call(_Provider(), _message({"input_tokens": 5, "output_tokens": 1}),
+                      started=issued)
+    usage.record(_Provider(), outcome="rate_limited", retry_after=7, started=issued)
+    served, refused = _lines(ledger)[-2:]
+
+    assert served["ts"] == round(issued, 3), served
+    assert refused["ts"] == round(issued, 3), "a refusal was issued then too"
+    # `at` is the same instant, so the two never disagree by the call's length.
+    assert datetime.fromtimestamp(issued).astimezone().isoformat(
+        timespec="seconds") == served["at"], served
+
+    # Omitted, it still means now: right for an attempt that failed before it
+    # left, and what every line written before this did.
+    usage.record(_Provider(), outcome="error", reached=False)
+    assert _lines(ledger)[-1]["ts"] >= issued + 39
+
+
 def _run():
     with tempfile.TemporaryDirectory() as tmp:
         os.environ["LLM_ROUTER_USAGE_DIR"] = tmp
@@ -113,6 +141,8 @@ def _run():
         usage.record_call(_Provider(), _message())
         silent = _lines(ledger)[4]
         assert silent["outcome"] == "ok" and "tokens_in" not in silent, silent
+
+        _check_issue_time(ledger)
 
         usage.write_pool_snapshot(
             [{"provider": "GptOss120b_groq_1", "limits": {"rpm": 30, "tpm": 8000}}],

@@ -133,17 +133,21 @@ Where the provider told us better, that still wins: a refusal carrying
 `Retry-After` puts a **blocked for 33s** on the row, and no arithmetic of ours
 overrides it.
 
-### What the ledger still cannot see
+### Which instant a call is counted at
 
-`ts` is written when a call **returns**; a vendor meters it when it **arrives**.
-For the day that is noise. For a minute it is not: a call taking thirty seconds
-is recorded in a bucket it may not have been charged to, so per-minute figures
-are smeared across the boundary and a single minute's peak can read high. Peaks
-of eleven requests in one clock minute against a declared five dissolve when the
-same ledger is read over five minutes, which is how far you have to stand back
-before the smear stops mattering. **Do not read a stale published limit off a
-one-minute spike here.** Recording the issue time instead is the fix, and it
-belongs in [usage.py](../llm_router/usage.py) rather than in the reader.
+The bucket a call lands in is only as good as the timestamp deciding it, and
+`ts` used to be written when a call **returned** — while a vendor meters it when
+it **arrives**. For the day that is noise. For a minute it is not: a call taking
+thirty seconds was recorded in a bucket it was never charged to, so per-minute
+figures smeared across the boundary and a single minute could read high. Peaks
+of eleven requests in one clock minute against a declared five came from this,
+and dissolved when the same ledger was read over five minutes.
+
+The caller now passes the moment it issued the request and
+[usage.py](../llm_router/usage.py) dates the line by that. **Lines written
+before that change still carry the completion time**, so a per-minute figure
+read over the older half of a long ledger is still smeared — and a spike there
+is not evidence that a published limit is stale.
 
 **Accounts do not share windows.** A model is fanned across every account on its
 platform ([3.3](03-pool-model.md#33-the-fan-out)), so `gemini-3.5-flash` may be
