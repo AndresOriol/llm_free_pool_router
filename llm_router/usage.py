@@ -26,6 +26,23 @@ A ledger line:
 `ts` is what the panel measures windows with; `at` is the same instant written
 out in local time, for reading the file by eye.
 
+**Known blind spot: `ts` is when the attempt finished, not when it started.**
+`record` runs once the provider has answered, so a call that took thirty seconds
+is written down thirty seconds after the vendor began charging for it. The daily
+windows do not notice. The per-minute ones do: consumption lands in the clock
+minute the reply arrived in rather than the one it was metered against, so a
+burst smears across the boundary and a single minute can read far above the
+declared ceiling. Peaks of eleven requests in one minute against a published
+five have been read off this file, and they dissolve when the same span is read
+over five minutes -- they are an artifact of this line, not a stale limit.
+
+No reader can undo it, so [quota/windows.py](quota/windows.py) does not try and
+[14.5](../docs/14-quota-panel.md#145-windows-and-when-they-reset) says so out
+loud instead. The fix belongs here: take the issue time in `record` and let the
+caller pass the moment it made the request, rather than the moment it got an
+answer. Until then, do not conclude a per-minute limit is wrong from one minute
+of this ledger.
+
 `tokens_in`/`tokens_out` are absent when the attempt was refused -- no tokens
 were spent -- and a refusal carries `retry_after` instead when the provider
 sent one. `reached: false` marks an attempt that never got an answer at all,
