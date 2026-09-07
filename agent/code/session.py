@@ -41,8 +41,9 @@ import logging
 from pathlib import Path
 from typing import Optional, Sequence
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tracers.context import collect_runs
+from langgraph.errors import GraphRecursionError
 
 from agent.code import context, prompt
 from agent.code import trace as run_trace
@@ -57,9 +58,38 @@ logger = logging.getLogger("harness.code")
 # request-scarce Gemini accounts (llm_router/config.yaml).
 CONTEXT_FLOOR = 128_000
 
-# Supersteps, not agent turns. A backstop against a loop that never settles --
-# on a free pool the daily request quota binds long before this does.
-RECURSION_LIMIT = 120
+# Supersteps, not agent turns. This was written as "a backstop against a loop
+# that never settles", on the premise that the free pool's daily request quota
+# would bind first. That premise was wrong: a recorded run reached 120
+# supersteps in 220 seconds of productive, non-looping work -- reading a
+# directory, writing five files, installing a toolchain and compiling it -- and
+# the backstop fired on a healthy session. It is a *budget*, not a loop guard,
+# so it is sized for real work and spending it all is an ordinary way for a run
+# to end (docs/06-agent.md).
+RECURSION_LIMIT = 400
+
+# Supersteps held back from that budget. Running out of steps used to raise
+# GraphRecursionError straight out of `agent.invoke`, which skipped the summary
+# and the run record: a session that had written working code reported nothing
+# and left it uncommitted. The reserve is what makes the end orderly -- the
+# session is told the budget is spent, and gets these steps to commit what it
+# has and say what is left, which is the one thing it cannot do if it does not
+# know it is about to be stopped.
+WRAP_UP_RESERVE = 40
+
+_WRAP_UP = (
+    "STOP. You have used {used} of your {limit} step budget and have about "
+    "{left} steps left before this session is ended for you.\n\n"
+    "Do not start anything new -- not a file, not a command, not a fix. "
+    "Spend what is left making the work you have already done survive, in "
+    "this order:\n"
+    "1. Say what is done, what is not done, and what the next session must "
+    "pick up first. Say it now, in this reply, before you run anything -- "
+    "if you are stopped mid-command it is the only account anyone gets.\n"
+    "2. Then commit what is on disk, even though it is incomplete.\n\n"
+    "An incomplete change that is described and committed is worth more "
+    "than a complete one nobody can find."
+)
 
 # Kept in step with RestrictedShellBackend's own allowlist. The backend is the
 # boundary; this is what the model gets told (agent/code/shell.py).
@@ -167,6 +197,49 @@ def _trace_locator(runs) -> tuple[Optional[str], Optional[str]]:
     return str(trace_id), str(project_id) if project_id else None
 
 
+def _settle(messages: list) -> list:
+    """Drop trailing tool calls that nothing answered.
+
+    The limit can fire between the model node and the tool node, leaving an
+    AIMessage whose `tool_calls` have no ToolMessage. Every provider in the
+    pool rejects that shape on the next request, so the wrap-up turn would die
+    on a 400 instead of committing anything. Trimming back to the last settled
+    message costs one model turn and is the difference between a wrap-up that
+    runs and one that cannot start.
+    """
+    while messages and _has_unanswered_call(messages):
+        messages = messages[:-1]
+    return messages
+
+
+def _has_unanswered_call(messages: Sequence) -> bool:
+    answered = {m.tool_call_id for m in messages
+                if isinstance(m, ToolMessage) and getattr(m, "tool_call_id", None)}
+    return any(call["id"] not in answered
+               for m in messages if isinstance(m, AIMessage)
+               for call in (m.tool_calls or []))
+
+
+def _drain(agent, state: dict, config: dict, limit: int) -> tuple[dict, bool]:
+    """Run the graph to `limit` supersteps. Returns (state, ran_out).
+
+    Streamed rather than invoked for one reason: `invoke` raises the recursion
+    error and hands back nothing, so the state at the moment of the stop is
+    lost along with it. `stream_mode="values"` yields the whole state after
+    every superstep, so the last one to arrive is the run's own account of
+    where it got to -- which is what the summary reads and the wrap-up turn
+    resumes from.
+    """
+    final = state
+    try:
+        for chunk in agent.stream(state, dict(config, recursion_limit=limit),
+                                  stream_mode="values"):
+            final = chunk
+        return final, False
+    except GraphRecursionError:
+        return final, True
+
+
 def run_session(model, task: str, workdir: Path, config=None,
                 floor: int = CONTEXT_FLOOR, members: int = 0,
                 allow_shell: bool = False, transport=None,
@@ -197,8 +270,27 @@ def run_session(model, task: str, workdir: Path, config=None,
     # `collect_runs` learns the trace and project ids from the same callbacks
     # LangSmith's tracer uses, so the fetch afterwards knows what to ask for
     # without a network round trip during the run.
+    # Two phases, so that spending the budget ends the run instead of killing
+    # it. The first gets everything but the reserve; if it runs out, the second
+    # runs on the reserve with one instruction -- land the work.
+    budget = config.pop("recursion_limit")
+    reserve = min(WRAP_UP_RESERVE, budget // 4)
     with collect_runs() as collected:
-        final = agent.invoke({"messages": [HumanMessage(task)]}, config)
+        final, ran_out = _drain(agent, {"messages": [HumanMessage(task)]},
+                                config, budget - reserve)
+        if ran_out:
+            logger.warning("Step budget spent after %d supersteps; %d reserved "
+                           "for wrap-up.", budget - reserve, reserve)
+            messages = _settle(list(final.get("messages") or []))
+            messages.append(HumanMessage(_WRAP_UP.format(
+                used=budget - reserve, limit=budget, left=reserve)))
+            final, ran_out = _drain(agent, {**final, "messages": messages},
+                                    config, reserve)
+            if ran_out:
+                logger.warning("Wrap-up did not finish inside its %d steps.",
+                               reserve)
+    final = dict(final or {})
+    final["step_budget_spent"] = ran_out
 
     trace_id, project_id = _trace_locator(collected.traced_runs)
     # Resolve here rather than inside the fetch, so the record names the
