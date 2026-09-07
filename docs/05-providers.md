@@ -128,6 +128,24 @@ degrades routing.
 These are the numbers `max_input_tokens` is derived from. They change; treat
 this table as a snapshot to re-check, not as truth.
 
+**Google no longer publishes a per-model free-tier table.**
+[The rate-limits page](https://ai.google.dev/gemini-api/docs/rate-limits) now
+says limits "depend on a variety of factors (such as your usage tier) and can be
+viewed in Google AI Studio", and sends you to
+[the per-account dashboard](https://aistudio.google.com/rate-limit). So the
+Gemini rows below are the last figures we held and cannot be re-derived from the
+docs — they have to be read off AI Studio, once per key, and they may differ
+between the six accounts. Third-party summaries of these limits disagree with
+each other; none of them is a source worth writing into `config.yaml`, because a
+*wrong* ceiling degrades routing further than a stale one.
+
+Two things the page does still state, and the quota panel now models
+([14.5](14-quota-panel.md#145-windows-and-when-they-reset)):
+
+- **RPD resets at midnight Pacific time** — a calendar day, not 24 hours after
+  your first call.
+- **TPM is "tokens per minute (input)"** — the reply is not charged against it.
+
 They are also declared per model as `limits:` in
 [config.yaml](../llm_router/config.yaml), which is this table in a form a program
 can read: the quota panel measures recorded usage against it
