@@ -1,0 +1,45 @@
+# `code` with the step limit treated as a work budget instead of a loop guard.
+#
+# Three changes ship together because they were one repair
+# (docs/06-agent.md#621-the-step-budget):
+#
+#   1. `RECURSION_LIMIT` 120 -> 400, with 40 supersteps reserved. Spending the
+#      budget ends the run instead of raising `GraphRecursionError` out of
+#      `agent.invoke`: the graph is streamed, so the state at the stop survives,
+#      the session is told the budget is gone and gets the reserve to commit and
+#      write a handover.
+#   2. The prompt names the programs `execute` can run and says there is no
+#      shell, from the constant the middleware and backend already enforce.
+#   3. The prompt warns that `python -c "subprocess.run(...)"` -- the way this
+#      agent reaches any tool not on its allowlist -- exits 0 whatever the child
+#      did, so a failing command is reported as `[Command succeeded]`.
+#
+# Why it exists: the old limit was documented as "a backstop against a loop that
+# never settles ... the daily request quota binds long before this does". A
+# recorded run reached 120 supersteps in 220 seconds of productive, non-looping
+# work and the backstop killed it, taking the summary, the run record and the
+# commit with it.
+#
+# What a run is asking:
+#
+#   1. **`tokens_in` first.** A budget more than three times larger is a licence
+#      to spend, and this arm can buy its success rate with tokens on an agent
+#      whose whole premise is a free tier (docs/06-agent.md#611). A rise in
+#      `solved` that comes with a large rise in `tokens_in` is not a win.
+#   2. Does `stopping` shrink? Runs that used to die at the limit should now
+#      either finish or stop cleanly. The taxonomy separates them
+#      (docs/10-metrics.md): a spent budget is not a loop.
+#   3. Do the two prompt paragraphs pay for themselves? They cost context on
+#      every run to save steps wasted on `&&` refusals and on trusting a masked
+#      exit code. `calls` and `bounces` are where that shows up.
+#   4. Does anything regress? Three changes at once means a draw is ambiguous --
+#      if the verdict is not clear, split them before re-running.
+#
+# Interleaved against `code`, never alone.
+name: code-step-budget
+repo: ../..
+ref: harness/step-budget
+env_file: ../../llm_router/.env
+overrides:
+  router_config: llm_router/config.yaml
+  env: {}
