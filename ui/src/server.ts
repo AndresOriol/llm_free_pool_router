@@ -193,6 +193,68 @@ app.get('/api/diff', (req: Request, res: Response) => {
   });
 });
 
+// The top of the tree the picker can climb to: every drive that exists on
+// Windows, just '/' anywhere else.
+function listRoots(): string[] {
+  if (process.platform !== 'win32') return ['/'];
+  const roots: string[] = [];
+  for (let code = 'A'.charCodeAt(0); code <= 'Z'.charCodeAt(0); code++) {
+    const root = `${String.fromCharCode(code)}:\\`;
+    try {
+      if (fs.existsSync(root)) roots.push(root);
+    } catch {
+      // A disconnected network drive: skip it rather than fail the listing.
+    }
+  }
+  return roots;
+}
+
+// Sub-directories of one folder, for the workspace picker. Directory names
+// only -- it never reads a file, and never walks anywhere the client did not
+// name by path.
+app.get('/api/browse', (req: Request, res: Response) => {
+  const requested = (req.query.path as string) || process.cwd();
+  const dir = path.resolve(requested);
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    res.status(400).json({
+      error: code === 'EACCES' || code === 'EPERM'
+        ? `Not allowed to read ${dir}`
+        : `Cannot open ${dir}`,
+    });
+    return;
+  }
+
+  const dirs = entries
+    .filter((entry) => {
+      if (entry.isDirectory()) return true;
+      // A symlink or junction pointing at a directory is still a folder the
+      // agent can be pointed at; a broken one is not.
+      if (!entry.isSymbolicLink()) return false;
+      try {
+        return fs.statSync(path.join(dir, entry.name)).isDirectory();
+      } catch {
+        return false;
+      }
+    })
+    .map((entry) => ({ name: entry.name, path: path.join(dir, entry.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+  const parent = path.dirname(dir);
+
+  res.json({
+    path: dir,
+    parent: parent === dir ? null : parent,
+    separator: path.sep,
+    roots: listRoots(),
+    dirs,
+  });
+});
+
 // Run the agent and stream output via SSE
 app.get('/api/sessions/:id/run', (req: Request, res: Response) => {
   const sessionId = req.params.id;

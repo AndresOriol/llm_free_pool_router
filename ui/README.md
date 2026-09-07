@@ -27,7 +27,13 @@ including the `highlight.js` token colours.
 
 - **Sessions** — sidebar list with message counts and relative timestamps;
   create, select, clear and delete. Stored in `.ui_data/sessions.json`.
-- **Workspace selector** — the folder the agent is pointed at.
+- **Workspace picker** — the folder the agent is pointed at, chosen by
+  browsing the filesystem rather than typed as a path. A browser cannot hand a
+  server an absolute path — a native folder dialog gives the page a name and a
+  sandboxed handle, never a location on disk — so the picker walks the machine
+  the server runs on, through `GET /api/browse`, and what you click through is
+  the filesystem the agent will actually see. Drive roots on Windows, a
+  clickable breadcrumb, and the choice remembered in `localStorage`.
 - **Live run stream** — elapsed timer, a collapsible drawer of raw
   stdout/stderr, and a status line that follows the run by matching the tool
   names and router lines that appear in that output.
@@ -64,6 +70,10 @@ including the `highlight.js` token colours.
    npm start
    ```
    Open [http://localhost:3000](http://localhost:3000).
+
+The workspace defaults to `.`, which is this `ui/` directory, until you pick a
+folder; picking one stores an absolute path, so it no longer depends on where
+the server was started.
 
 The Python side must be importable from the repository root — the server puts
 the root on `PYTHONPATH` and calls `python`, overridable with
