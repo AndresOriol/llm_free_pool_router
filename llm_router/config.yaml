@@ -68,11 +68,10 @@ models:
 
   # -- Reasoning tier: ambiguous/architectural steps. Gemini leads; gpt-oss-120b
   # (8k ceiling) is only the fallback once the flash models' 20/day is spent.
-  # 3.7 sits behind 3.6 despite being newer: measured 2026-08-25 it took 33-54s
-  # (vs 0.9s) and 503'd once in four calls -- better model, worse per-step loop.
-  - name: Gemini_3_6_Flash
+  # 3.8 is the most capable model (released Sept 2026), followed by 3.7 and 3.6.
+  - name: Gemini_3_8_Flash
     platform: gemini
-    model: gemini-3.6-flash
+    model: gemini-3.8-flash
     priority: 1
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
@@ -84,10 +83,17 @@ models:
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
 
+  - name: Gemini_3_6_Flash
+    platform: gemini
+    model: gemini-3.6-flash
+    priority: 3
+    max_input_tokens: 250000
+    limits: {rpm: 5, tpm: 250000, rpd: 20}
+
   - name: Gemini_3_5_Flash
     platform: gemini
     model: gemini-3.5-flash
-    priority: 3
+    priority: 4
     max_input_tokens: 250000
     limits: {rpm: 5, tpm: 250000, rpd: 20}
 

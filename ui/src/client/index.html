@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coding Agent UI</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>🤖 Coding Agent</h2>
+      </div>
+      
+      <div class="workspace-container">
+        <label for="workspace-input">Workspace Folder</label>
+        <input type="text" id="workspace-input" value="." placeholder="e.g. .">
+      </div>
+
+      <button id="new-session-btn" class="btn btn-primary">➕ New Task / Chat</button>
+
+      <div class="sessions-list-container">
+        <h3>Sessions</h3>
+        <ul id="sessions-list">
+          <!-- Sessions will be populated here -->
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Main Chat Area -->
+    <main class="chat-area">
+      <header class="chat-header">
+        <h1 id="session-title">New Task</h1>
+      </header>
+
+      <div id="messages-container" class="messages-container">
+        <!-- Messages will be populated here -->
+      </div>
+
+      <!-- Working Indicator / Live Stream -->
+      <div id="working-indicator" class="working-indicator hidden">
+        <div class="indicator-header">
+          <div class="indicator-left">
+            <span class="spinner">⏳</span>
+            <span id="indicator-text">Working...</span>
+          </div>
+          <button type="button" id="stop-btn" class="btn btn-stop">Stop Run</button>
+        </div>
+        <details class="live-output-details">
+          <summary>View Raw Execution Log (<span id="elapsed-time">0s</span>)</summary>
+          <pre id="live-output" class="live-output"></pre>
+        </details>
+      </div>
+
+      <div class="input-container">
+        <form id="chat-form">
+          <textarea id="chat-input" placeholder="Enter your coding task..." required rows="2"></textarea>
+          <button type="submit" id="send-btn" class="btn btn-send">Send</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
