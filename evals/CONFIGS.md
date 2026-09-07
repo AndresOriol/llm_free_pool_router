@@ -89,8 +89,16 @@ exclusive:
    scenario in `agent_evals` reproduces it — **a suite whose longest task is 30
    steps cannot see a failure that begins at 120.**
 
-The gap is the finding: there is no long-running scenario, so anything about
-sustained sessions is currently unmeasurable here.
+The gap is the finding: there was no long-running scenario, so anything about
+sustained sessions was unmeasurable here.
+
+**Closed the same day.** `scenario/ui-port/ui-port-to-typescript` (L3, refactor)
+is built to be long: three Python modules ported to TypeScript, a toolchain that
+is not on the execution allowlist, a package to delete and a README to rewrite.
+It is graded by running the built modules under `node`, so a port that compiles
+and misbehaves fails. Re-run this comparison against it before deciding anything
+about the budget -- the two prompt paragraphs are already decided, and the budget
+still is not.
 
 ### code-invariant-guard, 40 runs (2026-09-05)
 
