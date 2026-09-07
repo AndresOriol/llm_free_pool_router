@@ -68,7 +68,15 @@ def shell_shape_section(programs: Sequence[str]) -> str:
         "- Anything else you need to run, you run *through* Python: "
         "`python -c \"...\"` for a one-liner, or `write_file` plus "
         "`python <file>` for more. That is also how you reach a toolchain "
-        "that is not on the list above."
+        "that is not on the list above.\n"
+        "- **When you run a program that way, make its exit code yours.** "
+        "`subprocess.run(...)` returns non-zero into a variable and the "
+        "Python wrapper still exits 0, so a failing build or test is "
+        "reported to you as `[Command succeeded with exit code 0]`. Finish "
+        "such a command with `sys.exit(res.returncode)`, or check "
+        "`res.returncode` yourself before you believe it passed. Reading "
+        "the output is not enough -- the success line is the thing that "
+        "misleads you."
     )
 
 HEADLESS_PREAMBLE = (
