@@ -147,6 +147,35 @@ The bias throughout: **only** treat an error as "try another account" when it's
 confidently a capacity or availability signal. Default to surfacing everything
 else. An agent that reroutes past its own bugs is worse than one that stops.
 
+### 4.3.1 The two ways a member dies for good
+
+Rows 4 and 6 above are correct about *retrying* and were wrong about *stopping*.
+Neither of the failures below is transient — no amount of waiting fixes either —
+but neither is a bug in the caller, so ending the run on them throws away a pool
+that is still mostly working. Both are checked in
+[chat_model.py](../agent/runtime/chat_model.py) **before** the "non-transient →
+re-raise" branch, and both drop members instead of cooling them down, because a
+cooldown is a wait and there is nothing to wait for.
+
+| Cause | Signal | What is dropped | What the operator must do |
+| --- | --- | --- | --- |
+| **Model retired upstream** | 404, `model_not_found`, `no longer available` | That one member | Delete the model from the config |
+| **Key dead** | 401/403, `UNAUTHENTICATED`, `api key not valid`, `service account is deleted or disabled` | **Every member on that account** | Replace the key; leave the models alone |
+
+The account-wide sweep is the difference that matters. The key is per account,
+so one 401 condemns all nine models the account serves; benching them one
+failure at a time would spend a wasted call on each. And the two remedies are
+opposites, so `retire()` takes the remedy as an argument rather than assuming —
+telling an operator to delete the config entry for a *dead key* would cost them
+nine working models the day the key is renewed.
+
+This was found the way these things are found. A Gemini account was healthy at
+the start of a session and returned `401 UNAUTHENTICATED — The bound service
+account is deleted or disabled` partway through; the classifier read "clear
+client error, surface the bug" and the exception killed a run that still had six
+working accounts under it. That is precisely the stall
+[1.1](01-overview.md#11-the-goal) exists to prevent.
+
 ## 4.4 Cooldown and backoff
 
 When a provider fails transiently it is benched:
