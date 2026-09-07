@@ -22,7 +22,10 @@
 # Interleaved against `code`, never alone.
 name: code-utf8
 repo: ../..
-ref: agent/subprocess-encoding
+# Merged into master and the branch deleted, so `ref` is the commit it
+# merged as: a configuration nobody can check out is a comparison nobody
+# can repeat.
+ref: df56ca6  # was agent/subprocess-encoding
 env_file: ../../llm_router/.env
 overrides:
   router_config: llm_router/config.yaml

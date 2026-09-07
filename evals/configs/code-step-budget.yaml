@@ -38,7 +38,10 @@
 # Interleaved against `code`, never alone.
 name: code-step-budget
 repo: ../..
-ref: harness/step-budget
+# Merged into master and the branch deleted, so `ref` is the commit it
+# merged as: a configuration nobody can check out is a comparison nobody
+# can repeat.
+ref: c23c012  # was harness/step-budget
 env_file: ../../llm_router/.env
 overrides:
   router_config: llm_router/config.yaml

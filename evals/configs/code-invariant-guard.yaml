@@ -34,7 +34,10 @@
 # is what left `harness-v8-session` with no verdict (evals/CONFIGS.md).
 name: code-invariant-guard
 repo: ../..
-ref: agent/invariant-guard
+# Merged into master and the branch deleted, so `ref` is the commit it
+# merged as: a configuration nobody can check out is a comparison nobody
+# can repeat.
+ref: d023af5  # was agent/invariant-guard
 env_file: ../../llm_router/.env
 overrides:
   router_config: llm_router/config.yaml

@@ -30,7 +30,10 @@
 # Interleaved against `code`, never alone.
 name: code-account
 repo: ../..
-ref: agent/write-the-account
+# Merged into master and the branch deleted, so `ref` is the commit it
+# merged as: a configuration nobody can check out is a comparison nobody
+# can repeat.
+ref: 69a6c31  # was agent/write-the-account
 env_file: ../../llm_router/.env
 overrides:
   router_config: llm_router/config.yaml
