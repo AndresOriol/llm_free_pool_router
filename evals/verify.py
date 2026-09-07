@@ -36,7 +36,12 @@ ARTIFACT_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
                  # An agent that commits its own work initializes a repo to
                  # commit into. That is its bookkeeping, not the change under
                  # test, and left in it would dominate the diff the judge reads.
-                 ".git"}
+                 ".git",
+                 # Installed, not written. A scenario whose toolchain comes from
+                 # npm recorded a 27 MB diff over hundreds of dependency files,
+                 # which is not a diff a human can read against the session's
+                 # own account of what it did.
+                 "node_modules"}
 
 
 def _force_writable(func, path, _exc) -> None:
