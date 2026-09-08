@@ -40,9 +40,12 @@ else on this page is design and changes rarely; this block is state.*
 - **A third agent now reads the other two's runs and has the coding agent fix
   what recurs** ([19](19-improvement-agent.md)). It cannot edit a file — the fix
   is always delegated — and an issue in `evals/results/issues/` closes only when
-  runs recorded *after* the fix stop matching its signature. **Unmeasured**, and
-  it has never completed a live pass; `IMPROVE_FIX=0` leaves a diagnose-only arm
-  to compare against.
+  runs recorded *after* the fix stop matching its signature. **Unmeasured.** Its
+  first live pass went round the whole loop and diagnosed a failure that had
+  already been fixed, then relayed a coding agent's claim to have made a change
+  the diff did not contain — read
+  [19.9](19-improvement-agent.md#199-what-the-first-live-pass-showed) before
+  trusting a pass. `IMPROVE_FIX=0` leaves a diagnose-only arm.
 - **The explorer has been watched once, and it drifted.** A live run searched 13 times, opened **zero** sources, and wrote one file at the end — all against its own prompt, and none of it visible to any existing metric. The prompt now carries numeric rules and
   [evals/research_trajectory.py](../evals/research_trajectory.py) checks them ([15.7](15-explorer.md#157-measured-against-a-reference-research-agent),
   [16.10](16-agent-protocol.md#1610-what-the-first-live-run-showed)).
@@ -165,8 +168,9 @@ else on this page is design and changes rarely; this block is state.*
 [19.6](19-improvement-agent.md#196-the-rule-that-decides-whether-a-fix-worked) The rule that closes an issue ·
 [19.7](19-improvement-agent.md#197-making-new-evidence-costs-real-quota) Making new evidence ·
 [19.8](19-improvement-agent.md#198-what-it-costs-and-what-is-unmeasured) What is unmeasured ·
-[19.9](19-improvement-agent.md#199-what-is-deliberately-not-built) Not built ·
-[19.10](19-improvement-agent.md#1910-running-it) Running it
+[19.9](19-improvement-agent.md#199-what-the-first-live-pass-showed) What the first live pass showed ·
+[19.10](19-improvement-agent.md#1910-what-is-deliberately-not-built) Not built ·
+[19.11](19-improvement-agent.md#1911-running-it) Running it
 
 ### Part IV — Evaluation
 

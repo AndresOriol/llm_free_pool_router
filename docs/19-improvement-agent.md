@@ -88,10 +88,15 @@ never happen is quoting a live record as though a test had passed on it.
 
 ### 19.4.1 The traps that are already known
 
-The prompt carries four, each of which has produced a wrong conclusion in this
+The prompt carries five, each of which has produced a wrong conclusion in this
 repository before:
 
-- **The agent's own closing message is not evidence.** Check it against the diff
+- **A trace is older than the code.** Every recorded run was made against a
+  commit, and the file you are about to blame has moved since. This is the one
+  that ruined the first live pass ([19.9](#199-what-the-first-live-pass-showed)),
+  and it is now enforced as well as stated: `delegate_fix` refuses an issue whose
+  evidence all predates its lever's last change.
+- **The agent's own closing message is not evidence** — including the delegate's. Check it against the diff
   and the hidden tests. A claimed change absent from the diff is the headline
   finding, because the whole review model assumes it does not happen.
 - **A zero is ambiguous.** Every trace-derived count comes from `trace.jsonl`;
@@ -202,7 +207,58 @@ is a configuration nobody has run against a baseline. What can be said now:
 is the arm to compare against when asking whether the delegation is worth what it
 spends — the same arrangement `AGENT_PEERS=` provides for the coding agent.
 
-## 19.9 What is deliberately not built
+## 19.9 What the first live pass showed
+
+One pass, 2026-09-08, over 105 recorded runs (103 eval, 2 live). 21½ minutes,
+120 turns, 125 tool calls, 52 reroutes across two Gemini members. It went round
+the whole loop — opened one issue, delegated it, and checked it — and the
+outcome was wrong in a way worth keeping.
+
+**It diagnosed a failure that had already been fixed.** It found two real
+`GraphRecursionError` crashes, cited them correctly, wrote a well-formed
+signature, named `agent/code/session.py` as the lever, and described a 120-step
+limit that had been 400 since the day before the runs it was reading. The
+evidence was real; the conclusion was a day stale. It never asked when the lever
+last changed.
+
+**Then the coding agent said it had made the change.** The delegated session
+altered no code file at all — the work was already done — and appended a
+`NOTES.md` entry stating it had raised the limit, added the reserve and replaced
+`invoke` with `_drain`. The improvement agent repeated that in its own closing
+summary. This is the failure both this page and the `trace-reviewer` method name
+as the headline finding, and it was produced on the first try.
+
+**What held.** `check_issue` ran after the delegation, found `considered: 0`,
+and left the issue `fixing` — it did not close on the coding agent's word, which
+is the one rule the design rests on ([19.6](#196-the-rule-that-decides-whether-a-fix-worked)).
+`ReadOnlyMiddleware` refused two `edit_file` calls. No quota was spent on a
+batch, because the agent never reached `run_evals`.
+
+Three changes came out of it, all in this repo:
+
+1. **`delegate_fix` refuses an issue whose evidence all predates its lever's
+   last change.** `write_issue` only warns — a file may have moved for an
+   unrelated reason and only a reader can tell — but a delegation costs a whole
+   coding session, and at that price the rule is that you may not ask for a
+   change to a file when the failure has never been observed against the current
+   state of it. The way through is `run_evals`, then citing the fresh run.
+2. **The prompt now says the delegate's report is not evidence either**, and
+   `delegate_fix` returns that instruction with the task, naming the commands
+   that settle it.
+3. **`shell_shape_section` no longer advertises a Python escape hatch to an
+   agent without Python.** That section is shared with the coding agent, and it
+   told this one to reach for `python -c` when it needed anything beyond `git`:
+   10 of its 28 `execute` calls were refused programs, 8% of the run spent
+   discovering a boundary the prompt had misdescribed. It is the exact failure
+   this project already names — a description promising what the backend will
+   not do — and it had never been checked against a second caller's allowlist.
+
+Two findings that are not about this agent are in the ledger rather than fixed:
+the coding agent's false account, and the fact that a delegated session leaves
+no record this loop can read (an A2A task JSON is not a run record), which is
+why the false account had to be caught by hand.
+
+## 19.10 What is deliberately not built
 
 - **No pull request.** The coding agent commits on a branch and never pushes
   ([backend](../agent/runtime/backend.py) refuses `merge` and `push`). Opening a
@@ -218,7 +274,7 @@ spends — the same arrangement `AGENT_PEERS=` provides for the coding agent.
   reads as ordinary files.
 - **It does not grade prose.** That is J1's job, and J1 does not exist.
 
-## 19.10 Running it
+## 19.11 Running it
 
 ```bash
 python -m agent.improve .                          # work the ledger
