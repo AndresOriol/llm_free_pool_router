@@ -18,8 +18,8 @@ from pathlib import Path
 
 from agent.improve import issues, tools
 from agent.improve.readonly import ReadOnlyMiddleware
-from agent.protocol import (AgentCard, AgentRegistry, AgentSkill, LocalTransport,
-                            Message, TaskState)
+from agent.protocol import (AgentCard, AgentRegistry, AgentSkill, Artifact,
+                            LocalTransport, Message, TaskState)
 
 CODE_CARD = AgentCard(name="code", version="0.1.0",
                       description="Works a project.",
@@ -264,14 +264,14 @@ class TestStaleEvidence:
 
         assert sent, "no lever means nothing to compare; it is not a refusal"
 
-    def test_the_delegate_report_is_labelled_as_not_evidence(self, tmp_path):
+    def test_the_closing_message_is_not_taken_at_face_value(self, tmp_path):
         made = tools.make_tools(tmp_path, _transport())
         made["write_issue"].func(title="T", signature='{"kind": "eval"}')
 
         answer = made["delegate_fix"].func(issue_id="t", brief="b")
 
-        assert "not evidence" in answer
-        assert "git log -n 3 --stat" in answer
+        assert "read the diff before you believe" in answer
+        assert "not fixed until runs recorded after this" in answer
 
 
 class TestStalenessUsesTheCommitNotTheClock:
@@ -341,3 +341,61 @@ def test_offsets_are_normalised_before_being_compared():
     from agent.improve.records import _utc
     assert _utc("2026-09-07T10:20:18+02:00") < _utc("2026-09-07T08:59:32+00:00")
     assert _utc("not a date") is None
+
+
+class TestADelegationThatChangedNothing:
+    """A delegation is believed by the repository, not by the delegate.
+
+    The first live pass advanced its issue to `fixing` on a coding session that
+    committed nothing and changed no file. The ledger then read as work under
+    way, which is the state the whole design exists to keep honest.
+    """
+
+    def _transport_reporting(self, data):
+        from agent.protocol.types import DataPart
+        registry = AgentRegistry()
+
+        def handler(task):
+            task.artifacts.append(Artifact(name="workspace",
+                                           parts=[DataPart(data)]))
+            return task.advance(TaskState.COMPLETED,
+                                Message.agent("Implemented all three changes."))
+
+        registry.register(CODE_CARD, handler)
+        return LocalTransport(registry)
+
+    def _made(self, tmp_path, data):
+        made = tools.make_tools(tmp_path, self._transport_reporting(data))
+        made["write_issue"].func(title="T", signature='{"kind": "eval"}')
+        return made
+
+    def test_the_status_does_not_advance_when_nothing_moved(self, tmp_path):
+        made = self._made(tmp_path, {"git": True, "branch": "master",
+                                     "commits": 0, "files_changed": []})
+
+        answer = made["delegate_fix"].func(issue_id="t", brief="Fix it.")
+
+        assert "changed nothing" in answer
+        assert "Do not delegate the same brief again" in answer
+        issue = issues.IssueStore(tmp_path).get("t")
+        assert issue.status == issues.OPEN, "not `fixing` — no work was done"
+        assert issue.tasks[0]["changed_anything"] is False
+
+    def test_the_status_advances_when_the_repository_moved(self, tmp_path):
+        made = self._made(tmp_path, {"git": True, "branch": "fix/t",
+                                     "commits": 1,
+                                     "files_changed": ["agent/code/prompt.py"]})
+
+        made["delegate_fix"].func(issue_id="t", brief="Fix it.")
+
+        issue = issues.IssueStore(tmp_path).get("t")
+        assert issue.status == issues.FIXING
+        assert issue.tasks[0]["changed_anything"] is True
+
+    def test_an_agent_that_reports_no_git_state_is_not_called_a_failure(self, tmp_path):
+        made = tools.make_tools(tmp_path, _transport())
+        made["write_issue"].func(title="T", signature='{"kind": "eval"}')
+
+        made["delegate_fix"].func(issue_id="t", brief="Fix it.")
+
+        assert issues.IssueStore(tmp_path).get("t").status == issues.FIXING

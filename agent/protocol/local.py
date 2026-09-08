@@ -145,6 +145,60 @@ class LocalTransport:
         return self.store.get(task_id)
 
 
+def _data_summary(data) -> str:
+    """One line describing a `DataPart`, or '' when there is nothing to say.
+
+    **This existed and was thrown away, and it cost a real diagnosis.** `render`
+    used to print only parts carrying a `uri`, so a coding task's workspace
+    report -- branch, head, commits, files changed, what was left uncommitted --
+    was computed by [agent/code/a2a.py](../code/a2a.py), stored on the task, and
+    then dropped on the floor before the caller ever saw it.
+
+    The first improvement pass delegated a fix, got back
+    `{"commits": 0, "files_changed": []}` inside the task, was shown none of it,
+    read the delegate's prose claim to have changed three things, and believed
+    it ([19.9](../../docs/19-improvement-agent.md#199-what-the-first-live-pass-showed)).
+    The evidence that would have settled it was already in the object.
+
+    So a git report is rendered as a *verdict first*: whether anything actually
+    moved. A caller reading "no commit, and nothing changed on disk" cannot
+    accept "I made three changes" from the same message.
+    """
+    if not isinstance(data, dict):
+        return ""
+
+    if data.get("git") is True:
+        commits = data.get("commits")
+        changed = data.get("files_changed")
+        uncommitted = data.get("uncommitted") or []
+        branch = data.get("branch") or "?"
+
+        if commits == 0 and not changed and not uncommitted:
+            return (f"**Nothing changed.** On `{branch}`, no commit was made "
+                    f"and the working tree is clean — the head is the same one "
+                    f"the task started from. Whatever the message above says "
+                    f"it did, the repository disagrees.")
+
+        parts = [f"On `{branch}`"]
+        if commits is not None:
+            parts.append(f"{commits} commit(s)")
+        if changed:
+            shown = ", ".join(f"`{p}`" for p in list(changed)[:8])
+            parts.append(f"{len(changed)} file(s) changed: {shown}"
+                         + (" …" if len(changed) > 8 else ""))
+        if uncommitted:
+            parts.append(f"**{len(uncommitted)} left uncommitted**")
+        return " · ".join(parts) + "."
+
+    if data.get("git") is False:
+        return "The workspace is not a git repository; files are on disk only."
+
+    # Anything else: name the keys rather than dumping a payload of unknown
+    # size into the caller's context.
+    keys = ", ".join(sorted(str(k) for k in data)[:12])
+    return f"data: {keys}" if keys else ""
+
+
 def render(task: Task, agent: str) -> str:
     """One task as the text a calling model reads back from its tool.
 
@@ -168,6 +222,10 @@ def render(task: Task, agent: str) -> str:
                     size = artifact.metadata.get("bytes")
                     lines.append(f"- `{uri}`" + (f" ({size:,} bytes)" if size
                                                  else ""))
+                    continue
+                summary = _data_summary(getattr(part, "data", None))
+                if summary:
+                    lines.append(f"- {summary}")
         lines.append("")
     elif task.state == TaskState.COMPLETED:
         # The loudest thing this can say: the delegate ran, spent quota and left

@@ -37,6 +37,7 @@ from pathlib import Path
 
 from agent.improve import issues as issues_mod
 from agent.improve import records as records_mod
+from agent.improve import repo
 
 logger = logging.getLogger("harness.improve")
 
@@ -287,33 +288,96 @@ def make_tools(workdir: Path, transport=None) -> dict:
         from agent.protocol.local import render
         from agent.protocol.types import Message
 
+        # One branch per issue, taken from wherever the pass started. The first
+        # live pass delegated on `master` and nothing prevented it; the only
+        # reason master was not written to is that the session made no change
+        # ([repo.py](repo.py)).
+        branch = repo.branch_name(issue.id)
+        if repo.is_repo(workdir):
+            ok, note = repo.switch_to(workdir, branch)
+            if not ok:
+                return (f"error: could not put the work on `{branch}`: {note}. "
+                        f"Nothing was delegated — a fix committed onto whatever "
+                        f"branch happens to be checked out is not reviewable.")
+            logger.info(f"Delegating {issue.id} {note}")
+        else:
+            branch = ""
+
         request = (f"{brief.strip()}\n\n"
                    f"---\nThis addresses issue `{issue.id}` — {issue.title}. "
                    f"The diagnosis behind it is in "
-                   f"`{issues_mod.ISSUES_DIR.as_posix()}/{issue.id}.json`.")
+                   f"`{issues_mod.ISSUES_DIR.as_posix()}/{issue.id}.json`."
+                   + (f"\n\nYou are on branch `{branch}`, which exists for this "
+                      f"issue. Commit here and do not switch branches."
+                      if branch else ""))
         task = transport.message_send("code", Message.user(request))
+
+        # What the repository says, taken off the task rather than out of the
+        # delegate's prose. `agent/code/a2a.py` computes it; until this was
+        # read, nothing looked at it (agent/protocol/local.py::_data_summary).
+        moved = _repository_moved(task)
+
+        # The suite, after any delegation that moved the repository, and never
+        # as a tool the agent could forget to reach for. A change that breaks
+        # the tests is not a fix, whatever its signature does afterwards.
+        suite_passed, suite_tail = (True, "")
+        if moved:
+            suite_passed, suite_tail = repo.run_tests(
+                workdir, int(os.environ.get(TIMEOUT_ENV) or DEFAULT_TIMEOUT))
 
         issue.tasks.append({"ts": issues_mod.now(), "task_id": task.id,
                             "agent": "code", "state": task.state,
+                            "changed_anything": moved, "branch": branch,
+                            "tests_passed": suite_passed,
                             "brief": brief.strip()[:1000]})
-        if issue.status in (issues_mod.OPEN, issues_mod.REOPENED):
+        if moved and not suite_passed:
+            issue.note("regressed", f"task {task.id[:8]} broke the suite")
+            store.save(issue)
+            return (
+                f"{render(task, 'code')}\n\n**The change broke this project's "
+                f"own test suite, so it is not a fix.** It is committed on "
+                f"`{branch}` and nothing has been merged, so nothing else is "
+                f"affected — but `{issue.id}` stays {issue.status} and must not "
+                f"be verified or closed on this.\n\n```\n{_tail(suite_tail, 15)}"
+                f"\n```\n\nEither delegate a follow-up naming these failures, "
+                f"or say on the issue that the fix could not be made without "
+                f"breaking them. Do not run `run_evals` against this branch.")
+
+        if moved and issue.status in (issues_mod.OPEN, issues_mod.REOPENED):
             issue.note("status", f"{issue.status} -> {issues_mod.FIXING}")
             issue.status = issues_mod.FIXING
-        issue.note("delegated", f"task {task.id[:8]} to code")
+        issue.note("delegated",
+                   f"task {task.id[:8]} to code; repository "
+                   f"{'moved' if moved else 'did not move'}")
         store.save(issue)
+
+        if not moved:
+            # The status deliberately does not advance. A delegation that
+            # changed nothing is not the first half of a fix, and recording it
+            # as `fixing` would leave the ledger claiming work is under way
+            # when the repository says none was done.
+            return (
+                f"{render(task, 'code')}\n\n**The delegation changed nothing, "
+                f"so `{issue.id}` is still {issue.status}.** The task reports "
+                f"no commit and no files changed, whatever its closing message "
+                f"says — the first delegation this loop ever made came back "
+                f"describing three changes to `session.py` that the diff did "
+                f"not contain.\n\nTreat that as a finding about this issue: "
+                f"either the fix was already present (check the lever, and "
+                f"close this if so), or the brief did not say enough to act "
+                f"on. Do not delegate the same brief again.")
 
         return (
             f"{render(task, 'code')}\n\nRecorded against `{issue.id}`, now "
-            f"**{issue.status}**.\n\n"
-            f"**What you just read is the coding agent's account of itself, "
-            f"and it is not evidence.** The first recorded delegation of this "
-            f"kind came back describing three changes to `session.py`; the "
-            f"diff contained none of them and only `NOTES.md` had moved. "
-            f"Check with `execute`: `git log -n 3 --stat` and `git status`. "
-            f"If nothing changed, say so on the issue — a delegation that "
-            f"produced no diff is a finding, not a step forward.\n\n"
-            f"Then: it is not fixed until runs recorded after this stop "
-            f"matching the signature — `run_evals`, then `check_issue`.")
+            f"**{issue.status}**. The suite still passes.\n\n"
+            f"The repository moved, which is more than the closing message "
+            f"above is worth on its own — read the diff before you believe "
+            f"what it changed. It is not fixed until runs recorded after this "
+            f"stop matching the signature: `run_evals` on the scenario the "
+            f"issue was seen in with `ref=\"{branch}\"`, then `check_issue`. "
+            f"**Passing `ref` is not optional** — the fix is on that branch and "
+            f"a configuration pins `master`, so without it you would measure "
+            f"the unfixed code and conclude the fix failed.")
 
     # -- make new evidence -------------------------------------------------
 
@@ -424,6 +488,28 @@ def make_tools(workdir: Path, transport=None) -> dict:
         logger.warning("No `code` peer is reachable; this pass can diagnose "
                        "but not fix.")
     return made
+
+
+def _repository_moved(task) -> bool:
+    """Did a coding task actually change the repository?
+
+    Read off the `DataPart` the coding agent's handler puts on every task, which
+    carries the head it started from, the head it ended on, the commits between
+    them and anything left uncommitted. Prose is not consulted.
+
+    True when the task carries no such report at all: this is a guard against a
+    delegate that demonstrably did nothing, not a requirement that every agent
+    prove itself, and a handler that reports no git state must not be read as
+    having failed.
+    """
+    for artifact in getattr(task, "artifacts", None) or []:
+        for part in getattr(artifact, "parts", None) or []:
+            data = getattr(part, "data", None)
+            if not isinstance(data, dict) or data.get("git") is not True:
+                continue
+            return bool(data.get("commits") or data.get("files_changed")
+                        or data.get("uncommitted"))
+    return True
 
 
 # -- the sections of one run ----------------------------------------------

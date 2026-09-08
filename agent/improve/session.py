@@ -33,7 +33,7 @@ from langchain_core.tracers.context import collect_runs
 
 from agent.code import trace as run_trace
 from agent.code.session import CONTEXT_FLOOR, RECURSION_LIMIT, _trace_locator
-from agent.improve import prompt, records, tools as improve_tools
+from agent.improve import prompt, records, repo, tools as improve_tools
 from agent.improve.issues import IssueStore
 from agent.improve.readonly import ReadOnlyMiddleware
 from agent.runtime.trace import tracer_from_env
@@ -140,7 +140,12 @@ def run_session(model, task: str, workdir: Path, config=None,
     agent = build_agent(workdir, model, floor=floor, members=members,
                         transport=transport)
 
-    with collect_runs() as collected:
+    # A delegated fix moves the checkout onto `improve/<issue-id>`, and nobody
+    # is watching to move it back. Whatever branch the pass started on is the
+    # one an eval batch, the next pass and a human all find afterwards
+    # ([repo.restored](repo.py)). The fix branches are kept; only the checkout
+    # is put back.
+    with repo.restored(workdir), collect_runs() as collected:
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
 
     trace_id, project_id = _trace_locator(collected.traced_runs)

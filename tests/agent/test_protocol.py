@@ -196,3 +196,53 @@ def test_the_task_can_be_read_back_by_id():
     task = transport.message_send("explore", Message.user("q"))
     assert transport.tasks_get(task.id) is task
     assert transport.tasks_get("no-such-id") is None
+
+
+class TestDataPartsReachTheCaller:
+    """A `DataPart` used to be computed, stored on the task, and dropped.
+
+    `render` printed only parts carrying a `uri`, so a coding task's workspace
+    report -- branch, head, commits, files changed -- never reached the agent
+    that had asked for the work. The first improvement pass delegated a fix,
+    was handed a task saying `commits: 0, files_changed: []`, was shown none of
+    it, and believed the delegate's prose claim to have changed three files.
+    """
+
+    def _task(self, data):
+        from agent.protocol.types import DataPart
+
+        def handler(task):
+            task.artifacts.append(Artifact(name="workspace",
+                                           parts=[DataPart(data)]))
+            return task.advance(TaskState.COMPLETED,
+                                Message.agent("I made three changes."))
+        return _transport(handler).message_send("explore", Message.user("go"))
+
+    def test_a_run_that_changed_nothing_says_so_before_the_prose(self):
+        text = render(self._task({"git": True, "branch": "master",
+                                  "commits": 0, "files_changed": []}), "explore")
+
+        assert "Nothing changed" in text
+        assert "the repository disagrees" in text
+        # The claim is still shown; it is now contradicted rather than alone.
+        assert "I made three changes." in text
+
+    def test_a_run_that_changed_something_names_what(self):
+        text = render(self._task({"git": True, "branch": "fix/x", "commits": 2,
+                                  "files_changed": ["agent/code/session.py"]}),
+                      "explore")
+
+        assert "Nothing changed" not in text
+        assert "2 commit(s)" in text
+        assert "agent/code/session.py" in text
+
+    def test_work_left_uncommitted_is_called_out(self):
+        text = render(self._task({"git": True, "branch": "master", "commits": 0,
+                                  "files_changed": [],
+                                  "uncommitted": ["NOTES.md"]}), "explore")
+
+        assert "1 left uncommitted" in text
+
+    def test_a_workspace_without_git_is_not_reported_as_a_failure(self):
+        assert "not a git repository" in render(self._task({"git": False}),
+                                                "explore")

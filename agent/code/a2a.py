@@ -80,7 +80,12 @@ def _git(workdir: Path, *args: str) -> Optional[str]:
         return None
     if done.returncode != 0:
         return None
-    return done.stdout.strip()
+    # `rstrip`, never `strip`: `status --porcelain` encodes the state in the
+    # first two columns, so an unstaged change makes the first line start with
+    # a space. Stripping it shifted `_git_state`'s slice by one and reported
+    # `a.py` as `.py` -- in the list a caller reads to see what was left
+    # behind, which is exactly where a wrong path is least likely to be noticed.
+    return done.stdout.rstrip()
 
 
 def _head(workdir: Path) -> Optional[str]:
