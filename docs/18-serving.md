@@ -68,7 +68,15 @@ did to the repository — branch, head, the commits it made and the files they
 touched — because **the deliverable of a coding task is a commit, and a caller
 that cannot name the commit cannot review it**. A completed exploration carries
 one `FilePart` per research note, exactly as the local transport already
-reported them ([16.5](16-agent-protocol.md)).
+reported them ([16.5](16-agent-protocol.md)). A completed improvement pass
+carries one artifact per issue it moved, with the new status on it, and says in
+as many words when it moved none ([19](19-improvement-agent.md)).
+
+`improve` is served unconditionally, unlike `explore`. What it needs is recorded
+runs in the *bound workspace*, and a workspace arrives with the task rather than
+existing at start-up — so the probe happens in its handler, and a workspace with
+nothing recorded in it comes back as a `rejected` task naming the command that
+would fix that, rather than as an agent missing from the directory.
 
 `text` is a shorthand for a full A2A `Message`, which is also accepted. The
 common call is one line of prose from a shell script, and making that spell out

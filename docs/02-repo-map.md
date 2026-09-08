@@ -66,6 +66,21 @@ its tools pointed outward and no shell at all. See
 | [a2a.py](../agent/explore/a2a.py) | *How does another agent ask it for a report?* — its `AgentCard` and the handler behind it; the notes it wrote become `Artifact`s pointing at paths ([16](16-agent-protocol.md)) |
 | [`__main__.py`](../agent/explore/__main__.py) | CLI: same shape as the coding agent, and it lists the notes it wrote |
 
+`agent/improve/` is the **improvement agent**: the same loop and the same jail,
+pointed at what the other two *recorded* rather than at a project. It is the one
+agent here that cannot write a file. See
+[19. The improvement agent](19-improvement-agent.md).
+
+| File | The question it answers |
+| --- | --- |
+| [records.py](../agent/improve/records.py) | *What evidence is there?* — every recorded run under `evals/results/runs/` and any live root, whether it carries a hidden-test verdict, and whether a stored signature matches it |
+| [issues.py](../agent/improve/issues.py) | *What is already known?* — the ledger: a named failure, its signature, what was delegated, and the check that closed or reopened it |
+| [tools.py](../agent/improve/tools.py) | *What can it do?* — six tools, one per stage of the loop; every section bounded, because a `trace.json` is megabytes |
+| [readonly.py](../agent/improve/readonly.py) | *Why can't it just fix it?* — the filesystem writes, refused as a readable message, so the diff is always someone else's |
+| [session.py](../agent/improve/session.py) | *How does it differ from the coding agent?* — write tools refused, `git` and nothing else executable, the open ledger in the prompt, `code` as its only peer |
+| [a2a.py](../agent/improve/a2a.py) | *How does another agent ask for a pass?* — its `AgentCard`, and the issues it moved as `Artifact`s; a pass that moved none says so |
+| [`__main__.py`](../agent/improve/__main__.py) | CLI: same shape again, and with nothing on stdin it runs the standing pass over the ledger |
+
 `agent/protocol/` is **how one agent asks another for work**. The vocabulary is
 [A2A](https://a2a-protocol.org)'s and is not ours to change; the transport is a
 local Python call. See [16. The agent protocol](16-agent-protocol.md).

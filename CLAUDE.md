@@ -77,6 +77,19 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   hands off to the coding agent by writing `/research/*.md`
   ([15. The web explorer](docs/15-explorer.md)). Every deviation from upstream is
   marked `ADAPTED` in [deep_prompts.py](agent/explore/deep_prompts.py).
+- [agent/improve](agent/improve/) — the agent whose project is the other
+  agents, modelled on [LangSmith
+  Engine](https://docs.langchain.com/langsmith/engine). It reads the runs this
+  project has recorded — eval runs, which carry a hidden-test verdict, and live
+  ones, which do not — names what recurs as an *issue* in
+  `evals/results/issues/`, hands the fix to the coding agent over A2A, and
+  re-checks the issue's signature against runs recorded afterwards, closing it
+  or reopening it. **It cannot edit a file**
+  ([readonly.py](agent/improve/readonly.py)): the agent that diagnoses is not
+  the agent that changes the code, which is what makes a diff reviewable against
+  a diagnosis written before it. An issue never closes because nobody looked
+  ([19. The improvement agent](docs/19-improvement-agent.md)). **Unmeasured** —
+  `IMPROVE_FIX=0` is the diagnose-only arm.
 - [agent/protocol](agent/protocol/) — how one agent asks another for work. The
   vocabulary is [A2A](https://a2a-protocol.org)'s — `AgentCard`, `Task`,
   `Message`, `Artifact` — and must not drift from it; the transport is a local
@@ -125,7 +138,9 @@ Quick pointers: [18. Serving](docs/18-serving.md) for the container and the
 endpoints, [4. Failover](docs/04-failover.md) for how the router works,
 [14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
 [16. The agent protocol](docs/16-agent-protocol.md) for agent-to-agent
-delegation, [5. Providers](docs/05-providers.md) for accounts and limits,
+delegation, [19. The improvement agent](docs/19-improvement-agent.md) for the
+loop that turns recorded runs into fixes,
+[5. Providers](docs/05-providers.md) for accounts and limits,
 [12. Development harness](docs/12-development-harness.md) for which model tier
 does what, [15. The web explorer](docs/15-explorer.md) for web research, [13. Roadmap and scope](docs/13-roadmap.md) for what's next and
 what's already settled.

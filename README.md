@@ -59,10 +59,25 @@ delegation costs a whole explorer session, so it is worth knowing it is on —
 `AGENT_PEERS=` turns it off. See
 [docs/16-agent-protocol.md](docs/16-agent-protocol.md).
 
+## The agent that improves the agents
+
+A third one, whose project is the other two. It reads the runs they recorded,
+names what keeps going wrong as an issue, hands the fix to the coding agent —
+it cannot edit a file itself — and then checks whether the failure stopped
+happening.
+
+```bash
+python -m agent.improve .          # work the ledger, in this repo
+```
+
+An issue closes only when runs recorded *after* its fix stop matching it, and
+never because nobody looked. The ledger is `evals/results/issues/`. See
+[docs/19-improvement-agent.md](docs/19-improvement-agent.md).
+
 ## Run it in a container
 
-The same two agents, addressable over HTTP, for when the caller is not a person
-at a terminal:
+The same three agents, addressable over HTTP, for when the caller is not a
+person at a terminal:
 
 ```bash
 cp .env.example .env      # keys, and SERVE_TOKEN=$(openssl rand -hex 32)

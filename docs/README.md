@@ -37,6 +37,12 @@ else on this page is design and changes rarely; this block is state.*
   `tokens_in` may include one; the record carries `delegated_tasks` and
   `AGENT_PEERS=` turns it off. **Unmeasured** — `code-peers` has never been run
   against `code`.
+- **A third agent now reads the other two's runs and has the coding agent fix
+  what recurs** ([19](19-improvement-agent.md)). It cannot edit a file — the fix
+  is always delegated — and an issue in `evals/results/issues/` closes only when
+  runs recorded *after* the fix stop matching its signature. **Unmeasured**, and
+  it has never completed a live pass; `IMPROVE_FIX=0` leaves a diagnose-only arm
+  to compare against.
 - **The explorer has been watched once, and it drifted.** A live run searched 13 times, opened **zero** sources, and wrote one file at the end — all against its own prompt, and none of it visible to any existing metric. The prompt now carries numeric rules and
   [evals/research_trajectory.py](../evals/research_trajectory.py) checks them ([15.7](15-explorer.md#157-measured-against-a-reference-research-agent),
   [16.10](16-agent-protocol.md#1610-what-the-first-live-run-showed)).
@@ -149,6 +155,18 @@ else on this page is design and changes rarely; this block is state.*
 [16.8](16-agent-protocol.md#168-what-is-deliberately-not-built) Not built ·
 [16.9](16-agent-protocol.md#169-adding-a-third-agent) Adding a third agent ·
 [16.10](16-agent-protocol.md#1610-what-the-first-live-run-showed) What the first live run showed
+
+**[19. The improvement agent](19-improvement-agent.md)** — the agent whose project is the other agents: it reads their traces, names what recurs, delegates the fix, and checks whether it stopped
+&nbsp;&nbsp;&nbsp;&nbsp;[19.1](19-improvement-agent.md#191-the-problem-the-loop-was-a-person) The loop was a person ·
+[19.2](19-improvement-agent.md#192-the-loop) The loop ·
+[19.3](19-improvement-agent.md#193-it-cannot-change-the-harness-and-that-is-the-point) Why it cannot change the harness ·
+[19.4](19-improvement-agent.md#194-what-counts-as-evidence) What counts as evidence ·
+[19.5](19-improvement-agent.md#195-the-signature-and-why-an-issue-can-close-itself) The signature ·
+[19.6](19-improvement-agent.md#196-the-rule-that-decides-whether-a-fix-worked) The rule that closes an issue ·
+[19.7](19-improvement-agent.md#197-making-new-evidence-costs-real-quota) Making new evidence ·
+[19.8](19-improvement-agent.md#198-what-it-costs-and-what-is-unmeasured) What is unmeasured ·
+[19.9](19-improvement-agent.md#199-what-is-deliberately-not-built) Not built ·
+[19.10](19-improvement-agent.md#1910-running-it) Running it
 
 ### Part IV — Evaluation
 
