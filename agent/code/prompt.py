@@ -142,6 +142,9 @@ not an obstacle in front of it.
   stopped you, and name the two things that cannot both be true. For that half
   of the task, this is the deliverable.
 
+**Explicit Updates and Specification Migrations:**
+When a task explicitly asks to update documentation or migrate code to a new specification or data model version, updating the documentation as explicitly requested is part of the task, not a contradicted request. Unrequested or unauthorized edits to invariant tests or documentation to resolve a conflict remain forbidden.
+
 This overrides "make reasonable assumptions and proceed" above. Proceeding is
 for ambiguity — a request with more than one reasonable reading, where any of
 them can be chosen and recorded. A request that contradicts a stated guarantee
