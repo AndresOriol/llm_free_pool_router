@@ -236,12 +236,27 @@ batch, because the agent never reached `run_evals`.
 
 Three changes came out of it, all in this repo:
 
-1. **`delegate_fix` refuses an issue whose evidence all predates its lever's
-   last change.** `write_issue` only warns — a file may have moved for an
+1. **`delegate_fix` refuses an issue when no run showing it ever ran the
+   current lever.** `write_issue` only warns — a file may have moved for an
    unrelated reason and only a reader can tell — but a delegation costs a whole
    coding session, and at that price the rule is that you may not ask for a
    change to a file when the failure has never been observed against the current
    state of it. The way through is `run_evals`, then citing the fresh run.
+
+   **The test is which commit a run exercised, not when it ran.** An eval run
+   materialises a pinned worktree and records the SHA
+   ([8.4](08-evaluation-method.md#84-what-a-configuration-is)), so a run started
+   after a fix can still be running the code from before it; the check asks
+   whether the lever's last-changing commit is an ancestor of the run's
+   `config_sha`. The first version of it compared timestamps and reached the
+   right verdict on this very case by luck — `git` reports a commit date in the
+   committer's local offset, and `10:20:18+02:00` sorts after a UTC stamp an
+   hour later in real time. A live record has no pinned SHA and falls back to
+   the clock, which is a guess and is documented as one.
+
+   The pass had the facts: it ran `git log --oneline 72748b4..master` and read
+   the answer. It did not join them to its own diagnosis, which is the argument
+   for making this a refusal rather than another sentence in the prompt.
 2. **The prompt now says the delegate's report is not evidence either**, and
    `delegate_fix` returns that instruction with the task, naming the commands
    that settle it.

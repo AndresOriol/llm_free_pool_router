@@ -212,30 +212,35 @@ def make_tools(workdir: Path, transport=None) -> dict:
                 f"{issue.render()}")
 
     def _staleness(issue) -> str:
-        """A warning when the lever changed after every run cited. Or nothing.
+        """A warning when no run matching this issue ran the current lever.
 
         This is the check the first live pass needed and did not have. It opened
         a well-formed, correctly cited issue about a 120-step recursion limit
         that had been 400 for a day, and spent a delegation on it. The evidence
         was real and the conclusion was stale, and the difference between them
-        is one `git log` on the file it had already named as the lever.
+        is one question about the file it had already named as the lever.
 
-        A warning rather than a refusal: the file may have changed for an
-        unrelated reason, and only the agent reading both can tell. What it may
-        not do is fail to look.
+        The question is *which commit each run exercised*, not when it ran: an
+        eval run pins a SHA, so a run started after a fix can still be running
+        the code from before it ([records.saw_current_lever](records.py)).
         """
-        changed = records_mod.lever_changed_at(workdir, issue.lever)
-        if not changed or not issue.last_seen or changed <= issue.last_seen:
+        if not issue.signature or not issue.lever:
             return ""
+        matching = [r for r in _records()
+                    if records_mod.matches(r, issue.signature)]
+        if not records_mod.evidence_predates_lever(workdir, issue.lever, matching):
+            return ""
+        changed = records_mod.lever_changed_at(workdir, issue.lever) or "?"
         return (f"⚠ **This may already be fixed.** `{issue.lever}` last changed "
-                f"at {changed[:19]}, which is *after* the newest run matching "
-                f"this signature ({issue.last_seen[:19]}). Every run you are "
-                f"citing predates the current state of the file you want "
-                f"changed.\n\nRead the lever and its recent history "
-                f"(`git log -p -n 3 {issue.lever.lstrip('/')}`) before you "
-                f"delegate anything. If the fix is already there, say so and "
-                f"close this issue against runs recorded since — do not spend "
-                f"a coding session re-making a change that exists.\n\n")
+                f"at {changed[:19]}, and not one of the {len(matching)} run(s) "
+                f"matching this signature ran the file as it now stands — each "
+                f"either pinned a commit without that change or predates it. "
+                f"Every run you are citing is about a different version of the "
+                f"code you want changed.\n\nRead the lever and its recent "
+                f"history (`git log -p -n 3 {issue.lever.lstrip('/')}`) before "
+                f"you delegate anything. If the fix is already there, say so "
+                f"and close this issue — do not spend a coding session "
+                f"re-making a change that exists.\n\n")
 
     # -- fix ---------------------------------------------------------------
 

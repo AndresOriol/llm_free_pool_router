@@ -300,36 +300,107 @@ def grep(record: Record, pattern: str, max_hits: int = 8) -> list:
     return hits
 
 
-def lever_changed_at(workdir: Path, lever: str) -> Optional[str]:
-    """When the file an issue names as its lever last changed, ISO-8601 UTC.
+def _git(workdir: Path, *args: str) -> Optional[str]:
+    """One read-only git command's stdout, or None if it could not be answered."""
+    import subprocess
+    try:
+        done = subprocess.run(("git", *args), cwd=str(workdir),
+                              capture_output=True, encoding="utf-8",
+                              errors="replace", timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return (done.stdout or "").strip() if done.returncode == 0 else None
 
-    The one fact that separates "this is happening" from "this already got
-    fixed and the traces are older than the fix", and it is not in any trace.
 
-    The first live pass got that wrong in the most convincing way available: it
-    found two runs crashing with `GraphRecursionError`, diagnosed a 120-step
-    limit in `agent/code/session.py`, and delegated a fix -- for a change that
-    had shipped the day before the runs it was reading were even superseded.
-    The evidence was real, the citation was correct, the signature was
-    well-formed, and the whole issue was stale. A delegation was spent, and the
-    coding agent then reported having made changes the diff does not contain.
+def _utc(stamp: str) -> Optional[str]:
+    """An ISO-8601 stamp normalised to UTC, for comparing with another.
 
-    None of that is visible from the runs. It is visible in one `git log`.
+    Not decoration. `git log --format=%cI` returns the committer's local
+    offset, so `2026-09-07T10:20:18+02:00` sorts *after* `2026-09-07T08:59:32
+    +00:00` as a string and before it in real time. The first version of the
+    staleness check compared the two raw and reached the right verdict on the
+    case it was written for by luck.
     """
+    if not stamp:
+        return None
+    try:
+        moment = datetime.fromisoformat(str(stamp))
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc).isoformat()
+
+
+def lever_changed_at(workdir: Path, lever: str) -> Optional[str]:
+    """When the file an issue names as its lever last changed, in UTC."""
     lever = (lever or "").strip().lstrip("/")
     if not lever:
         return None
-    import subprocess
-    try:
-        done = subprocess.run(
-            ("git", "log", "-1", "--format=%cI", "--", lever),
-            cwd=str(workdir), capture_output=True, encoding="utf-8",
-            errors="replace", timeout=30)
-    except (OSError, subprocess.SubprocessError):
+    return _utc(_git(workdir, "log", "-1", "--format=%cI", "--", lever) or "")
+
+
+def _lever_commit(workdir: Path, lever: str) -> Optional[str]:
+    lever = (lever or "").strip().lstrip("/")
+    if not lever:
         return None
-    if done.returncode != 0:
-        return None
-    return (done.stdout or "").strip() or None
+    return _git(workdir, "log", "-1", "--format=%H", "--", lever) or None
+
+
+def saw_current_lever(workdir: Path, record: Record, lever: str) -> bool:
+    """Did this run exercise the lever as it stands now?
+
+    **The question is which commit the run ran, not when it ran.** An eval run
+    materialises a pinned worktree and records the resolved SHA as `config_sha`
+    ([evals/agent_config.py](../../evals/agent_config.py)), so a run started an
+    hour after a fix landed can still be running the code from before it. Asking
+    the clock gets that backwards, and the first version of this asked the clock.
+
+    So for an eval run the test is whether the lever's last-changing commit is
+    an ancestor of the commit the run actually used. A live run has no pinned
+    SHA -- it ran whatever was checked out -- and there the clock is the only
+    thing there is, so it is used and the answer is a good guess rather than a
+    fact.
+    """
+    lever_commit = _lever_commit(workdir, lever)
+    if lever_commit is None:
+        return True  # nothing to compare against; never block on ignorance
+
+    sha = record.verdict.get("config_sha")
+    if sha:
+        import subprocess
+        try:
+            done = subprocess.run(
+                ("git", "merge-base", "--is-ancestor", lever_commit, str(sha)),
+                cwd=str(workdir), capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return True
+        # 0 = the run's tree contained the change; 1 = it did not; anything
+        # else (an unknown SHA, a shallow clone) is unanswerable, and an
+        # unanswerable question must not become a refusal.
+        return done.returncode != 1
+
+    changed, ran = lever_changed_at(workdir, lever), _utc(record.ts)
+    if changed is None or ran is None:
+        return True
+    return ran >= changed
+
+
+def evidence_predates_lever(workdir: Path, lever: str, found: list) -> bool:
+    """Is every one of these runs older than the current state of the lever?
+
+    The one fact that separates "this is happening" from "this was fixed and
+    the traces are older than the fix", and it is in no trace at all.
+
+    The first live pass got it wrong in the most convincing way available: two
+    real `GraphRecursionError` crashes, correctly cited, diagnosed as a 120-step
+    limit in `agent/code/session.py` that had been 400 for a day. Real evidence,
+    correct citation, well-formed signature, stale conclusion. A coding session
+    was spent, and it came back reporting changes the diff does not contain.
+    """
+    if not lever or not found:
+        return False
+    return not any(saw_current_lever(workdir, r, lever) for r in found)
 
 
 def contains(record: Record, pattern: str) -> bool:

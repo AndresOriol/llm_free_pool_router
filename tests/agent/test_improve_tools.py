@@ -272,3 +272,72 @@ class TestStaleEvidence:
 
         assert "not evidence" in answer
         assert "git log -n 3 --stat" in answer
+
+
+class TestStalenessUsesTheCommitNotTheClock:
+    """An eval run pins a SHA, so *when* it ran says nothing about *what* it ran.
+
+    A run started an hour after a fix landed still exercises the commit its
+    configuration pinned. The first version of this check compared timestamps
+    and reached the right verdict on the case it was written for by luck: git
+    reported the lever's change in a +02:00 offset, which sorts after a UTC
+    stamp that is actually later in real time.
+    """
+
+    def _repo(self, tmp_path):
+        import subprocess
+        run = lambda *a: subprocess.run(("git", *a), cwd=str(tmp_path),
+                                        capture_output=True, check=True)
+        sha = lambda: subprocess.run(("git", "rev-parse", "HEAD"),
+                                     cwd=str(tmp_path), capture_output=True,
+                                     encoding="utf-8", check=True).stdout.strip()
+        run("init", "-q")
+        run("config", "user.email", "t@t")
+        run("config", "user.name", "t")
+        (tmp_path / "other.py").write_text("x = 1\n", encoding="utf-8")
+        run("add", "-A"); run("commit", "-qm", "before")
+        before = sha()
+        (tmp_path / "session.py").write_text("LIMIT = 400\n", encoding="utf-8")
+        run("add", "-A"); run("commit", "-qm", "raise the limit")
+        return before, sha()
+
+    def _issue(self, root, name, config_sha):
+        _run(root, name, {"outcome": "fail", "config_sha": config_sha})
+        made = tools.make_tools(root, _transport())
+        made["write_issue"].func(
+            title="T", lever="/session.py",
+            signature=json.dumps({"where": {"outcome": "fail"}}))
+        return made
+
+    def test_a_run_pinned_before_the_change_is_stale(self, tmp_path):
+        before, _ = self._repo(tmp_path)
+        made = self._issue(tmp_path, "29990101T000000Z_late_but_old", before)
+
+        answer = made["delegate_fix"].func(issue_id="t", brief="Raise it.")
+
+        # Dated in the far future, so a clock comparison would let it through.
+        assert "Nothing was delegated" in answer
+        assert "different version of the code" in answer
+
+    def test_a_run_pinned_after_the_change_is_current(self, tmp_path):
+        _, after = self._repo(tmp_path)
+        made = self._issue(tmp_path, "20000101T000000Z_early_but_new", after)
+
+        answer = made["delegate_fix"].func(issue_id="t", brief="Raise it.")
+
+        # Dated in the distant past, so a clock comparison would refuse it.
+        assert "Nothing was delegated" not in answer
+
+    def test_an_unknown_sha_does_not_become_a_refusal(self, tmp_path):
+        """An unanswerable question is not evidence of staleness."""
+        self._repo(tmp_path)
+        made = self._issue(tmp_path, "20260101T000000Z_r", "0" * 40)
+
+        assert "Nothing was delegated" not in made["delegate_fix"].func(
+            issue_id="t", brief="b")
+
+
+def test_offsets_are_normalised_before_being_compared():
+    from agent.improve.records import _utc
+    assert _utc("2026-09-07T10:20:18+02:00") < _utc("2026-09-07T08:59:32+00:00")
+    assert _utc("not a date") is None
