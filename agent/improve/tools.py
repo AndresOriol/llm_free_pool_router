@@ -303,6 +303,12 @@ def make_tools(workdir: Path, transport=None) -> dict:
         # ([repo.py](repo.py)).
         branch = repo.branch_name(issue.id)
         if repo.is_repo(workdir):
+            ok, note = repo.commit_ledger(workdir, issue.id)
+            if not ok:
+                return (f"error: could not put the ledger on this branch: "
+                        f"{note}. Nothing was delegated — a fix branch that "
+                        f"carried the diagnosis away is the bug this "
+                        f"prevents.")
             ok, note = repo.switch_to(workdir, branch)
             if not ok:
                 return (f"error: could not put the work on `{branch}`: {note}. "
