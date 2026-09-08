@@ -94,7 +94,7 @@ def cmd_validate(args) -> int:
 
 def cmd_run(args) -> int:
     repo = _scenario_repo(args)
-    configs = [agent_config.load(CONFIGS / f"{name}.yaml")
+    configs = [agent_config.load(CONFIGS / f"{name}.yaml", getattr(args, "ref", ""))
                for name in args.config]
     tasks = _selected_tasks(_scenarios(repo, args), args.suite, args.tags or [])
     if not tasks:
@@ -264,6 +264,9 @@ def main() -> int:
     run.add_argument("--suite", default="")
     run.add_argument("--tags", nargs="*")
     run.add_argument("--reps", type=int, default=3)
+    run.add_argument("--ref", default="",
+                     help="resolve every config against this ref instead of the "
+                          "one it pins; how a fix on a branch gets measured")
     run.add_argument("--skip-validate", action="store_true")
     # Self-tests point this elsewhere so stub runs never land in the real
     # record -- a leaderboard mixing stubbed and measured runs is worse than

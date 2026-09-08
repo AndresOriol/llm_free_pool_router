@@ -134,14 +134,21 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def load(path: Path) -> AgentConfig:
+def load(path: Path, ref: str = "") -> AgentConfig:
     """Read a config and resolve its ref. No tree is created here -- `ref` is
     resolved to a SHA now so a batch cannot silently straddle a commit that
-    moved under it, and `checkout()` builds the tree when the batch starts."""
+    moved under it, and `checkout()` builds the tree when the batch starts.
+
+    `ref` overrides the one in the file, which is what makes a *fix* measurable:
+    a configuration pins `master`, and the branch a change was just committed to
+    is not master yet. The override is recorded like any other -- the resolved
+    SHA lands in every `run.json` and the fingerprint changes with it -- so a
+    batch run this way is never mistaken for a batch of the pinned config.
+    """
     raw = path.read_text(encoding="utf-8")
     spec = yaml.safe_load(raw)
     repo = (path.parent / spec["repo"]).resolve()
-    ref = spec.get("ref", "master")
+    ref = ref or spec.get("ref", "master")
     sha = _git(repo, "rev-parse", ref)
 
     overrides = spec.get("overrides") or {}
