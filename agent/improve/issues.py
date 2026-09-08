@@ -42,6 +42,11 @@ OPEN = "open"           # seen, diagnosed or not, nothing done yet
 FIXING = "fixing"       # a task has been handed to the coding agent
 CLOSED = "closed"       # runs recorded after the fix no longer match
 REOPENED = "reopened"   # they matched again
+
+# Not a status -- a verdict a check can return without touching the status.
+# An issue whose signature has never matched a run has no baseline to have
+# moved away from, so "nothing matched" says nothing about it either way.
+UNPROVEN = "unproven"
 STATES = (OPEN, FIXING, CLOSED, REOPENED)
 
 _SLUG = re.compile(r"[^a-z0-9]+")
@@ -223,14 +228,24 @@ def check(issue: Issue, found: list, since: str = "") -> dict:
       → **closed**.
     - Nothing matched and nothing ran → unchanged, and the report says so. An
       issue must never close because nobody looked.
+    - Nothing matched, but the signature has never matched any run (evidence is
+      empty and no previous check had matched > 0) → unchanged, and the verdict
+      is "unproven". An issue must never close because its signature never
+      looked at anything.
     """
     considered = [r for r in found if not since or (r.ts and r.ts > since)]
     matched = [r for r in considered if records_mod.matches(r, issue.signature)]
 
+    never_matched = (not issue.evidence
+                     and not any(c.get("matched", 0) > 0 for c in issue.checks))
+
     if matched:
         verdict = REOPENED if issue.status == CLOSED else issue.status
     elif considered:
-        verdict = CLOSED
+        if never_matched:
+            verdict = UNPROVEN
+        else:
+            verdict = CLOSED
     else:
         verdict = issue.status
 
@@ -238,7 +253,7 @@ def check(issue: Issue, found: list, since: str = "") -> dict:
               "matched": len(matched), "verdict": verdict,
               "matching_runs": [r.id for r in matched[:20]]}
     issue.checks.append(report)
-    if verdict != issue.status:
+    if verdict != issue.status and verdict != UNPROVEN:
         issue.note("status", f"{issue.status} -> {verdict} (check)")
         issue.status = verdict
     stamp_evidence(issue, matched)

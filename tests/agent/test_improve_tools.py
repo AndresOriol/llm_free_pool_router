@@ -399,3 +399,56 @@ class TestADelegationThatChangedNothing:
         made["delegate_fix"].func(issue_id="t", brief="Fix it.")
 
         assert issues.IssueStore(tmp_path).get("t").status == issues.FIXING
+
+
+def test_delegate_fix_commits_ledger_before_switching(tmp_path):
+    import subprocess
+    from agent.improve import repo
+    run = lambda *a: subprocess.run(("git", *a), cwd=str(tmp_path),
+                                    capture_output=True, check=True)
+    run("init", "-q", "-b", "master")
+    run("config", "user.email", "t@t")
+    run("config", "user.name", "t")
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    run("add", "-A")
+    run("commit", "-qm", "first")
+
+    made = tools.make_tools(tmp_path, _transport())
+    made["write_issue"].func(title="T", signature='{"kind": "eval"}')
+
+    assert (tmp_path / "evals" / "results" / "issues" / "t.json").is_file()
+    ok, out = repo.git(tmp_path, "status", "--porcelain")
+    assert "evals/" in out
+
+    made["delegate_fix"].func(issue_id="t", brief="Fix it.")
+
+    done = subprocess.run(("git", "log", "master", "-1", "--pretty=%B"), cwd=str(tmp_path),
+                          capture_output=True, encoding="utf-8", check=True)
+    assert "Update ledger for issue t" in done.stdout
+
+
+def test_delegate_fix_fails_when_ledger_commit_fails(tmp_path, monkeypatch):
+    import subprocess
+    from agent.improve import repo
+    run = lambda *a: subprocess.run(("git", *a), cwd=str(tmp_path),
+                                    capture_output=True, check=True)
+    run("init", "-q", "-b", "master")
+    run("config", "user.email", "t@t")
+    run("config", "user.name", "t")
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    run("add", "-A")
+    run("commit", "-qm", "first")
+
+    made = tools.make_tools(tmp_path, _transport())
+    made["write_issue"].func(title="T", signature='{"kind": "eval"}')
+
+    monkeypatch.setattr(repo, "commit_ledger", lambda w, i: (False, "mocked commit failure"))
+
+    answer = made["delegate_fix"].func(issue_id="t", brief="Fix it.")
+
+    # The prose is free to change; what must hold is that the tool refused,
+    # said why, and left the checkout where it was. A delegation that went
+    # ahead here would carry the diagnosis onto the fix branch again.
+    assert answer.startswith("error:")
+    assert "mocked commit failure" in answer
+    assert repo.current_branch(tmp_path) == "master"

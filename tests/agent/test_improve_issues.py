@@ -70,8 +70,9 @@ def test_a_status_change_leaves_a_history_line(tmp_path):
 class TestCheck:
     """`check` is the only thing in this project that can close an issue."""
 
-    def _issue(self, status=issues.FIXING):
+    def _issue(self, status=issues.FIXING, evidence=None):
         return issues.Issue(id="t", title="T", status=status,
+                            evidence=evidence if evidence is not None else ["20260101T000000Z_before"],
                             signature={"where": {"failure_class": "stopping"}})
 
     def test_no_run_since_the_fix_leaves_the_status_alone(self, tmp_path):
@@ -120,6 +121,16 @@ class TestCheck:
         issues.check(issue, _records(tmp_path), since="2026-06-01")
 
         assert len(issue.checks) == 2, "a check is evidence, not a status update"
+
+    def test_never_matched_issue_does_not_close(self, tmp_path):
+        _record(tmp_path, "20260901T000000Z_after", {"failure_class": ""})
+        issue = self._issue(evidence=[])
+
+        report = issues.check(issue, _records(tmp_path), since="2026-06-01")
+
+        assert (report["considered"], report["matched"]) == (1, 0)
+        assert report["verdict"] == "unproven"
+        assert issue.status == issues.FIXING
 
 
 def test_the_ledger_survives_a_round_trip(tmp_path):

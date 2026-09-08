@@ -163,3 +163,37 @@ def run_tests(workdir: Path, timeout: int) -> tuple:
                     f"{done.returncode}); nothing was checked.")
         return True, f"No suite was run (pytest exit {done.returncode}).\n{tail}"
     return True, tail
+
+
+def commit_ledger(workdir: Path, issue_id: str) -> tuple:
+    """Put the ledger on the branch the pass started on, before it leaves it.
+
+    The ledger is the loop's memory: an issue is supposed to outlive the
+    session that found it. It lives inside the repository, so a pass that
+    wrote it and then switched to a fix branch carried it along -- and the
+    delegated session, which commits whatever it finds dirty, committed the
+    diagnosis onto the fix branch. `restored` then put the checkout back and
+    the starting branch had never heard of any of it. The next pass began
+    from an empty ledger and re-diagnosed what was already written down,
+    which is the one thing the ledger exists to prevent.
+
+    Committing here also draws the line a reviewer wants: the diagnosis on
+    the branch they already have, the fix on a branch they can take or
+    leave, and neither hidden inside the other.
+
+    Returns (ok, message). Nothing to commit is success, not an error.
+    """
+    ok, out = git(workdir, "status", "--porcelain", "evals/results/issues/")
+    if not ok:
+        return False, f"Could not check ledger status: {out}"
+    if not out.strip():
+        return True, "No uncommitted ledger changes"
+
+    ok, out = git(workdir, "add", "evals/results/issues/")
+    if not ok:
+        return False, f"Could not stage ledger changes: {out}"
+
+    ok, out = git(workdir, "commit", "-m", f"Update ledger for issue {issue_id}")
+    if not ok:
+        return False, f"Could not commit ledger changes: {out}"
+    return True, "Ledger changes committed"

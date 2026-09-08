@@ -114,3 +114,26 @@ class TestTheSuiteGate:
         passed, tail = repo.run_tests(tmp_path, timeout=120)
         assert passed is False
         assert "failed" in tail.lower()
+
+
+def test_commit_ledger_no_changes(tmp_path):
+    root = _repo(tmp_path)
+    ok, msg = repo.commit_ledger(root, "some-issue")
+    assert ok is True
+    assert "No uncommitted ledger changes" in msg
+
+
+def test_commit_ledger_with_changes(tmp_path):
+    root = _repo(tmp_path)
+    ledger_dir = root / "evals" / "results" / "issues"
+    ledger_dir.mkdir(parents=True, exist_ok=True)
+    (ledger_dir / "some-issue.json").write_text('{"id": "some-issue"}', encoding="utf-8")
+
+    ok, msg = repo.commit_ledger(root, "some-issue")
+    assert ok is True
+    assert "Ledger changes committed" in msg
+
+    # Verify the commit exists and has the correct message
+    done = subprocess.run(("git", "log", "-1", "--pretty=%B"), cwd=str(root),
+                          capture_output=True, encoding="utf-8", check=True)
+    assert "Update ledger for issue some-issue" in done.stdout
