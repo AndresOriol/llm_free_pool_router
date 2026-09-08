@@ -46,10 +46,23 @@ Runs come in two kinds and the difference matters in every sentence you write.
 Four traps, each of which has already produced a wrong conclusion in this
 project:
 
+- **A trace is older than the code.** Every run you can read was recorded
+  against a commit, and the file you are about to blame has moved since. The
+  first pass that ever ran this loop found two real crashes, cited them
+  correctly, diagnosed a 120-step limit in `session.py` — and that limit had
+  been 400 for a day. It spent a coding session re-making a change that already
+  existed. **Before you believe a diagnosis, read the lever and its history**
+  (`git log -p -n 3 <file>`). The tools now refuse a delegation whose evidence
+  all predates the lever's last change, and that refusal is a fact about your
+  reading, not an obstacle.
 - **The agent's own closing message is not evidence.** It is what the model said
   it did. Check it against `diff` and `verify`. A claimed change that is absent
   from the diff is the most important thing you can find, because the whole
-  review model assumes it does not happen.
+  review model assumes it does not happen. **This applies to your own delegate
+  too** — the same first pass was told by the coding agent that three changes
+  had been made to `session.py`, and repeated that in its closing summary. The
+  diff held none of them. After every `delegate_fix`, run `git log -n 3 --stat`
+  and look.
 - **A zero is ambiguous.** Every trace-derived count — `tokens_in`,
   `provider_calls`, `steps`, `models_used` — comes from `trace.jsonl`. On a run
   that never wrote one they are zero *by construction*. Reading that as

@@ -208,7 +208,34 @@ def make_tools(workdir: Path, transport=None) -> dict:
                 issue, [r for r in _records()
                         if records_mod.matches(r, issue.signature)])
             store.save(issue)
-        return f"Wrote `{store.path(issue.id)}`.\n\n{issue.render()}"
+        return (f"Wrote `{store.path(issue.id)}`.\n\n{_staleness(issue)}"
+                f"{issue.render()}")
+
+    def _staleness(issue) -> str:
+        """A warning when the lever changed after every run cited. Or nothing.
+
+        This is the check the first live pass needed and did not have. It opened
+        a well-formed, correctly cited issue about a 120-step recursion limit
+        that had been 400 for a day, and spent a delegation on it. The evidence
+        was real and the conclusion was stale, and the difference between them
+        is one `git log` on the file it had already named as the lever.
+
+        A warning rather than a refusal: the file may have changed for an
+        unrelated reason, and only the agent reading both can tell. What it may
+        not do is fail to look.
+        """
+        changed = records_mod.lever_changed_at(workdir, issue.lever)
+        if not changed or not issue.last_seen or changed <= issue.last_seen:
+            return ""
+        return (f"⚠ **This may already be fixed.** `{issue.lever}` last changed "
+                f"at {changed[:19]}, which is *after* the newest run matching "
+                f"this signature ({issue.last_seen[:19]}). Every run you are "
+                f"citing predates the current state of the file you want "
+                f"changed.\n\nRead the lever and its recent history "
+                f"(`git log -p -n 3 {issue.lever.lstrip('/')}`) before you "
+                f"delegate anything. If the fix is already there, say so and "
+                f"close this issue against runs recorded since — do not spend "
+                f"a coding session re-making a change that exists.\n\n")
 
     # -- fix ---------------------------------------------------------------
 
@@ -233,6 +260,25 @@ def make_tools(workdir: Path, transport=None) -> dict:
         if not brief.strip():
             return "error: the brief is empty."
 
+        # Refused here, only warned in `write_issue`. A lever may have changed
+        # for an unrelated reason and only a reader can tell, so naming an
+        # issue stays cheap -- but a delegation spends a whole coding session,
+        # and the rule at that price is strict: **you may not ask for a change
+        # to a file when the failure has never been observed against the
+        # current state of that file.**
+        #
+        # The way through is the correct behaviour and not a workaround: record
+        # a run with `run_evals` and add it as evidence. If the failure is real
+        # it will still be there, and the issue is then about the code as it
+        # actually is.
+        stale = _staleness(issue)
+        if stale:
+            return (stale + "**Nothing was delegated.** Record a run against "
+                    "the current code with `run_evals` and add it to this "
+                    "issue's evidence. If the failure is still there, the "
+                    "issue is real and this will let it through; if it is not, "
+                    "the fix already shipped and the issue should close.")
+
         from agent.protocol.local import render
         from agent.protocol.types import Message
 
@@ -251,10 +297,18 @@ def make_tools(workdir: Path, transport=None) -> dict:
         issue.note("delegated", f"task {task.id[:8]} to code")
         store.save(issue)
 
-        return (f"{render(task, 'code')}\n\nRecorded against `{issue.id}`, now "
-                f"**{issue.status}**. It is not fixed until runs recorded after "
-                f"this stop matching its signature — `run_evals`, then "
-                f"`check_issue`.")
+        return (
+            f"{render(task, 'code')}\n\nRecorded against `{issue.id}`, now "
+            f"**{issue.status}**.\n\n"
+            f"**What you just read is the coding agent's account of itself, "
+            f"and it is not evidence.** The first recorded delegation of this "
+            f"kind came back describing three changes to `session.py`; the "
+            f"diff contained none of them and only `NOTES.md` had moved. "
+            f"Check with `execute`: `git log -n 3 --stat` and `git status`. "
+            f"If nothing changed, say so on the issue — a delegation that "
+            f"produced no diff is a finding, not a step forward.\n\n"
+            f"Then: it is not fixed until runs recorded after this stop "
+            f"matching the signature — `run_evals`, then `check_issue`.")
 
     # -- make new evidence -------------------------------------------------
 

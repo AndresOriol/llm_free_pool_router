@@ -188,3 +188,87 @@ class TestReadOnly:
     def test_everything_else_passes_through(self):
         assert ReadOnlyMiddleware().wrap_tool_call(
             self._Request("read_file"), lambda r: "contents") == "contents"
+
+
+class TestStaleEvidence:
+    """The guard the first live pass needed and did not have.
+
+    That pass found two real `GraphRecursionError` crashes, cited them
+    correctly, and diagnosed a 120-step limit in `agent/code/session.py` that
+    had been 400 since the day before. The evidence was real and the conclusion
+    was stale; a whole coding session was spent re-making a change that already
+    existed. The difference between the two is one `git log` on the file the
+    issue had already named as its lever.
+    """
+
+    def _repo(self, tmp_path, lever_body="LIMIT = 400\n"):
+        """A tiny git repo with one run recorded before the lever changed."""
+        import subprocess
+        run = lambda *a: subprocess.run(("git", *a), cwd=str(tmp_path),
+                                        capture_output=True, check=True)
+        run("init", "-q")
+        run("config", "user.email", "t@t")
+        run("config", "user.name", "t")
+        (tmp_path / "session.py").write_text(lever_body, encoding="utf-8")
+        run("add", "session.py")
+        run("commit", "-qm", "the fix that already shipped")
+        # Recorded well before that commit, which is "now".
+        _run(tmp_path, "20200101T000000Z_old", {"outcome": "fail"})
+        return tmp_path
+
+    def test_write_issue_warns_when_the_lever_outlives_the_evidence(self, tmp_path):
+        made = tools.make_tools(self._repo(tmp_path), None)
+
+        answer = made["write_issue"].func(
+            title="T", lever="/session.py",
+            signature=json.dumps({"where": {"outcome": "fail"}}))
+
+        assert "may already be fixed" in answer
+        assert "git log -p" in answer, "it names the command that would settle it"
+
+    def test_delegate_fix_refuses_a_stale_issue(self, tmp_path):
+        sent = []
+        made = tools.make_tools(self._repo(tmp_path), _transport(sent))
+        made["write_issue"].func(
+            title="T", lever="/session.py",
+            signature=json.dumps({"where": {"outcome": "fail"}}))
+
+        answer = made["delegate_fix"].func(issue_id="t", brief="Raise it.")
+
+        assert "Nothing was delegated" in answer
+        assert sent == [], "no coding session was spent"
+        assert issues.IssueStore(tmp_path).get("t").status == issues.OPEN
+
+    def test_evidence_recorded_after_the_change_lets_it_through(self, tmp_path):
+        """The way out is the correct behaviour: record a run against the code
+        as it actually is, and if the failure survives, the issue is real."""
+        root = self._repo(tmp_path)
+        _run(root, "20990101T000000Z_fresh", {"outcome": "fail"})
+        sent = []
+        made = tools.make_tools(root, _transport(sent))
+        made["write_issue"].func(
+            title="T", lever="/session.py",
+            signature=json.dumps({"where": {"outcome": "fail"}}))
+
+        answer = made["delegate_fix"].func(issue_id="t", brief="Raise it.")
+
+        assert "Nothing was delegated" not in answer
+        assert sent, "the failure was seen against the current code"
+
+    def test_an_unnamed_lever_cannot_be_checked_and_does_not_block(self, tmp_path):
+        sent = []
+        made = tools.make_tools(self._repo(tmp_path), _transport(sent))
+        made["write_issue"].func(title="T", signature='{"kind": "eval"}')
+
+        made["delegate_fix"].func(issue_id="t", brief="b")
+
+        assert sent, "no lever means nothing to compare; it is not a refusal"
+
+    def test_the_delegate_report_is_labelled_as_not_evidence(self, tmp_path):
+        made = tools.make_tools(tmp_path, _transport())
+        made["write_issue"].func(title="T", signature='{"kind": "eval"}')
+
+        answer = made["delegate_fix"].func(issue_id="t", brief="b")
+
+        assert "not evidence" in answer
+        assert "git log -n 3 --stat" in answer

@@ -55,16 +55,38 @@ FS_TOOL_GUIDANCE = (
 # run, twice in some. Saying it before the first command turns a recurring
 # wasted step into none.
 def shell_shape_section(programs: Sequence[str]) -> str:
+    """What `execute` will and will not do, for the programs it is given.
+
+    **The Python escape hatch is conditional on Python actually being on the
+    list**, and that is a bug fix rather than tidiness. This section is shared
+    with `agent/improve`, whose allowlist is `git` alone -- and it was telling
+    that agent to reach for `python -c` when it needed anything else. Its first
+    recorded pass spent 10 of its 28 `execute` calls on `python` and `pytest`
+    commands the backend refused, having been told by this very paragraph to
+    make them ([19.4](../../docs/19-improvement-agent.md#1941-the-traps-that-are-already-known)).
+
+    That is the failure this project already names: a description advertising
+    capabilities the backend does not have is a measured cause of failed calls
+    ([agent/runtime/tools.py](../runtime/tools.py)). It had simply never been
+    checked against a *caller's* allowlist, because until now there was only one.
+    """
     if not programs:
         return ""
-    return (
+    section = (
         "## Running commands\n\n"
         "`execute` is not a shell. It launches one program directly, so:\n\n"
-        f"- Only these run, named bare with no path: {', '.join(programs)}.\n"
+        f"- Only these run, named bare with no path: {', '.join(programs)}. "
+        "Nothing else runs at all -- there is no wrapper, no interpreter and "
+        "no escape hatch around that list.\n"
         "- No `&&`, `||`, `;`, `|`, `>` or heredocs -- there is nothing to "
         "interpret them. Run one command per call, or make several calls in "
         "one response when they do not depend on each other.\n"
         "- No `cd`. Paths are relative to the project root.\n"
+    )
+    if not any(p in ("python", "python3", "py") for p in programs):
+        return section
+
+    return section + (
         "- Anything else you need to run, you run *through* Python: "
         "`python -c \"...\"` for a one-liner, or `write_file` plus "
         "`python <file>` for more. That is also how you reach a toolchain "

@@ -300,6 +300,38 @@ def grep(record: Record, pattern: str, max_hits: int = 8) -> list:
     return hits
 
 
+def lever_changed_at(workdir: Path, lever: str) -> Optional[str]:
+    """When the file an issue names as its lever last changed, ISO-8601 UTC.
+
+    The one fact that separates "this is happening" from "this already got
+    fixed and the traces are older than the fix", and it is not in any trace.
+
+    The first live pass got that wrong in the most convincing way available: it
+    found two runs crashing with `GraphRecursionError`, diagnosed a 120-step
+    limit in `agent/code/session.py`, and delegated a fix -- for a change that
+    had shipped the day before the runs it was reading were even superseded.
+    The evidence was real, the citation was correct, the signature was
+    well-formed, and the whole issue was stale. A delegation was spent, and the
+    coding agent then reported having made changes the diff does not contain.
+
+    None of that is visible from the runs. It is visible in one `git log`.
+    """
+    lever = (lever or "").strip().lstrip("/")
+    if not lever:
+        return None
+    import subprocess
+    try:
+        done = subprocess.run(
+            ("git", "log", "-1", "--format=%cI", "--", lever),
+            cwd=str(workdir), capture_output=True, encoding="utf-8",
+            errors="replace", timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    return (done.stdout or "").strip() or None
+
+
 def contains(record: Record, pattern: str) -> bool:
     """Does anything in this record's trace match? One streaming pass."""
     regex = re.compile(pattern)
