@@ -205,6 +205,15 @@ else on this page is design and changes rarely; this block is state.*
 [10.5](10-metrics.md#105-ranking-is-lexicographic-not-weighted) Lexicographic ranking ·
 [10.6](10-metrics.md#106-what-a-run-leaves-behind) What a run leaves behind
 
+**[20. Probes](20-probes.md)** — the small tests: one agent, one situation, one decision, and what that can and cannot prove
+&nbsp;&nbsp;&nbsp;&nbsp;[20.1](20-probes.md#201-the-problem-one-test-and-it-is-a-blunt-one) One test, and it is blunt ·
+[20.2](20-probes.md#202-what-a-probe-is) What a probe is ·
+[20.3](20-probes.md#203-what-it-can-and-cannot-say) What it can and cannot say ·
+[20.4](20-probes.md#204-the-expectations) The expectations ·
+[20.5](20-probes.md#205-langsmith-holds-the-runs-git-holds-the-claims) LangSmith holds the runs, git holds the claims ·
+[20.6](20-probes.md#206-running-them) Running them ·
+[20.7](20-probes.md#207-what-the-first-two-live-runs-showed) What the first two live runs showed
+
 **[11. Evaluation status](11-eval-status.md)** — the running state ⟳ *changes often*
 &nbsp;&nbsp;&nbsp;&nbsp;[11.2](11-eval-status.md#112-whats-built) What's built ·
 [11.3](11-eval-status.md#113-where-the-numbers-stand) Where the numbers stand ·

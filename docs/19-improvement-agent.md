@@ -39,11 +39,20 @@ Five stages. Each is a tool, and each stage's output is what the next one reads.
 | Name | `write_issue` | a ledger entry carrying a **signature** |
 | Fix | `delegate_fix` | an A2A task to `agent/code`, recorded on the issue |
 | Check | `run_evals`, `check_issue` | fresh runs, then close or reopen |
+| Grow the instrument | `draft_scenario` | a failed run becomes an eval case |
 
-Six tools, and the count is a budget rather than a preference: tool schemas are
-91% of what a step of this loop spends
+Seven tools, and the count is a budget rather than a preference: tool schemas
+are 91% of what a step of this loop spends
 ([6.4](06-agent.md#64-why-it-is-shaped-this-way)). `check_issue` doubles as the
-ledger listing so that reading what is already known does not cost a seventh.
+ledger listing so that reading what is already known does not cost an eighth.
+
+`draft_scenario` is the one that is not a stage of the fixing loop, and it earns
+its schema by raising the ceiling on every other stage. The eval set bounds what
+any measurement here can claim — including this agent's claims about its own
+fixes — and a run the agent failed is a description of a test it would fail
+([20](20-probes.md) is the small end of the same argument). Building it is a
+second binding of the coding agent, `scenarios`, jailed to the eval repository
+rather than this one, registered only when that repository is really there.
 
 The standing job is the loop's second half, not its first. `python -m
 agent.improve .` with nothing on stdin runs *work the ledger*: re-check
@@ -186,7 +195,22 @@ in each `run.json` as it always did, so a verification batch can never be
 mistaken for a batch of the pinned configuration. Without that flag a
 verification pass would measure the unfixed code and conclude the fix failed.
 
-## 19.8 What it costs, and what is unmeasured
+## 19.8 How its judgement is measured
+
+A full pass costs twenty minutes and one diagnosis, which makes the agent's
+judgement the most expensive thing here to have an opinion about — and at the
+time of writing the entire evidence base is one pass that got the answer wrong.
+
+`python -m evals probes --agent improve` is the cheap instrument: the real agent,
+one situation, stopped at its first decision, one model call
+([20](20-probes.md)). The four that exist ask whether it reads the ledger before
+the traces, whether it delegates before diagnosing, whether it tries to edit the
+harness it is forbidden to touch, and whether it reaches for a `python` it does
+not have. None of them can say a pass was any good. All of them can say it
+started wrong, which is where every recorded failure of this agent so far has
+begun.
+
+## 19.9 What it costs, and what is unmeasured
 
 **Unmeasured.** Like the protocol before it
 ([16.7](16-agent-protocol.md#167-what-this-costs-and-what-is-unmeasured)), this
@@ -207,7 +231,7 @@ is a configuration nobody has run against a baseline. What can be said now:
 is the arm to compare against when asking whether the delegation is worth what it
 spends — the same arrangement `AGENT_PEERS=` provides for the coding agent.
 
-## 19.9 What the first live pass showed
+## 19.10 What the first live pass showed
 
 One pass, 2026-09-08, over 105 recorded runs (103 eval, 2 live). 21½ minutes,
 120 turns, 125 tool calls, 52 reroutes across two Gemini members. It went round
@@ -273,7 +297,7 @@ the coding agent's false account, and the fact that a delegated session leaves
 no record this loop can read (an A2A task JSON is not a run record), which is
 why the false account had to be caught by hand.
 
-## 19.10 What is deliberately not built
+## 19.11 What is deliberately not built
 
 - **No pull request.** The coding agent commits on a branch and never pushes
   ([backend](../agent/runtime/backend.py) refuses `merge` and `push`). Opening a
@@ -289,7 +313,7 @@ why the false account had to be caught by hand.
   reads as ordinary files.
 - **It does not grade prose.** That is J1's job, and J1 does not exist.
 
-## 19.11 Running it
+## 19.12 Running it
 
 ```bash
 python -m agent.improve .                          # work the ledger

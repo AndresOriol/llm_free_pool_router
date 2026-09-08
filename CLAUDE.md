@@ -108,7 +108,16 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   JSONL ledger both say so. Nothing here changes an agent
   ([18. Serving](docs/18-serving.md)).
 - [evals](evals/) — the harness that decides whether a change to the above
-  helped. Scenarios live in the separate `agent_evals` repo.
+  helped. Scenarios live in the separate `agent_evals` repo. Two instruments:
+  a **scenario run** is the acceptance contract (minutes, one bit, decided by
+  hidden tests), and a **probe** is the small end — the real agent in front of
+  one situation, stopped at its first decision, one model call
+  ([20. Probes](docs/20-probes.md), `python -m evals probes`). A probe cannot
+  say a task was solved; it says the agent started the way it should, which is
+  where the recorded failures live. Probes are defined in
+  [evals/probes/](evals/probes/) with the failure each one guards cited beside
+  it, and pushed one-way to a LangSmith dataset — the files are the claim, the
+  dataset is a projection.
 - Providers today: Groq, Gemini. Expect more free-tier providers (Cerebras,
   OpenRouter free models, Mistral free tier, HuggingFace Inference, etc.) as
   they're evaluated — the provider list is meant to grow, not stay fixed.
