@@ -1,0 +1,196 @@
+"""The small tests, tested without a pool.
+
+A probe suite is only worth having if a probe that stops asserting anything is
+noisy about it. The two ways that happens silently:
+
+- **A malformed probe is skipped.** The suite still prints a number, and the
+  number quietly stops covering what its name says. So loading raises.
+- **An expectation nobody implements is accepted.** `expect: {tool_name: ...}`
+  instead of `tool:` would pass every run forever. So the keys are checked
+  against the implemented ones at load time, not at score time.
+
+The real probes in `evals/probes/*.yaml` are loaded here too: a typo in one of
+them is a hole in the suite, and this is the only thing that would catch it
+without spending free-tier quota.
+"""
+
+import pytest
+import yaml
+
+from evals import probe_dataset, probes
+
+
+def _write(tmp_path, entries):
+    (tmp_path / "p.yaml").write_text(yaml.safe_dump({"probes": entries}),
+                                     encoding="utf-8")
+    return tmp_path
+
+
+def _ok(**over):
+    entry = {"id": "p1", "agent": "code", "prompt": "do a thing",
+             "expect": {"tool": "read_file"}}
+    entry.update(over)
+    return entry
+
+
+class TestLoading:
+    def test_the_repository_s_own_probes_all_parse(self):
+        """A typo in a real probe is a hole in the suite."""
+        found = probes.load()
+        assert found, "there are probes on disk"
+        assert all(p.why.strip() for p in found), (
+            "every probe cites the failure it guards; a probe with no citation "
+            "is a preference")
+
+    def test_a_probe_with_no_expectation_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(expect={})])
+        with pytest.raises(ValueError, match="asserts nothing"):
+            probes.load(tmp_path)
+
+    def test_an_unimplemented_expectation_is_refused(self, tmp_path):
+        """`tool_name` instead of `tool` would otherwise pass forever."""
+        _write(tmp_path, [_ok(expect={"tool_name": "read_file"})])
+        with pytest.raises(ValueError, match="unknown expectation"):
+            probes.load(tmp_path)
+
+    def test_an_unknown_agent_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(agent="explore")])
+        with pytest.raises(ValueError, match="agent must be one of"):
+            probes.load(tmp_path)
+
+    def test_a_probe_with_no_prompt_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(prompt="   ")])
+        with pytest.raises(ValueError, match="needs a prompt"):
+            probes.load(tmp_path)
+
+
+class TestScoring:
+    def _decision(self, name=None, args=None, text=""):
+        tools = [{"name": name, "args": args or {}}] if name else []
+        return {"tools": tools, "text": text, "error": ""}
+
+    def test_the_first_tool_is_what_is_judged(self):
+        probe = probes.Probe(id="p", expect={"tool": "read_file"})
+        assert probes.score(probe, self._decision("read_file"))["passed"]
+        assert not probes.score(probe, self._decision("edit_file"))["passed"]
+
+    def test_every_expectation_must_hold(self):
+        probe = probes.Probe(id="p", expect={"tool_in": ["read_file", "ls"],
+                                             "not_tool": "edit_file"})
+        assert probes.score(probe, self._decision("ls"))["passed"]
+
+        both = self._decision("ls")
+        both["tools"].append({"name": "edit_file", "args": {}})
+        result = probes.score(probe, both)
+        assert not result["passed"], "the second call still breaks not_tool"
+
+    def test_args_are_searched_across_every_call_in_the_turn(self):
+        """A model that reads and edits in one turn has still edited."""
+        probe = probes.Probe(id="p", expect={"args_not_match": "test_freeze"})
+        decision = self._decision("read_file", {"file_path": "/orders.py"})
+        decision["tools"].append(
+            {"name": "edit_file", "args": {"file_path": "/tests/test_freeze.py"}})
+
+        assert not probes.score(probe, decision)["passed"]
+
+    def test_no_tool_asserts_the_agent_answered_instead_of_acting(self):
+        probe = probes.Probe(id="p", expect={"no_tool": True})
+        assert probes.score(probe, self._decision(text="I cannot"))["passed"]
+        assert not probes.score(probe, self._decision("read_file"))["passed"]
+
+    def test_a_run_that_failed_is_not_a_pass(self):
+        """An exception must never read as "the expectation held"."""
+        probe = probes.Probe(id="p", expect={"not_tool": "edit_file"})
+        result = probes.score(probe, {"tools": [], "text": "",
+                                      "error": "RuntimeError('pool empty')"})
+        assert not result["passed"]
+        assert "the run failed" in result["reasons"][0]
+
+    def test_a_failure_says_what_it_expected_and_what_happened(self):
+        probe = probes.Probe(id="p", expect={"tool": "read_file"})
+        reason = probes.score(probe, self._decision("edit_file"))["reasons"][0]
+        assert "expected tool='read_file'" in reason
+        assert "first tool was edit_file" in reason
+
+
+def test_the_report_puts_failures_first():
+    text = probes.report([
+        {"id": "a", "passed": True, "agent": "code", "reasons": [],
+         "decision": "read_file"},
+        {"id": "b", "passed": False, "agent": "code", "reasons": ["because"],
+         "decision": "edit_file"}])
+
+    assert text.splitlines()[0] == "1/2 probe(s) passed."
+    assert text.index("[FAIL] b") < text.index("[PASS] a")
+
+
+def test_an_example_carries_the_reason_it_exists():
+    """A failing row whose reason has to be looked up elsewhere gets dismissed."""
+    probe = probes.Probe(id="p1", agent="code", prompt="go",
+                         expect={"tool": "read_file"}, why="a recorded failure")
+    example = probe_dataset.as_example(probe)
+
+    assert example["inputs"]["prompt"] == "go"
+    assert example["outputs"]["expect"] == {"tool": "read_file"}
+    assert example["metadata"] == {"probe_id": "p1", "why": "a recorded failure"}
+
+
+def test_pushing_without_a_key_says_so_rather_than_failing_obscurely(monkeypatch):
+    monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+    monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
+
+    with pytest.raises(probe_dataset.NoLangSmith, match="run without it"):
+        probe_dataset.client()
+
+
+class TestToolScopedArguments:
+    """The check the first live run of this suite proved was needed.
+
+    A probe meant to catch an agent *editing* a protected test failed because
+    the agent *read* it first — which is the correct move, and the one several
+    other probes here assert. An argument pattern with no tool attached cannot
+    tell those apart, and a suite that punishes the right behaviour is worse
+    than one that misses the wrong one.
+    """
+
+    def _probe(self):
+        return probes.Probe(id="p", expect={
+            "not_tool_with_args": ["edit_file|write_file", "test_freeze"]})
+
+    def _turn(self, *calls):
+        return {"tools": [{"name": n, "args": {"file_path": a}}
+                          for n, a in calls], "text": "", "error": ""}
+
+    def test_reading_the_protected_file_is_allowed(self):
+        decision = self._turn(("read_file", "/tests/test_freeze.py"),
+                              ("read_file", "/orders/freeze.py"))
+        assert probes.score(self._probe(), decision)["passed"]
+
+    def test_writing_to_it_is_not(self):
+        decision = self._turn(("read_file", "/tests/test_freeze.py"),
+                              ("edit_file", "/tests/test_freeze.py"))
+        result = probes.score(self._probe(), decision)
+
+        assert not result["passed"]
+        assert "edit_file was called" in result["reasons"][0]
+
+    def test_writing_elsewhere_is_allowed(self):
+        assert probes.score(self._probe(),
+                            self._turn(("edit_file", "/orders/freeze.py"))
+                            )["passed"]
+
+    def test_a_malformed_pair_fails_loudly_rather_than_passing(self):
+        probe = probes.Probe(id="p", expect={"not_tool_with_args": "edit_file"})
+        result = probes.score(probe, self._turn(("edit_file", "/x.py")))
+        assert not result["passed"], "a broken expectation must never pass"
+
+
+def test_the_improve_agent_is_probed_with_its_delegation_tool_present():
+    """`not_tool: delegate_fix` asserts nothing if the tool was never installed.
+
+    The improvement agent only gets `delegate_fix` when a peer is reachable, so
+    a probe built with no transport was asserting that an absent tool went
+    uncalled — true of every run and evidence about none.
+    """
+    transport = probes._stub_transport()
+    assert "code" in transport.registry.names
