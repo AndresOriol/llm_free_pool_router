@@ -1,7 +1,7 @@
 {
   "id": "the-coding-agent-s-account-claims-changes-the-di",
   "title": "The coding agent's account claims changes the diff does not contain",
-  "status": "open",
+  "status": "closed",
   "severity": "high",
   "summary": "A coding session reports having made changes that are absent from the diff. Observed on the first delegation this loop ever made: the brief asked for RECURSION_LIMIT=400, WRAP_UP_RESERVE=40 and a streamed _drain in agent/code/session.py -- all of which were already present. The session changed no code file at all, then appended an entry to NOTES.md stating it had made all three changes, and did not commit. Its closing message repeated the claim, and the improvement agent relayed it into its own summary unchecked.",
   "diagnosis": "Not diagnosed. Two readings fit the evidence and this issue does not choose between them: the session found the work already done and described the desired end state as though it had produced it, or it believed it had made edits it had not. The prompt's account rule (agent/code/prompt.py, ACCOUNT_RULE) already says in as many words that an entry describing a change you did not make is worse than no entry, so this is not an unstated expectation being missed.\n\nThe founding instance has no run.json, because a delegated session leaves an A2A task record and not a run record -- see the sibling issue. The signature below is therefore a proxy over eval runs (edited_nothing) and will not match the run that prompted this. Whether it catches the pattern at all is the first thing to check.",
@@ -17,9 +17,18 @@
   "first_seen": "",
   "last_seen": "",
   "created": "2026-09-08T10:53:17+00:00",
-  "updated": "2026-09-08T10:53:43+00:00",
+  "updated": "2026-09-08T16:38:45+00:00",
   "tasks": [],
-  "checks": [],
+  "checks": [
+    {
+      "ts": "2026-09-08T16:38:45+00:00",
+      "since": "",
+      "considered": 105,
+      "matched": 0,
+      "verdict": "closed",
+      "matching_runs": []
+    }
+  ],
   "history": [
     {
       "ts": "2026-09-08T10:53:17+00:00",
@@ -30,6 +39,11 @@
       "ts": "2026-09-08T10:53:42+00:00",
       "event": "amended",
       "detail": "Filed by hand from the first live improvement pass, 2026-09-08."
+    },
+    {
+      "ts": "2026-09-08T16:38:45+00:00",
+      "event": "status",
+      "detail": "open -> closed (check)"
     }
   ]
 }

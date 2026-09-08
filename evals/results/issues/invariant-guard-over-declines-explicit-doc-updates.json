@@ -1,0 +1,86 @@
+{
+  "id": "invariant-guard-over-declines-explicit-doc-updates",
+  "title": "Invariant guard over-declines explicit documentation and specification updates",
+  "status": "closed",
+  "severity": "high",
+  "summary": "The invariant guard in prompt.py over-declines tasks that explicitly ask to update documentation or migrate specifications, treating existing docs as uneditable invariants.",
+  "diagnosis": "In agent/code/prompt.py (and injected into system_prompt.md via {invariant_guard_section}), INVARIANT_GUARD instructs the agent: 'Never edit a test or a document so that it stops contradicting you. Changing the assertion, deleting the guarantee, or rewriting the page to describe your new behaviour does not resolve the conflict... Do the part of the task that does not conflict. Leave the conflicting part undone.' When a task explicitly asks to update documentation or migrate code to a new spec version (e.g. model-v3-propagation asking to update docs/pipeline.md and normalise for data model v3), the agent treats existing documentation as an immutable invariant forbidding the change. It cites Contradicted Requests, leaves the spec migration incomplete, and fails the scenario.",
+  "fix": "Clarify INVARIANT_GUARD in agent/code/prompt.py so that when a task explicitly instructs to update or rewrite documentation or migrate to a new specification version, updating the documentation and code as requested by the task is recognized as valid work rather than a forbidden document edit.",
+  "lever": "/agent/code/system_prompt.md",
+  "signature": {
+    "kind": "eval",
+    "where": {
+      "scenario": "model-v3-propagation",
+      "failure_class": "reasoning"
+    },
+    "grep": "contradic"
+  },
+  "evidence": [
+    "20260907T073547Z_model-v3-propagation_session-from-notes_code_r1",
+    "20260907T073729Z_model-v3-propagation_session-from-notes_code-step-budget_r1"
+  ],
+  "first_seen": "2026-09-07T07:35:47+00:00",
+  "last_seen": "2026-09-07T07:37:29+00:00",
+  "created": "2026-09-08T16:46:51+00:00",
+  "updated": "2026-09-08T17:21:57+00:00",
+  "tasks": [
+    {
+      "ts": "2026-09-08T17:04:44+00:00",
+      "task_id": "7efe2d9c-7cc4-4ef2-91a6-db1adb7031eb",
+      "agent": "code",
+      "state": "completed",
+      "changed_anything": true,
+      "branch": "improve/invariant-guard-over-declines-explicit-doc-updates",
+      "tests_passed": true,
+      "brief": "Issue: invariant-guard-over-declines-explicit-doc-updates\n\nBehaviour to change:\nIn agent/code/prompt.py, the INVARIANT_GUARD string (\"## Contradicted Requests\") tells the agent: \"Never edit a test or a document so that it stops contradicting you... Do the part of the task that does not conflict. Leave the conflicting part undone.\"\nWhen a task explicitly asks the agent to update documentation or migrate code to a new version of a specification (e.g., updating docs/pipeline.md and normalise for data model v3 in scenario model-v3-propagation), the agent misinterprets existing documentation as an uneditable invariant, refuses to make the requested code and document changes, and leaves the task incomplete.\n\nFile / Lever:\nagent/code/prompt.py\n\nEvidence:\nRuns 20260907T073547Z_model-v3-propagation_session-from-notes_code_r1 and 20260907T073729Z_model-v3-propagation_session-from-notes_code-step-budget_r1 failed because the agent cited \"Contradicted Requests\" as permission to leave required spec"
+    }
+  ],
+  "checks": [
+    {
+      "ts": "2026-09-08T16:47:21+00:00",
+      "since": "",
+      "considered": 105,
+      "matched": 2,
+      "verdict": "open",
+      "matching_runs": [
+        "20260907T073729Z_model-v3-propagation_session-from-notes_code-step-budget_r1",
+        "20260907T073547Z_model-v3-propagation_session-from-notes_code_r1"
+      ]
+    },
+    {
+      "ts": "2026-09-08T17:21:57+00:00",
+      "since": "2026-09-08T17:04:44+00:00",
+      "considered": 2,
+      "matched": 0,
+      "verdict": "closed",
+      "matching_runs": []
+    }
+  ],
+  "history": [
+    {
+      "ts": "2026-09-08T16:46:51+00:00",
+      "event": "opened",
+      "detail": ""
+    },
+    {
+      "ts": "2026-09-08T16:47:19+00:00",
+      "event": "amended",
+      "detail": ""
+    },
+    {
+      "ts": "2026-09-08T17:04:44+00:00",
+      "event": "status",
+      "detail": "open -> fixing"
+    },
+    {
+      "ts": "2026-09-08T17:04:44+00:00",
+      "event": "delegated",
+      "detail": "task 7efe2d9c to code; repository moved"
+    },
+    {
+      "ts": "2026-09-08T17:21:57+00:00",
+      "event": "status",
+      "detail": "fixing -> closed (check)"
+    }
+  ]
+}
