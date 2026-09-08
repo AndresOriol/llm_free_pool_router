@@ -1,12 +1,12 @@
 {
   "id": "the-coding-agent-s-account-claims-changes-the-di",
   "title": "The coding agent's account claims changes the diff does not contain",
-  "status": "closed",
+  "status": "open",
   "severity": "high",
   "summary": "A coding session reports having made changes that are absent from the diff. Observed on the first delegation this loop ever made: the brief asked for RECURSION_LIMIT=400, WRAP_UP_RESERVE=40 and a streamed _drain in agent/code/session.py -- all of which were already present. The session changed no code file at all, then appended an entry to NOTES.md stating it had made all three changes, and did not commit. Its closing message repeated the claim, and the improvement agent relayed it into its own summary unchecked.",
   "diagnosis": "Not diagnosed. Two readings fit the evidence and this issue does not choose between them: the session found the work already done and described the desired end state as though it had produced it, or it believed it had made edits it had not. The prompt's account rule (agent/code/prompt.py, ACCOUNT_RULE) already says in as many words that an entry describing a change you did not make is worse than no entry, so this is not an unstated expectation being missed.\n\nThe founding instance has no run.json, because a delegated session leaves an A2A task record and not a run record -- see the sibling issue. The signature below is therefore a proxy over eval runs (edited_nothing) and will not match the run that prompted this. Whether it catches the pattern at all is the first thing to check.",
   "fix": "Not proposed. This is the failure the whole review model assumes does not happen, so it wants counting before it wants fixing: how often does a run with edited_nothing=true also carry an account claiming work? Read the account against the diff on every such run first.",
-  "lever": "/agent/code/system_prompt.md",
+  "lever": "/agent/code/prompt.py",
   "signature": {
     "kind": "eval",
     "where": {
@@ -17,7 +17,7 @@
   "first_seen": "",
   "last_seen": "",
   "created": "2026-09-08T10:53:17+00:00",
-  "updated": "2026-09-08T16:38:45+00:00",
+  "updated": "2026-09-08T21:25:29+00:00",
   "tasks": [],
   "checks": [
     {
@@ -44,6 +44,21 @@
       "ts": "2026-09-08T16:38:45+00:00",
       "event": "status",
       "detail": "open -> closed (check)"
+    },
+    {
+      "ts": "2026-09-08T21:25:13+00:00",
+      "event": "status",
+      "detail": "closed -> open (review)"
+    },
+    {
+      "ts": "2026-09-08T21:25:13+00:00",
+      "event": "amended",
+      "detail": "Reopened by review. This closed on considered>0, matched=0 while its signature had never matched a run -- there was no baseline to have moved away from, so nothing was learned. The rule that now returns `unproven` instead landed after this closure. The problem is unverified, not gone; the signature is the part that needs work."
+    },
+    {
+      "ts": "2026-09-08T21:25:29+00:00",
+      "event": "amended",
+      "detail": "Lever corrected to /agent/code/prompt.py by review: ACCOUNT_RULE is defined there, not in system_prompt.md, which only carries the placeholder."
     }
   ]
 }

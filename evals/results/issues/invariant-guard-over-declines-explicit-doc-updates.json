@@ -6,7 +6,7 @@
   "summary": "The invariant guard in prompt.py over-declines tasks that explicitly ask to update documentation or migrate specifications, treating existing docs as uneditable invariants.",
   "diagnosis": "In agent/code/prompt.py (and injected into system_prompt.md via {invariant_guard_section}), INVARIANT_GUARD instructs the agent: 'Never edit a test or a document so that it stops contradicting you. Changing the assertion, deleting the guarantee, or rewriting the page to describe your new behaviour does not resolve the conflict... Do the part of the task that does not conflict. Leave the conflicting part undone.' When a task explicitly asks to update documentation or migrate code to a new spec version (e.g. model-v3-propagation asking to update docs/pipeline.md and normalise for data model v3), the agent treats existing documentation as an immutable invariant forbidding the change. It cites Contradicted Requests, leaves the spec migration incomplete, and fails the scenario.",
   "fix": "Clarify INVARIANT_GUARD in agent/code/prompt.py so that when a task explicitly instructs to update or rewrite documentation or migrate to a new specification version, updating the documentation and code as requested by the task is recognized as valid work rather than a forbidden document edit.",
-  "lever": "/agent/code/system_prompt.md",
+  "lever": "/agent/code/prompt.py",
   "signature": {
     "kind": "eval",
     "where": {
@@ -22,7 +22,7 @@
   "first_seen": "2026-09-07T07:35:47+00:00",
   "last_seen": "2026-09-07T07:37:29+00:00",
   "created": "2026-09-08T16:46:51+00:00",
-  "updated": "2026-09-08T17:21:57+00:00",
+  "updated": "2026-09-08T21:25:29+00:00",
   "tasks": [
     {
       "ts": "2026-09-08T17:04:44+00:00",
@@ -81,6 +81,11 @@
       "ts": "2026-09-08T17:21:57+00:00",
       "event": "status",
       "detail": "fixing -> closed (check)"
+    },
+    {
+      "ts": "2026-09-08T21:25:29+00:00",
+      "event": "amended",
+      "detail": "Lever corrected to /agent/code/prompt.py by review: INVARIANT_GUARD is defined there (prompt.py:127); system_prompt.md holds only the {invariant_guard_section} placeholder. Staleness keys off the lever's last commit, so the wrong file disables that check."
     }
   ]
 }
