@@ -8,6 +8,7 @@ The CLI entry points are unchanged and remain the primary way to run one task:
 
     echo "..." | python -m agent.code    ../my-project
     echo "..." | python -m agent.explore ../my-project
+    python -m agent.improve .
 
 This is the same agents, addressable, for when the caller is not a person at a
 terminal.
@@ -30,6 +31,9 @@ Environment:
   AGENT_CONTEXT_FLOOR  override the input-token floor (default 128,000)
   AGENT_PEERS        peers the coding agent may delegate to; unset means
                      `explore`, empty means none
+  IMPROVE_RECORDS    extra directories of recorded runs the `improve` agent may
+                     read; point it at SERVE_RECORD_DIR to include live runs
+                     (docs/19-improvement-agent.md)
   HARNESS_SHELL=1    give the served coding agent an unrestricted shell. Over a
                      network this is remote code execution by design, so it is
                      the operator's deliberate call and never a default

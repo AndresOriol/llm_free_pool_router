@@ -127,8 +127,15 @@ class Runner:
         would make an in-process delegation claim it went over HTTP.
         """
         from agent.code.a2a import CARD as CODE_CARD
+        from agent.improve.a2a import CARD as IMPROVE_CARD
 
-        cards = {CODE_CARD.name: self._addressed(CODE_CARD, base_url)}
+        # `improve` needs nothing this server can check for at start-up: what it
+        # reads is the recorded runs in the *bound workspace*, and a workspace
+        # arrives with a task. Its handler refuses a workspace with no runs in
+        # it, which is the same probe one step later
+        # ([improve/a2a.py](../improve/a2a.py)).
+        cards = {CODE_CARD.name: self._addressed(CODE_CARD, base_url),
+                 IMPROVE_CARD.name: self._addressed(IMPROVE_CARD, base_url)}
         self.search_pool = None
 
         # The imports are in their own `try` because `NoSearchPool` comes from
@@ -343,5 +350,22 @@ class Runner:
             return make_handler(self.model, workdir, self.search_pool,
                                 floor=self.floor, members=self.members,
                                 recursion_limit=self.recursion_limit)
+
+        if agent == "improve":
+            from agent.improve.a2a import make_handler
+            from agent.protocol import peers
+
+            # One peer, `code`, because what this agent delegates is a fix. It
+            # runs in this process on the same provider objects, so a delegated
+            # coding session shares the pass's cooldown and lands in its trace.
+            transport = peers.build_transport(
+                self.router, self.model, workdir, floor=self.floor,
+                members=self.members, recursion_limit=self.recursion_limit,
+                peers=("code",), allow_shell=self.allow_shell,
+                record_dir=(record_dir / "a2a") if record_dir else None)
+            return make_handler(self.model, workdir, floor=self.floor,
+                                members=self.members,
+                                recursion_limit=self.recursion_limit,
+                                transport=transport)
 
         raise KeyError(f"no handler for agent {agent!r}")
