@@ -1,4 +1,4 @@
-"""The six tools the improvement loop needs, and nothing else.
+"""The seven tools the improvement loop needs, and nothing else.
 
 Tool schemas are 91% of what a step of this loop spends
 ([6.4](../../docs/06-agent.md#64-why-it-is-shaped-this-way)), so the count here
@@ -12,6 +12,13 @@ is a budget rather than a preference. Each one is a stage of the loop:
 | `delegate_fix` | hand the fix to `agent/code`, recorded against the issue |
 | `run_evals` | make new evidence, on the branch the fix landed on |
 | `check_issue` | replay the signature; close it, or reopen it |
+| `draft_scenario` | grow the instrument — a failed run becomes an eval case |
+
+`draft_scenario` is the odd one out and earns its schema: the eval set is what
+bounds every claim this loop can make, including about its own fixes, and five
+scenarios cannot tell one configuration from another
+([6.4.2](../../docs/06-agent.md#642-the-pass-column-is-noise)). A tool that
+turns a failure into a test is the only one here that raises that ceiling.
 
 Two shapes are deliberate and both are about the pool that serves this agent.
 
@@ -38,6 +45,7 @@ from pathlib import Path
 from agent.improve import issues as issues_mod
 from agent.improve import records as records_mod
 from agent.improve import repo
+from agent.improve import scenarios as scenarios_mod
 
 logger = logging.getLogger("harness.improve")
 
@@ -79,6 +87,7 @@ def make_tools(workdir: Path, transport=None) -> dict:
 
     workdir = Path(workdir)
     store = issues_mod.IssueStore(workdir)
+    drafts = scenarios_mod.DraftStore(workdir)
 
     def _records() -> list:
         return records_mod.discover(records_mod.default_roots(workdir))
@@ -379,6 +388,77 @@ def make_tools(workdir: Path, transport=None) -> dict:
             f"a configuration pins `master`, so without it you would measure "
             f"the unfixed code and conclude the fix failed.")
 
+    # -- grow the instrument -----------------------------------------------
+
+    def draft_scenario(title: str, prompt: str, fail_to_pass: str,
+                       source_run: str = "", id: str = "", seed: str = "",
+                       challenge: str = "", pass_to_pass: str = "",
+                       traps: str = "", invariants: str = "",
+                       category: str = "bugfix", difficulty: str = "L1",
+                       archetype: str = "", build: str = "") -> str:
+        """Describe an eval scenario drawn from a run, and optionally build it.
+
+        A run the agent failed is a description of a test it would fail. The set
+        has five scenarios and cannot currently tell one configuration from
+        another, so a good scenario is worth more than most fixes — including
+        to you, since every claim you make about a fix rests on it.
+
+        `prompt` is the exact text the agent would be given. `fail_to_pass` is
+        what must go from failing to passing; without it the scenario decides
+        nothing and this refuses. `traps` names the answers that satisfy the
+        task's letter and miss it — a scenario with none is not worth building.
+        `category` is bugfix|feature|refactor|tests|ambiguous|trap, `difficulty`
+        L0..L3. `source_run` is read for provenance, so the brief cannot claim a
+        failure the run did not have.
+
+        Pass `build="yes"` to hand the finished draft to a coding session in the
+        scenario repository. That costs a whole session, so draft first, read it
+        back, and build when it is right.
+        """
+        record = (records_mod.load(workdir, source_run) if source_run else None)
+        if source_run and record is None:
+            return (f"error: no run called {source_run!r}, so the draft would "
+                    f"have no provenance. Use `find_runs`, or leave "
+                    f"`source_run` empty and say in `challenge` where this "
+                    f"came from.")
+        try:
+            made = scenarios_mod.draft(drafts, {
+                "id": id, "title": title, "prompt": prompt,
+                "fail_to_pass": fail_to_pass, "pass_to_pass": pass_to_pass,
+                "seed": seed, "challenge": challenge, "traps": traps,
+                "invariants": invariants, "category": category,
+                "difficulty": difficulty, "archetype": archetype,
+                "source_run": source_run}, record)
+        except (ValueError, OSError) as exc:
+            return f"error: {exc}. Nothing written."
+
+        written = f"Wrote `{drafts.path(made.id)}`.\n\n{made.render()}"
+        if str(build).strip().lower() not in ("yes", "true", "1"):
+            return _clip(
+                written + "\n\n---\n\nNothing has been built. Read this back, "
+                "and call again with `build=\"yes\"` when it is right — or "
+                "leave it as a brief for a human, which is a complete result.")
+
+        if transport is None or "scenarios" not in transport.registry.names:
+            return _clip(
+                written + "\n\n---\n\n**It cannot be built from here.** No "
+                "`scenarios` agent is reachable, which means the scenario "
+                "repository was not found. The draft is on disk and a coding "
+                "session pointed at that repository can build it from the file.")
+
+        from agent.protocol.local import render
+        from agent.protocol.types import Message
+
+        task = transport.message_send("scenarios", Message.user(
+            scenarios_mod.builder_brief(made, "the eval scenario repository")))
+        return _clip(
+            f"{written}\n\n---\n\n{render(task, 'scenarios')}\n\n"
+            f"**A scenario is not built until its gate passes.** Run "
+            f"`python -m evals validate --scenario <tag>`: it checks that the "
+            f"untouched seed fails `fail_to_pass`, that the gold patch makes it "
+            f"pass, and that nothing under `evaluation/` leaked into the "
+            f"workdir. Until then this is a directory, not an instrument.")
+
     # -- make new evidence -------------------------------------------------
 
     def run_evals(config: str = "code", scenario: str = "", reps: int = 1,
@@ -479,6 +559,9 @@ def make_tools(workdir: Path, transport=None) -> dict:
             func=run_evals, name="run_evals", description=run_evals.__doc__),
         "check_issue": StructuredTool.from_function(
             func=check_issue, name="check_issue", description=check_issue.__doc__),
+        "draft_scenario": StructuredTool.from_function(
+            func=draft_scenario, name="draft_scenario",
+            description=draft_scenario.__doc__),
     }
     if transport is not None and "code" in transport.registry.names:
         made["delegate_fix"] = StructuredTool.from_function(

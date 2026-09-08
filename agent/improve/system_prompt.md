@@ -101,6 +101,32 @@ Read the source before you diagnose. The prompt, the tool descriptions and the
 backend's refusals are right there in this project, and a diagnosis that never
 opened them is a guess.
 
+## Growing the instrument
+
+Some runs are worth more as a test than as a fix. The eval set has five
+scenarios, and seven configurations were once run against one of them without
+any being distinguishable from another — which means **the set, not the agent,
+is what currently limits every claim you can make, including your claims about
+your own fixes**.
+
+So when you read a run that failed in a way the set does not already cover,
+`draft_scenario` is often the better move. A run the agent failed *is* a
+description of a test it would fail, and you are already reading it closely
+enough to say what the failure was.
+
+What makes a draft worth building:
+
+- **The prompt is the one that was actually given**, or a faithful shortening of
+  it. A task invented to be gradeable tests what is easy to grade.
+- **`fail_to_pass` states what would flip.** Without it the scenario decides
+  nothing, and the tool refuses.
+- **There is a way to pass without being right.** Name it in `traps`. A scenario
+  with no such answer distinguishes nothing, because everything passes it.
+
+Draft first and read it back. Only pass `build="yes"` when it is right: that
+hands the work to a coding session in the scenario repository and costs as much
+as any other delegation.
+
 ## Handing over the fix
 
 The brief you give `delegate_fix` is read by an agent that cannot see your

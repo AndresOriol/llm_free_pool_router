@@ -46,7 +46,15 @@ def requested_peers() -> tuple:
     return tuple(name.strip() for name in raw.split(",") if name.strip())
 
 
-KNOWN_PEERS = ("explore", "code")
+KNOWN_PEERS = ("explore", "code", "scenarios")
+
+# Where the eval scenarios live. They are a separate repository on purpose, so
+# they survive branch switching in this one
+# ([8.3](../../docs/08-evaluation-method.md#83-where-things-live)) -- which also
+# means a coding agent jailed to this repo cannot reach them, and a second
+# binding is the only way an agent here can build one.
+SCENARIOS_ENV = "EVAL_SCENARIOS"
+DEFAULT_SCENARIOS = "agent_evals"
 
 
 def build_transport(router, model, workdir: Path, *, floor: int, members: int,
@@ -80,6 +88,10 @@ def build_transport(router, model, workdir: Path, *, floor: int, members: int,
         _register_code(registry, router, model, workdir, floor=floor,
                        members=members, recursion_limit=recursion_limit,
                        record_dir=record_dir, allow_shell=allow_shell)
+    if "scenarios" in wanted:
+        _register_scenarios(registry, model, floor=floor, members=members,
+                            recursion_limit=recursion_limit,
+                            allow_shell=allow_shell)
 
     unknown = [n for n in wanted if n not in KNOWN_PEERS]
     if unknown:
@@ -118,6 +130,58 @@ def _register_code(registry: AgentRegistry, router, model, workdir: Path, *,
         model, workdir, floor=floor, members=members,
         recursion_limit=recursion_limit, allow_shell=allow_shell,
         transport=inner))
+
+
+def scenario_repo() -> Optional[Path]:
+    """Where the scenario repository is, if it is there. A probe, not a guess."""
+    raw = os.environ.get(SCENARIOS_ENV)
+    path = (Path(raw) if raw
+            else Path(__file__).resolve().parents[2].parent / DEFAULT_SCENARIOS)
+    return path.resolve() if (path / ".git").is_dir() else None
+
+
+def _register_scenarios(registry: AgentRegistry, model, *, floor: int,
+                        members: int, recursion_limit: int,
+                        allow_shell: bool) -> None:
+    """Offer the coding agent again, bound to the scenario repository.
+
+    Not a new agent -- the same handler, the same prompt, the same jail, with
+    its `/` at `agent_evals` instead of here. Two bindings of one agent is what
+    the serving layer already does per task
+    ([18.4](../../docs/18-serving.md#184-binding-an-agent-to-a-repository-or-a-filesystem));
+    this brings it to the local transport, because an eval scenario cannot be
+    built by an agent jailed to the repository the scenarios are deliberately
+    kept out of.
+
+    Registered only when the repository is actually there, on the same rule as
+    `explore`: an agent advertised and then unable to work costs its caller a
+    whole task to discover it ([registry](registry.py)).
+
+    It gets no peers of its own. A session writing a test fixture has nothing to
+    delegate, and the nesting would be a second workspace to reason about.
+    """
+    from dataclasses import replace
+
+    from agent.code.a2a import CARD, make_handler
+
+    repo = scenario_repo()
+    if repo is None:
+        logger.warning(
+            f"Not offering the `scenarios` agent: no git repository at "
+            f"{os.environ.get(SCENARIOS_ENV) or DEFAULT_SCENARIOS}. Set "
+            f"{SCENARIOS_ENV} if it lives elsewhere.")
+        return
+
+    card = replace(
+        CARD, name="scenarios",
+        description=(f"The coding agent, bound to the eval scenario repository "
+                     f"at {repo.name} instead of this project. Use it to build "
+                     f"a scenario that has been drafted — a seed, a task, and "
+                     f"the withheld tests that decide it."))
+    registry.register(card, make_handler(
+        model, repo, floor=floor, members=members,
+        recursion_limit=recursion_limit, allow_shell=allow_shell,
+        transport=None))
 
 
 def _register_explore(registry: AgentRegistry, router, model, workdir: Path, *,

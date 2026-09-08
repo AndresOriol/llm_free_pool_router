@@ -22,7 +22,9 @@ Environment:
   IMPROVE_RECORDS    extra directories of recorded runs, comma-separated;
                      `evals/results/runs` is always read
   IMPROVE_EVAL_TIMEOUT  ceiling in seconds on one `run_evals` call (default 3600)
-  IMPROVE_FIX=0      diagnose only -- no `code` peer, so no fix can be delegated
+  IMPROVE_FIX=0      diagnose only -- no peers, so nothing can be delegated
+  EVAL_SCENARIOS     the scenario repository, for building a drafted scenario;
+                     unset looks for `agent_evals` beside this one
   HARNESS_SHELL=1    give the *delegated* coding agent an unrestricted shell.
                      This agent never gets one: it runs no programs but `git`.
 """
@@ -106,11 +108,13 @@ def main() -> None:
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
         trace_file = Path(os.environ["EVAL_TRACE_FILE"]).with_name("trace.json")
 
-    # One peer, `code`, and only because a fix has to be made by somebody.
+    # Two peers: `code` for a fix in this repository, and `scenarios` -- the
+    # same coding agent bound to the eval repo -- for building a scenario the
+    # pass has drafted. `scenarios` registers only if that repo is really there.
     # IMPROVE_FIX=0 takes it away, which leaves a diagnose-only pass -- the arm
     # to compare against when asking whether the delegation is worth what it
     # spends (docs/19-improvement-agent.md).
-    wanted = () if os.environ.get("IMPROVE_FIX") == "0" else ("code",)
+    wanted = () if os.environ.get("IMPROVE_FIX") == "0" else ("code", "scenarios")
     transport = peers.build_transport(
         router, model, workdir, floor=floor, members=members,
         recursion_limit=RECURSION_LIMIT, peers=wanted,
