@@ -119,13 +119,14 @@ class AutonomousLLMRouter:
         every candidate is spent it says nothing useful, so priority decides as
         it always did and the provider gets the last word.
         """
-        # Slow failures can outlast another member's cooldown. Try the rest of
+        # The ledger's funded set remains the first preference. Within it, slow
+        # failures can outlast another member's cooldown, so try the rest of
         # the fitting pool before revisiting those failures in this request.
         # This is a preference: a lone recovered member must still be usable.
-        untried = [p for p in candidates if p.name not in (attempted or ())]
-        candidates = untried or candidates
         funded = [p for p in candidates if self.quota.has_budget(p)]
-        return min(funded or candidates, key=lambda p: p.priority)
+        candidates = funded or candidates
+        untried = [p for p in candidates if p.name not in (attempted or ())]
+        return min(untried or candidates, key=lambda p: p.priority)
 
     def seconds_until_available(self,
                                 min_context: Optional[int] = None) -> Optional[float]:
