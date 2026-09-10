@@ -70,7 +70,9 @@ MAX_SEARCHES_PER_SUBAGENT = 5
 def orchestrator_prompt() -> str:
     """Upstream's two orchestrator sections, joined the way upstream joins them."""
     return (
-        deep_prompts.RESEARCH_WORKFLOW_INSTRUCTIONS
+        f"Today's research date is {date.today().isoformat()}. Use this date for "
+        "the report; distinguish it from publication dates of sources.\n\n"
+        + deep_prompts.RESEARCH_WORKFLOW_INSTRUCTIONS
         + "\n\n" + "=" * 80 + "\n\n"
         + deep_prompts.SUBAGENT_DELEGATION_INSTRUCTIONS.format(
             max_concurrent_research_units=MAX_CONCURRENT_RESEARCH_UNITS,
@@ -82,6 +84,8 @@ def orchestrator_prompt() -> str:
 
 def researcher_subagent(tools: list) -> dict:
     """The `research-agent` sub-agent, as upstream declares it."""
+    from langchain.agents.middleware import ToolCallLimitMiddleware
+
     return {
         "name": "research-agent",
         "description": ("Delegate research to the sub-agent researcher. Only "
@@ -90,6 +94,11 @@ def researcher_subagent(tools: list) -> dict:
             date=date.today().isoformat(),
             max_searches=MAX_SEARCHES_PER_SUBAGENT),
         "tools": tools,
+        # Keep the stated budget real, but let the researcher save findings
+        # and explain gaps after search is exhausted. State is per invocation.
+        "middleware": [ToolCallLimitMiddleware(
+            tool_name="tavily_search", run_limit=MAX_SEARCHES_PER_SUBAGENT,
+            exit_behavior="continue")],
     }
 
 

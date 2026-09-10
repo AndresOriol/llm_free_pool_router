@@ -1,0 +1,8 @@
+name: explore-decision-led
+repo: ../..
+ref: codex/improve-explore-research
+env_file: ../../llm_router/.env
+agent_cmd: [python, -m, agent.explore, "{workdir}"]
+overrides:
+  router_config: llm_router/config.yaml
+  env: {}

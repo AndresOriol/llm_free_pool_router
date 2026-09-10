@@ -311,6 +311,41 @@ failing the run for it — but it is a real regression in crash-resilience for a
 agent meant to run unattended, and it is the first thing to revisit if a long
 run dies late.
 
+### 15.8.4 Decision-led research candidate
+
+Branch `codex/improve-explore-research` adapts the workflow to the Machintl
+reference business-analysis session. Before delegation, the orchestrator saves
+a plan tying the reader's decision and constraints to evidence requirements.
+Independent scenarios stay separate; shared constraints such as legality or
+economics get scoped workstreams when they could change the decision. Briefs
+carry context and a unique findings path, and researchers are asked to save
+partial evidence before returning. The numeric delegation and search limits
+remain unchanged. `ToolCallLimitMiddleware` now enforces the five-search limit
+separately for each researcher invocation; it blocks further searches while
+leaving file writes and synthesis available. The control run exceeded that
+limit and accumulated large histories that then hit per-minute token quotas.
+
+The report leads with findings for each scenario, uses comparable tables,
+distinguishes sourced facts, vendor claims and estimates, and names validation
+steps that could change its recommendation. The orchestrator receives the
+current research date explicitly. Researchers and the synthesis use direct
+source links: the first candidate reused note-local citation numbers in the
+combined bibliography, binding industrial claims to retail sources. Three sources are sufficient only
+when they cover the assigned questions. These are instructions, not guarantees
+of citation quality or crash recovery. The
+[capability queue](../.Codex/artifacts/2026-09-10-explore-capability-issues.md)
+records the reference, live evidence and future eval contracts; no claim of
+parity with Claude follows from copying its method.
+
+The [live comparison](../evals/results/reports/2026-09-10-explore-machintl.md)
+completed one control and two candidate reports. The revised candidate saved
+sector findings and corrected the date and citation-number collisions, but
+still made unsupported legal and commercial claims. It did not perform the
+requested follow-up verification. The candidate is **not promoted**: one task
+cannot establish a quality gain, and the last run also changed models after
+daily quota exhaustion. The deterministic search-budget and routing checks
+pass; they establish infrastructure behavior, not research quality.
+
 ## 15.9 What the grounded-Gemini search was
 
 *Deleted, and recorded here because the reasoning outlived the code and one of
