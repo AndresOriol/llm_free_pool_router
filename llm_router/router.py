@@ -34,7 +34,8 @@ class AutonomousLLMRouter:
 
     def get_best_provider(self, estimated_tokens: Optional[int] = None,
                           min_context: Optional[int] = None,
-                          strict_context: bool = False) -> Optional[LLMProvider]:
+                          strict_context: bool = False,
+                          attempted: Optional[set[str]] = None) -> Optional[LLMProvider]:
         """Return the highest-priority available provider that fits the request.
 
         `estimated_tokens` (from `estimate_tokens`) filters out providers whose
@@ -98,25 +99,31 @@ class AutonomousLLMRouter:
                 return None
 
         if estimated_tokens is None:
-            return self._cheapest(available)
+            return self._cheapest(available, attempted)
 
         fits = [p for p in available
                 if p.max_input_tokens is None
                 or p.max_input_tokens * _FIT_SAFETY >= estimated_tokens]
         if fits:
-            return self._cheapest(fits)
+            return self._cheapest(fits, attempted)
         # Nothing fits, so the largest window is the only thing that might: it
         # is offered whatever the ledger says about its budget, because a member
         # too small for the request is not an alternative to one that is spent.
         return max(available, key=lambda p: p.max_input_tokens or 0)
 
-    def _cheapest(self, candidates: List[LLMProvider]) -> LLMProvider:
+    def _cheapest(self, candidates: List[LLMProvider],
+                  attempted: Optional[set[str]] = None) -> LLMProvider:
         """The highest-priority candidate, preferring ones with quota left.
 
         `funded or candidates` is the whole tolerance rule: when the ledger says
         every candidate is spent it says nothing useful, so priority decides as
         it always did and the provider gets the last word.
         """
+        # Slow failures can outlast another member's cooldown. Try the rest of
+        # the fitting pool before revisiting those failures in this request.
+        # This is a preference: a lone recovered member must still be usable.
+        untried = [p for p in candidates if p.name not in (attempted or ())]
+        candidates = untried or candidates
         funded = [p for p in candidates if self.quota.has_budget(p)]
         return min(funded or candidates, key=lambda p: p.priority)
 

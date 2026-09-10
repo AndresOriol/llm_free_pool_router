@@ -56,6 +56,13 @@ def _run():
 
     # 100k fits only the big window.
     assert router.get_best_provider(100000) is big
+    # Retry preference never trades away fit or the caller's strict floor.
+    assert router.get_best_provider(100000, attempted={big.name}) is big
+    assert router.get_best_provider(3000, 100000, True,
+                                    attempted={big.name}) is big
+    # It is a preference, not exclusion: a lone recovered member can serve.
+    assert router.get_best_provider(3000, attempted={small.name, mid.name,
+                                                    big.name}) is small
 
     # Bigger than every window -> fall back to the largest, don't stall.
     assert router.get_best_provider(500000) is big

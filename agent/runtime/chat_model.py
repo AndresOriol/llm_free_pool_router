@@ -98,9 +98,11 @@ class RouterChatModel(BaseChatModel):
         last_exc: Optional[Exception] = None
         # Size the request once so routing can skip models it would overflow.
         estimated = estimate_tokens(messages, self.bound_tools)
+        attempted: set[str] = set()
         for _ in range(self.max_retries):
             provider = self.router.get_best_provider(estimated, self.min_context,
-                                                     self.strict_context)
+                                                     self.strict_context,
+                                                     attempted=attempted)
             if provider is None:
                 if self._wait_for_cooldown():
                     continue
@@ -108,6 +110,7 @@ class RouterChatModel(BaseChatModel):
 
             logger.info(f"Routing to {provider.name} (model={provider.model}, "
                         f"~{estimated} tok).")
+            attempted.add(provider.name)
             try:
                 # The instant the request goes out, which is the one the vendor
                 # meters it against. Recording when the reply landed instead put
@@ -122,6 +125,7 @@ class RouterChatModel(BaseChatModel):
                 # nesting and trips the tracer's run_map ("No indexed run ID").
                 message = self._underlying(provider).invoke(
                     messages, config=self.provider_config, stop=stop, **kwargs)
+                provider.consecutive_failures = 0
                 usage.record_call(provider, message, started=issued)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below

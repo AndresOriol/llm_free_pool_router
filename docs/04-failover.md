@@ -180,6 +180,18 @@ working accounts under it. That is precisely the stall
 
 ## 4.4 Cooldown and backoff
 
+The failure streak resets when a call succeeds, not when its cooldown expires.
+Expiry only permits another attempt. Resetting on expiry made every slow 503
+start at 30 seconds again, so the documented exponential backoff never grew.
+The Machintl research baseline reproduced this on September 10, 2026.
+
+Within one model request, selection also prefers fitting, available members
+that have not yet been tried over members that already failed that request.
+This prevents slow failures from rotating between the first two priorities
+while the rest of the pool goes unused. Context constraints still apply first;
+when all suitable available members have been tried, ordinary selection and
+cooldown waiting remain available. This preference is local to the request.
+
 When a provider fails transiently it is benched:
 
 - If the provider sent a `Retry-After` header, that value is authoritative and
