@@ -45,4 +45,74 @@ The repository suite passed 372 tests in 68 seconds ([v2 tests.log](../runs/2026
 
 We author both the harness changes and this assessment. That makes the lower candidate-v1 cost attractive evidence, while its source-binding defects cut against the same work. The report therefore treats the result as a rejected quality candidate and calls for fixed-source, human-reviewable contracts rather than claiming the design helped.
 
+## Candidate v3 — the tailored tool surface
+
+*Added after a live run of `d20f374` against the same question. **Not
+promoted**, and weaker evidence than the arms above: this run wrote no trace,
+so its provider numbers come from the router's usage ledger
+(`llm_router/.usage/ledger.jsonl`, the 13:10:05–13:26:47 segment) rather than
+from an experiment record, and its search count, step count and tool counts are
+simply unknown.*
+
+The configuration change is the agent's tool surface, not its method: `ls`,
+`glob`, `grep` and `execute` are no longer offered, the project tree is out of
+the system prompt, the `/research/` listing is injected on every call, and four
+tool descriptions are rewritten
+([15.5.1](../../../docs/15-explorer.md#1551-the-surface-is-chosen-not-inherited)).
+
+| | candidate v2 | candidate v3 |
+| --- | ---: | ---: |
+| tokens in | 1,454,307 (trace) | 1,434,961 (ledger) |
+| successful model calls | 57 | 43 |
+| tokens per successful call | 25,514 | 33,371 |
+| provider errors | 9 bounces (trace) | 58 attempts failed (ledger) |
+| wall clock | 7.3 min | 16.7 min |
+| model | gemini-3.6-flash | gemini-3.7 / 3.8-flash |
+| files written | 5 | 4 |
+| links in report | 57 across 16 domains | 39 across 16 domains |
+| primary-source domains | `aepd.es` (3 links) | none |
+
+**The one number that is not an observation.** Measured on the assembled agent
+rather than on a run: the fixed per-call overhead — system prompt plus every
+tool schema, before any conversation — falls from 47,187 to 36,568 characters,
+about 2,650 tokens on every model call, and the tool count from 11 to 7. That is
+deterministic and reproducible. It is also the only thing here that is.
+
+**What the run does not show.** Total input tokens moved 1.3%, which is noise
+against a change of model, a different day's provider state, and n=1. The 58
+failed attempts are Gemini 503s and rate limits, not a property of this
+configuration; they are why the run took 16.7 minutes for less work. Fewer
+successful calls carrying more tokens each is consistent with removing tool
+steps, and equally consistent with a longer conversation being retried.
+
+**Where it is better.** The report leads with a comparison matrix and separates
+the two scenarios; the Sources section says what each source establishes; the
+date is right; citations are direct links with no numbering collisions. The
+commercial claims v2 asserted without any retrieved source — pricing bands,
+margins, payback — are now attached to named pages.
+
+**Where it is not, and this is the dimension the arms above were rejected on.**
+The pages those claims are attached to are vendor marketing: payback of 4–9
+months to a video-analytics vendor's own ROI post, integration margins to an
+inspection vendor's pricing blog, shrinkage benchmarks to two content-marketing
+pages. The report does not label them as vendor claims, though its instructions
+ask it to separate sourced facts, vendor claims and estimates. **Every legal
+conclusion rests on secondary commentary** — an AEPD sanction cited through a
+surveillance vendor's blog post, the AI Act through a compliance vendor's guide
+— where v2 at least reached `aepd.es`. Zero primary sources is a regression on
+the evidence axis, not an improvement.
+
+**One artefact regression.** v2 saved a `research_plan.md`; this run saved none,
+tracking its workstreams in `write_todos` instead. The rewritten `write_todos`
+description calls the todo list "the plan", which is the plausible cause and
+was not intended; the workflow instruction to save a plan beside the request is
+unchanged and was not followed.
+
+**Verdict.** A tool-surface change that provably shrinks what every call
+carries, and shows no measured effect on research quality — with one evidence
+metric moving the wrong way. It cannot be promoted on this run, and it does not
+need to be reverted on it either: recommendation 2 above (paired runs, one
+model, fresh quota, evidence contracts) is what would decide it, and it is still
+the outstanding work.
+
 ## Comments
