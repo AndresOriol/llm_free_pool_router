@@ -84,8 +84,25 @@ def make_research_tools(pool, *, max_results: int = DEFAULT_MAX_RESULTS):
     def tavily_search(query: str) -> str:
         """Search the web and return the full text of the pages found.
 
-        Ask a whole question, not a string of keywords. Returns each result's
-        title, URL and page content as markdown — cite those URLs.
+        This is the only way anything from outside this workspace reaches you.
+        It searches, then opens every result and converts it to markdown, so
+        what comes back is the page itself — there is no summary in between and
+        no second tool to open a source with. Each result arrives as its title,
+        its URL, and its content; a page too long to return whole is cut and
+        says where it was cut.
+
+        Ask a whole question, not a string of keywords: `"tavily api pricing
+        free tier"` retrieves, but "What does Tavily's free tier include per
+        month, and what happens at the limit?" retrieves *and* tells the engine
+        what you are trying to learn.
+
+        - Cite the URL this returned, exactly, next to the claim it supports.
+          Never write down a plausible-looking address you did not receive.
+        - A page that would not open comes back saying so. That is information —
+          record it as a source you could not read, do not cite it for figures.
+        - One call costs a search credit from a small monthly pool and a model
+          call from a daily one. Repeating a question you have already asked
+          costs the same as asking the next one.
         """
         if not query.strip():
             return "error: the query is empty."
@@ -112,11 +129,27 @@ def make_research_tools(pool, *, max_results: int = DEFAULT_MAX_RESULTS):
                 + "\n".join(blocks))
 
     def think_tool(reflection: str) -> str:
-        """Record a reflection on what the last search found and what is missing.
+        """Stop and examine your own research before continuing it.
 
-        Use after every search, before deciding whether to search again. Address:
-        what concrete information you now have, what is still missing, whether
-        you have enough to answer, and whether to continue or stop.
+        Use after every search, before deciding whether to search again. It
+        retrieves nothing and changes nothing; it is a step that exists purely
+        so the decision to keep going is made deliberately once, rather than by
+        default a dozen times.
+
+        Write, in plain sentences:
+
+        - **What this search actually established** — the specific fact, with
+          the page it came from. "Useful background" is not a finding.
+        - **What it did not.** Name the question that is still open, and whether
+          the last two searches have started returning the same thing.
+        - **Where the answer is weakest.** Which claim rests on a single source,
+          a vendor's own page, or your inference rather than something you read.
+          That is what the next search should attack — not the part you have
+          already confirmed twice.
+        - **Whether you are done.** Say it either way. Enough evidence to answer,
+          with the gaps named, is a finished job; a run that keeps searching
+          because it has budget left is spending someone's day of requests on
+          confirmation.
         """
         return f"Reflection recorded: {reflection}"
 

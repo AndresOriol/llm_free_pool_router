@@ -14,9 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-from agent.explore import prompt, research_tools, session
+from agent.explore import notes, prompt, research_tools, session, tools
 from agent.runtime.backend import RestrictedShellBackend
 
 
@@ -237,3 +238,161 @@ def test_the_prompt_no_longer_teaches_keyword_search():
     example = ("What fields does a SWE-bench instance carry and what is each "
                "for?")
     assert example in text and _looks_like_a_question(example)
+
+
+# --- the tool surface -------------------------------------------------------
+# What the model is *offered*. The jail is the boundary and is checked above;
+# this is about what the schema invites, which is a different failure: a tool
+# that is always refused, or a listing tool whose answer is already in the
+# prompt, costs a request out of a daily budget to learn nothing
+# (agent/explore/tools.py).
+
+
+class _Recorder(GenericFakeChatModel):
+    """A model that records the tools and the system message it was handed."""
+
+    def bind_tools(self, tools, **kwargs):
+        _Recorder.seen.append([getattr(t, "name", "") for t in tools])
+        _Recorder.described.update({getattr(t, "name", ""): getattr(t, "description", "")
+                                    for t in tools})
+        return self
+
+    def _generate(self, messages, *args, **kwargs):
+        _Recorder.system.append(messages[0].text)
+        return super()._generate(messages, *args, **kwargs)
+
+
+def _recorder():
+    _Recorder.seen, _Recorder.system, _Recorder.described = [], [], {}
+    return _Recorder(messages=iter([AIMessage("done")]))
+
+
+def test_the_explorer_is_offered_exactly_its_six_capabilities(tmp_path):
+    """Read a named file, write one, edit one, plan, delegate, search, reflect
+    -- and nothing for browsing a repository it was never asked to explore."""
+    model = _recorder()
+    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
+        {"messages": [("user", "research something")]})
+
+    assert _Recorder.seen[0] == ["write_todos", "read_file", "write_file",
+                                 "edit_file", "task", "tavily_search",
+                                 "think_tool"]
+
+
+def test_the_researcher_sub_agent_gets_the_same_surface(tmp_path):
+    """It is built by the framework with its own copy of the filesystem tools,
+    so without its own copy of the middleware it would be the one thing left in
+    this system able to grep the project."""
+    from deepagents import create_deep_agent
+
+    model = _recorder()
+    spec = session.researcher_subagent(
+        list(research_tools.make_research_tools(pool=None).values()),
+        tmp_path / session.RESEARCH_DIR)
+    create_deep_agent(
+        model=model, tools=spec["tools"], system_prompt=spec["system_prompt"],
+        middleware=spec["middleware"],
+        backend=RestrictedShellBackend(root_dir=str(tmp_path),
+                                       allowed_programs=()),
+    ).invoke({"messages": [("user", "research something")]})
+
+    for excluded in tools.EXCLUDED:
+        assert excluded not in _Recorder.seen[0]
+    assert "tavily_search" in _Recorder.seen[0]
+
+
+def test_the_rewritten_descriptions_reach_the_model(tmp_path):
+    """Upstream's are a coding agent's: `read_file` explains itself in terms of
+    codebase exploration and `write_todos` ends by saying the deliverable is the
+    final message, which is the opposite of what this agent is told."""
+    model = _recorder()
+    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
+        {"messages": [("user", "research something")]})
+
+    described = {name: _flat(text)
+                 for name, text in _Recorder.described.items()}
+    # Upstream's `read_file` sells pagination as the way to survive reading a
+    # codebase; this one says where its two sources of paths are.
+    assert "codebase exploration" not in described["read_file"]
+    assert "There is no `ls`, no `glob` and no `grep`" in described["read_file"]
+    # And upstream's `write_todos` closes by insisting the answer belongs in the
+    # final message. Here the final message is clipped before its caller sees it.
+    assert "the answer is the file under `/research/`" in described["write_todos"]
+    assert "This replaces the whole file." in described["write_file"]
+
+
+def test_tailoring_does_not_mutate_the_tools_it_was_given():
+    """The tool objects are shared with the graph and with any other agent over
+    the same backend; rewriting one in place would change a description the
+    coding agent relies on."""
+    from langchain_core.tools import StructuredTool
+
+    def read_file(file_path: str) -> str:
+        """Original description."""
+        return ""
+
+    original = StructuredTool.from_function(func=read_file, name="read_file",
+                                            description="Original description.")
+    tailored = tools._tailor([original])
+
+    assert tailored[0].description == tools.READ_FILE
+    assert original.description == "Original description."
+
+
+# --- the research directory, in place of `ls` -------------------------------
+
+
+def test_the_research_directory_is_listed_in_every_system_message(tmp_path):
+    """The one listing this agent gets. It is rebuilt per call because it is the
+    agent's own output: a note written an hour ago is gone from the conversation
+    after summarization, and the directory is what still remembers it."""
+    (tmp_path / session.RESEARCH_DIR).mkdir()
+    (tmp_path / session.RESEARCH_DIR / "pricing.md").write_text(
+        "# What the vendors charge\n\nbody\n", encoding="utf-8")
+
+    model = _recorder()
+    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
+        {"messages": [("user", "research something")]})
+
+    text = _Recorder.system[0]
+    assert "/research/pricing.md" in text
+    assert "What the vendors charge" in text
+
+
+def test_an_empty_research_directory_says_so(tmp_path):
+    """Silence would read as "no directory". "Nothing is written yet" is the
+    state in which a crash costs the whole run."""
+    assert "empty" in notes.section(tmp_path / "research")
+
+
+def test_the_listing_survives_a_note_it_cannot_read(tmp_path):
+    """A listing that raises would end a run over a file permission."""
+    research = tmp_path / "research"
+    research.mkdir()
+    (research / "unreadable.md").write_text("", encoding="utf-8")
+
+    assert "/research/unreadable.md" in notes.listing(research)
+
+
+def test_the_project_tree_is_not_in_the_prompt(tmp_path):
+    """The coding agent opens with one because it has to find its way around a
+    repository. This agent is given its question, and the paths worth reading
+    belong in the brief -- so a tree here is an invitation to the one thing the
+    surface no longer supports."""
+    (tmp_path / "some_package").mkdir()
+
+    model = _recorder()
+    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
+        {"messages": [("user", "research something")]})
+
+    assert "some_package" not in _Recorder.system[0]
+
+
+def test_the_prompt_names_the_surface_and_the_missing_tools(tmp_path):
+    """A prompt that describes a tool the agent does not have is a measured
+    cause of failed calls; so is one that stays silent about a gap."""
+    text = _flat(prompt.build(128_000, members=9,
+                              extra_sections=[session.orchestrator_prompt()]))
+
+    assert "There is no shell, no `ls`, no `glob` and no `grep`" in text
+    assert "`ls /research`" not in text

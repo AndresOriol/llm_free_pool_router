@@ -141,14 +141,15 @@ Same jail as the coding agent, rooted at `workdir`, with one difference:
 
 | | coding agent | explorer |
 | --- | --- | --- |
-| read / write / edit files | ✓ | ✓ |
-| `python`, `pytest` | ✓ | — |
-| `git` (by subcommand) | ✓ | — |
+| `read_file`, `write_file`, `edit_file` | ✓ | ✓ |
+| `write_todos`, `task` | ✓ | ✓ |
+| `ls`, `glob`, `grep` | ✓ | — |
+| `execute` — `python`, `pytest`, `git` | ✓ | — |
 | `tavily_search`, `think_tool` | — | ✓ |
 
 The coding agent needs a shell to close its own loop — write a test, run it,
 react to the result. A researcher has no loop to close, so the allowlist is
-empty and `execute` refuses everything with the backend's own explanation, as a
+empty and the backend refuses every command with its own explanation, as a
 readable tool result rather than an exception. Nothing is lost, and the blast
 radius of an unattended run drops to the files it writes
 ([6.2](06-agent.md#62-the-blast-radius)).
@@ -156,6 +157,82 @@ radius of an unattended run drops to the files it writes
 `ShellAllowListMiddleware` is not installed here, unlike on the coding agent:
 with an empty allowlist there is nothing for it to mirror, and a rule that exists
 in two places is worse than one that exists in one.
+
+### 15.5.1 The surface is chosen, not inherited
+
+*The rows marked — above are the change. Read after the first traces of the
+decision-led runs ([15.8.4](#1584-decision-led-research-candidate)): the agent
+had been handed a coding agent's tools and was using them as one.*
+
+`create_deep_agent` installs one suite on everything built with it —
+`write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`,
+`execute`, `task` — and that suite is shaped for the job [6](06-agent.md) does:
+find your way around a repository you were dropped into, then change it. Four of
+them are removed here ([tools.py](../agent/explore/tools.py)), each for a reason
+about the same scarce thing, a model call against a per-day request budget:
+
+- **`ls`, `glob`, `grep` are repository discovery**, and this agent has two
+  sources of paths that cost nothing. Its own directory arrives in the system
+  prompt on every call ([15.5.2](#1552-the-research-directory-in-place-of-ls)),
+  and a project file worth reading is one the *request* named — the caller is
+  usually the coding agent, which knows the repository already
+  ([16](16-agent-protocol.md)). Searching a repo with the research budget is
+  doing the other agent's job with the wrong account.
+- **`execute` was offered by the framework and refused by the backend** on every
+  command. An always-refused tool can only ever cost a step to learn what the
+  schema could have said — this project's own measured lesson, that a
+  description advertising a capability the backend does not have causes failed
+  calls ([agent/runtime/tools.py](../agent/runtime/tools.py)). The jail is
+  unchanged; what is gone is the invitation.
+
+**The project tree went with them.** The coding agent's prompt opens with a
+depth-limited listing of the repository ([agent/code/context.py](../agent/code/context.py))
+because two or three tool calls spent discovering the shape of a project are the
+most expensive calls in a run. That argument does not transfer: this agent is
+*given* its question, and a tree in its prompt is a hundred lines inviting
+exactly the exploration the surface no longer supports.
+
+Four descriptions are rewritten for the same reason the tools are. Upstream's
+`read_file` explains itself in terms of *codebase exploration*; `write_file`
+opens by telling the agent to prefer editing something that already exists; and
+`write_todos` closes by insisting the deliverable is the final message — which
+here is false, since the closing message is clipped before its caller ever reads
+it ([a2a.py](../agent/explore/a2a.py)) and the files are the deliverable
+([15.1](#151-what-it-is-for)). A tool description contradicting the system prompt
+is worse than a thin one.
+
+**Why a middleware rather than a `HarnessProfile`.** Upstream's documented way to
+drop a built-in is to register a profile against the model. Profiles are keyed by
+provider or `provider:model`, and the model here is one `RouterChatModel` shared
+by every agent in this repo — so no registration narrow enough to describe the
+explorer exists, and one that matched would take the coding agent's shell with
+it. Filtering the request applies to exactly the agent it is installed on. The
+researcher sub-agent gets its own copy, because the framework hands it its own
+copy of the filesystem tools.
+
+### 15.5.2 The research directory, in place of `ls`
+
+Every model call carries the current contents of `/research/` — each note's
+path, size and first heading ([notes.py](../agent/explore/notes.py)).
+
+Per call, unlike the coding agent's project tree, and the difference is what
+makes it worth the tokens: **this listing is the agent's own output.** It changes
+exactly when a note is written, which is the moment it starts mattering — the
+orchestrator has to know whether a `final_report.md` about someone else's
+question is already sitting there before it writes over it
+([15.8.2](#1582-what-this-pool-forced-us-to-change)), two researchers working in
+parallel have to not choose the same filename, and after summarization a note
+written an hour ago is no longer anywhere in the conversation. The directory is
+the only thing that still remembers it.
+
+It costs a directory read and no model call. An empty directory says so rather
+than being omitted: "nothing is written yet" is the state in which a crash costs
+the whole run ([15.8.3](#1583-what-it-costs-and-what-was-given-up)).
+
+**Unmeasured.** This is a configuration change argued from traces, not a result.
+The number that would say whether it helped is `tokens_in` per run and the count
+of tool calls spent before the first search; nothing has read them against a
+control yet.
 
 ## 15.6 What it costs a run
 
@@ -345,6 +422,11 @@ requested follow-up verification. The candidate is **not promoted**: one task
 cannot establish a quality gain, and the last run also changed models after
 daily quota exhaustion. The deterministic search-budget and routing checks
 pass; they establish infrastructure behavior, not research quality.
+
+Reading those traces produced one further change, argued separately because it
+is about the agent's tools rather than its method: the surface it is offered is
+now chosen rather than inherited from the framework
+([15.5.1](#1551-the-surface-is-chosen-not-inherited)). Also unmeasured.
 
 ## 15.9 What the grounded-Gemini search was
 

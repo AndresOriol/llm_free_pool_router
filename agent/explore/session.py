@@ -20,6 +20,15 @@ The three things that changed, and what each was for:
    deciding to retrieve again. The failure it addresses is thirteen searches
    that never asked whether the twelfth had added anything.
 
+And one that is not upstream's, added after reading the traces of the runs
+above: **the tool surface is chosen rather than inherited**
+([tools.py](tools.py)). `create_deep_agent` hands every agent a coding agent's
+suite; this one is offered no `ls`, `glob`, `grep` or `execute`, and reads its
+own directory from the system prompt instead ([notes.py](notes.py)). The project
+tree went with them: what this agent should read of a repository is what the
+brief names, because the agent that owns the repository is the one delegating
+([15.5](../../docs/15-explorer.md#155-what-it-is-allowed-to-do)).
+
 What did *not* change: the loop, the jail, the pool, the failover, and the fact
 that the deliverable is a file on disk that outlives the run. The A2A handler
 above it ([a2a.py](a2a.py)) is untouched -- it still collects `/research/*.md`
@@ -45,10 +54,10 @@ from typing import Optional, Sequence
 from langchain_core.messages import HumanMessage
 from langchain_core.tracers.context import collect_runs
 
-from agent.code import context
 from agent.code import trace as run_trace
 from agent.code.session import CONTEXT_FLOOR, RECURSION_LIMIT, _trace_locator
-from agent.explore import deep_prompts, prompt, research_tools
+from agent.explore import deep_prompts, notes, prompt, research_tools
+from agent.explore import tools as tool_surface
 from agent.explore.research_tools import NoSearchPool, check_pool  # noqa: F401
 from agent.runtime.trace import tracer_from_env
 
@@ -82,9 +91,29 @@ def orchestrator_prompt() -> str:
     )
 
 
-def researcher_subagent(tools: list) -> dict:
-    """The `research-agent` sub-agent, as upstream declares it."""
+def researcher_subagent(tools: list,
+                        research_dir: Optional[Path] = None) -> dict:
+    """The `research-agent` sub-agent, as upstream declares it.
+
+    `research_dir` is what makes its `/research/` listing current. A sub-agent
+    gets its own copy of the filesystem tools from the framework, so it gets its
+    own copy of the surface middleware too -- without it the researcher would be
+    the only thing in this system still able to `grep` the project.
+    """
     from langchain.agents.middleware import ToolCallLimitMiddleware
+
+    middleware = [
+        # Keep the stated budget real, but let the researcher save findings
+        # and explain gaps after search is exhausted. State is per invocation.
+        ToolCallLimitMiddleware(
+            tool_name="tavily_search", run_limit=MAX_SEARCHES_PER_SUBAGENT,
+            exit_behavior="continue"),
+        tool_surface.ToolSurfaceMiddleware(),
+    ]
+    if research_dir is not None:
+        # Parallel researchers pick their own filenames. The listing is how one
+        # of them finds out the other has already taken the path it wanted.
+        middleware.append(notes.ResearchNotesMiddleware(research_dir))
 
     return {
         "name": "research-agent",
@@ -94,11 +123,7 @@ def researcher_subagent(tools: list) -> dict:
             date=date.today().isoformat(),
             max_searches=MAX_SEARCHES_PER_SUBAGENT),
         "tools": tools,
-        # Keep the stated budget real, but let the researcher save findings
-        # and explain gaps after search is exhausted. State is per invocation.
-        "middleware": [ToolCallLimitMiddleware(
-            tool_name="tavily_search", run_limit=MAX_SEARCHES_PER_SUBAGENT,
-            exit_behavior="continue")],
+        "middleware": middleware,
     }
 
 
@@ -111,7 +136,8 @@ def build_agent(workdir: Path, model, pool, *,
     from agent.runtime.backend import RestrictedShellBackend
 
     workdir = Path(workdir)
-    (workdir / RESEARCH_DIR).mkdir(parents=True, exist_ok=True)
+    research_dir = workdir / RESEARCH_DIR
+    research_dir.mkdir(parents=True, exist_ok=True)
 
     # No programs at all, unchanged. `execute` is still installed -- the backend
     # satisfies SandboxBackendProtocol either way -- but every command comes back
@@ -125,10 +151,21 @@ def build_agent(workdir: Path, model, pool, *,
     # carries facts about *this* system that upstream cannot know -- which pool
     # is serving the call, where the jail's `/` is, that nobody is watching --
     # and the workflow carries the method.
-    project = context.section(workdir)
+    #
+    # No project tree. The coding agent's prompt opens with one
+    # (agent/code/context.py) because it has to find its way around a repository
+    # it was dropped into; this agent is *given* the question, and the paths
+    # worth reading belong in the brief that asked it. A tree here is a hundred
+    # lines inviting the one thing the tool surface no longer supports.
     system_prompt = prompt.build(
-        floor, members=members,
-        extra_sections=[s for s in (project, orchestrator_prompt()) if s])
+        floor, members=members, extra_sections=[orchestrator_prompt()])
+
+    # Ours, after everything the framework installs: the surface middleware has
+    # to run late enough to see the tools the filesystem and subagent middleware
+    # inject, which is exactly where `create_deep_agent` puts caller middleware.
+    middleware = [tool_surface.ToolSurfaceMiddleware(),
+                  notes.ResearchNotesMiddleware(research_dir),
+                  *(extra_middleware or [])]
 
     return create_deep_agent(
         model=model,
@@ -139,8 +176,8 @@ def build_agent(workdir: Path, model, pool, *,
         tools=tools,
         system_prompt=system_prompt,
         backend=backend,
-        middleware=list(extra_middleware or []),
-        subagents=[researcher_subagent(tools)],
+        middleware=middleware,
+        subagents=[researcher_subagent(tools, research_dir)],
     )
 
 

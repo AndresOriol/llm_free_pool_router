@@ -33,6 +33,12 @@ The adaptations, in full:
    separates scenarios, checks shared blocking questions and saves workstream
    evidence before synthesizing. These additions are marked `ADAPTED` below;
    their quality must be measured rather than inferred from the instructions.
+6. **No `ls`, and a tool list that matches the tools.** The surface here is
+   chosen rather than inherited ([tools.py](tools.py)), so upstream's `ls
+   /research` becomes the listing that arrives in the system prompt on every
+   call ([notes.py](notes.py)), and the researcher's "two specific research
+   tools" -- which was never true, since it has always been asked to save its
+   findings to a file -- names the ones it actually holds.
 """
 
 from __future__ import annotations
@@ -58,8 +64,9 @@ Follow this workflow for all research requests:
 
 ## Decision-led research
 
-`ADAPTED` — before delegating, read relevant project context and save a compact
-research plan beside the request. Identify the decision the reader needs to
+`ADAPTED` — before delegating, read with read_file any project file the request
+names — you cannot go looking for others — and save a compact research plan
+beside the request. Identify the decision the reader needs to
 make, their constraints (location, resources, stage and intended use), and the
 questions whose answers could change that decision. Do not invent missing
 constraints: state working assumptions and unresolved questions.
@@ -97,8 +104,9 @@ the camera sees and what the product controls; otherwise these are open question
 ## Naming the report
 
 `ADAPTED` — this directory outlives your run and another agent will be asked a
-different question in it tomorrow. Before writing, `ls /research`. If a
-`final_report.md` is already there **about a different topic**, write yours as
+different question in it tomorrow. Before writing, read the research directory
+listing in your system prompt; it is current and it is the only listing you get.
+If a `final_report.md` is already there **about a different topic**, write yours as
 `/research/final_report-<topic-slug>.md` instead of overwriting it, and say in
 your closing message which file you wrote. Never delete someone else's report.
 
@@ -223,10 +231,17 @@ You can call these tools in series or in parallel, your research is conducted in
 </Task>
 
 <Available Research Tools>
-You have access to two specific research tools:
-1. **tavily_search**: For conducting web searches to gather information
+Two research tools:
+1. **tavily_search**: For conducting web searches to gather information. It returns the pages themselves, not summaries of them — what you read is the source.
 2. **think_tool**: For reflection and strategic planning during research
 **CRITICAL: Use think_tool after each search to reflect on results and plan next steps**
+
+`ADAPTED` — and three tools for the record you leave behind: **write_file** and
+**edit_file** to save your findings to the path your brief assigned, and
+**read_file** to open a note or a project file by exact path. You have no `ls`,
+`glob`, `grep` or shell; the listing of `/research/` in your system prompt is
+current and is the only listing there is. Everything you learn that you do not
+write down is lost when you return.
 </Available Research Tools>
 
 <Instructions>

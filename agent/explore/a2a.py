@@ -30,7 +30,10 @@ CARD = AgentCard(
     version="0.1.0",
     description=("Researches the open web and writes a cited report to "
                  "`/research/final_report.md`. It reads whole pages, not "
-                 "search snippets; it cannot run or change this project."),
+                 "search snippets; it cannot run or change this project. It "
+                 "also cannot browse it: name the absolute path of any file it "
+                 "should read (`/pkg/module.py`), because it has no `ls`, "
+                 "`glob` or `grep` and will not go looking."),
     skills=[
         AgentSkill(
             id="web_research",
@@ -46,7 +49,8 @@ CARD = AgentCard(
                 "adding to the pool.",
                 "Does langchain-core still expose `BaseChatModel._generate` as "
                 "the sync entry point in the version this repo pins, and what "
-                "replaced it if not?",
+                "replaced it if not? Our subclass is "
+                "`/agent/runtime/chat_model.py`.",
             ],
         ),
     ],

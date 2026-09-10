@@ -73,8 +73,12 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   plans and delegates to a `research-agent` sub-agent and never searches itself;
   `tavily_search` finds URLs through a pool of Tavily accounts, fetches each page
   and converts it, so the **page** reaches the model rather than a summary of it;
-  `think_tool` forces a pause between searches. It runs no programs at all, and
-  hands off to the coding agent by writing `/research/*.md`
+  `think_tool` forces a pause between searches. Its tool surface is tailored
+  rather than inherited: no `ls`, `glob`, `grep` or shell, because it never
+  explores a repository — a caller names the paths, and its own `/research/`
+  listing arrives in the system prompt on every call
+  ([15.5.1](docs/15-explorer.md#1551-the-surface-is-chosen-not-inherited)).
+  It hands off to the coding agent by writing `/research/*.md`
   ([15. The web explorer](docs/15-explorer.md)). Every deviation from upstream is
   marked `ADAPTED` in [deep_prompts.py](agent/explore/deep_prompts.py).
 - [agent/improve](agent/improve/) — the agent whose project is the other
