@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-from agent.explore import notes, prompt, research_tools, session, tools
+from agent.explore import prompt, research_tools, session, tools
 from agent.runtime.backend import RestrictedShellBackend
 
 
@@ -216,9 +216,9 @@ def test_the_orchestrator_is_told_the_delegation_limits():
 def test_reading_the_page_is_structural_rather_than_instructed():
     """The old prompt asked the agent to open a source and it never did. The
     replacement removes the choice: the search tool returns the page."""
-    tools = research_tools.make_research_tools(pool=None)
-    assert set(tools) == {"tavily_search", "think_tool"}
-    assert "full text of the pages" in tools["tavily_search"].description
+    made = research_tools.make_research_tools(pool=None)
+    assert set(made) == {"tavily_search", "think_tool", "research_status"}
+    assert "full text of the pages" in made["tavily_search"].description
 
 
 def test_the_researcher_is_told_to_reflect_after_every_search():
@@ -321,7 +321,7 @@ def test_the_rewritten_descriptions_reach_the_model(tmp_path):
     assert "This replaces the whole file." in described["write_file"]
 
 
-def test_tailoring_does_not_mutate_the_tools_it_was_given():
+def test_describing_a_tool_does_not_mutate_the_one_it_was_given():
     """The tool objects are shared with the graph and with any other agent over
     the same backend; rewriting one in place would change a description the
     coding agent relies on."""
@@ -333,28 +333,29 @@ def test_tailoring_does_not_mutate_the_tools_it_was_given():
 
     original = StructuredTool.from_function(func=read_file, name="read_file",
                                             description="Original description.")
-    tailored = tools._tailor([original])
+    described = tools.ToolSurfaceMiddleware()._describe(original)
 
-    assert tailored[0].description == tools.READ_FILE
+    assert described.description == tools.DESCRIPTIONS["read_file"]
     assert original.description == "Original description."
 
 
 # --- the research directory, in place of `ls` -------------------------------
 
 
-def test_research_status_lists_the_notes_with_their_titles(tmp_path):
+def _status(research, mount="research"):
+    return research_tools.make_research_tools(
+        None, research, mount)["research_status"].invoke({})
+
+
+def test_research_status_lists_what_has_been_written(tmp_path):
     """The one listing this agent gets, and it is asked for rather than paid for
     on every call. A note written an hour ago is gone from the conversation
     after summarization; it is still on disk."""
     research = tmp_path / "research"
     research.mkdir()
-    (research / "pricing.md").write_text("# What the vendors charge\n\nbody\n",
-                                         encoding="utf-8")
+    (research / "pricing.md").write_text("body", encoding="utf-8")
 
-    answer = notes.make_status_tool(research).invoke({})
-
-    assert "/research/pricing.md" in answer
-    assert "What the vendors charge" in answer
+    assert "/research/pricing.md" in _status(research)
 
 
 def test_research_status_is_bound_to_this_runs_directory(tmp_path):
@@ -376,16 +377,16 @@ def test_research_status_is_bound_to_this_runs_directory(tmp_path):
 def test_an_empty_research_directory_says_so(tmp_path):
     """Silence would read as "no directory". "Nothing is written yet" is the
     state in which a crash costs the whole run."""
-    assert "empty" in notes.make_status_tool(tmp_path / "research").invoke({})
+    assert "empty" in _status(tmp_path / "research")
 
 
-def test_the_listing_survives_a_note_it_cannot_read(tmp_path):
-    """A listing that raises would end a run over a file permission."""
+def test_an_empty_note_is_still_listed(tmp_path):
+    """A file with nothing in it is exactly the one worth seeing in a listing."""
     research = tmp_path / "research"
     research.mkdir()
-    (research / "unreadable.md").write_text("", encoding="utf-8")
+    (research / "started.md").write_text("", encoding="utf-8")
 
-    assert "/research/unreadable.md" in notes.listing(research)
+    assert "/research/started.md" in _status(research)
 
 
 def test_the_project_tree_is_not_in_the_prompt(tmp_path):
@@ -424,8 +425,8 @@ def test_the_framework_sections_about_tools_it_lacks_are_removed(tmp_path):
         {"messages": [("user", "research something")]})
     text = _Recorder.system[0]
 
-    for label, section in tools._framework_sections().items():
-        assert section not in text, f"the {label} section survived"
+    for section in tools.PRUNED:
+        assert section not in text, "a framework section survived the pruning"
     # The three tools the agent does not have must not be named as available.
     assert "## Filesystem Tools" not in text
     assert "## Execute Tool" not in text
@@ -454,17 +455,6 @@ def test_the_agent_is_not_told_its_final_message_is_the_deliverable(tmp_path):
     assert "belongs in a file" in _Recorder.system[0]
 
 
-def test_a_reworded_upstream_section_is_reported_rather_than_missed(caplog):
-    """The removals match imported constants. If upstream rewords one the
-    import still resolves, the removal silently does nothing, and this is the
-    only thing that would say so."""
-    tools._warned.clear()
-    with caplog.at_level("WARNING"):
-        assert tools._prune("nothing to remove here") == "nothing to remove here"
-    assert "reworded upstream" in caplog.text
-    tools._warned.clear()
-
-
 # --- one directory per investigation ----------------------------------------
 
 
@@ -486,8 +476,8 @@ def test_the_default_directory_is_left_exactly_as_written():
     """`retarget` is a substitution over assembled prose; on the default it must
     be the identity, or every prompt assertion is testing the rewriter."""
     text = "write it to /research/final_report.md"
-    assert notes.retarget(text, "research") == text
-    assert notes.retarget(text, "/research/") == text
+    assert tools.retarget(text, "research") == text
+    assert tools.retarget(text, "/research/") == text
 
 
 def test_a_continued_investigation_sees_what_the_last_run_left(tmp_path):
@@ -495,13 +485,9 @@ def test_a_continued_investigation_sees_what_the_last_run_left(tmp_path):
     first one's directory and its notes are there to read, extend and cite."""
     earlier = tmp_path / "research" / "cv-spain"
     earlier.mkdir(parents=True)
-    (earlier / "retail.md").write_text("# Retail security in Spain\n",
-                                       encoding="utf-8")
+    (earlier / "retail.md").write_text("body", encoding="utf-8")
 
-    answer = notes.make_status_tool(earlier, "research/cv-spain").invoke({})
-
-    assert "/research/cv-spain/retail.md" in answer
-    assert "Retail security in Spain" in answer
+    assert "/research/cv-spain/retail.md" in _status(earlier, "research/cv-spain")
 
 
 def test_a_delegated_exploration_can_be_given_its_own_directory(monkeypatch,
@@ -529,98 +515,44 @@ def test_a_delegated_exploration_can_be_given_its_own_directory(monkeypatch,
 # --- the sub-agents are held to the same surface ----------------------------
 
 
-def test_the_general_purpose_subagent_is_declared_rather_than_defaulted():
-    """The framework adds one when the caller declares none, and the default
-    inherits the filesystem tools without our middleware -- so an agent with no
-    `grep` could delegate to one that has, under no search budget either."""
+def test_every_subagent_is_held_to_the_same_surface():
+    """The framework adds a `general-purpose` sub-agent when the caller declares
+    none, and its default inherits the filesystem tools without our middleware --
+    so an agent with no `grep` could delegate to one that has, under no search
+    budget either. Both are declared, and both get this list."""
     from langchain.agents.middleware import ToolCallLimitMiddleware
 
-    spec = session.general_purpose_subagent([])
+    kinds = {type(m) for m in session.subagent_middleware()}
 
-    assert spec["name"] == "general-purpose"
-    kinds = {type(m) for m in spec["middleware"]}
-    assert tools.ToolSurfaceMiddleware in kinds
-    assert ToolCallLimitMiddleware in kinds
-    assert "no shell" in spec["description"]
+    assert kinds == {tools.ToolSurfaceMiddleware, ToolCallLimitMiddleware}
 
 
-# --- step 6: the review at the end ------------------------------------------
-# The prompt asks for it and `invoke_with_review` asks again when a run ends
-# without it. Every skipped step in this agent's recorded history was one the
-# prompt already asked for, and this is the step that decides whether the
-# deliverable answers the question (agent/explore/session.py).
 
 
-class _Agent:
-    """A compiled agent, faked: writes the files each invocation is told to."""
-
-    def __init__(self, research: Path, *writes):
-        self.research, self.writes, self.calls = research, list(writes), []
-
-    def invoke(self, state, config=None):
-        self.calls.append(list(state.get("messages") or []))
-        for name in (self.writes.pop(0) if self.writes else []):
-            path = self.research / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("# " + name, encoding="utf-8")
-        return {"messages": [AIMessage("done")]}
+# --- step 6: the review, which only the prompt asks for ---------------------
 
 
-def test_a_run_that_reviewed_is_left_alone(tmp_path):
-    agent = _Agent(tmp_path, ["final_report.md", "review.md"])
-    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
+def test_the_prompt_makes_the_review_the_last_thing_it_does():
+    """There is no code behind this. The system prompt says a run is not
+    finished until the request has been read back and the review written, and
+    the workflow says what the review has to establish -- so these sentences
+    are the whole mechanism (docs/15-explorer.md#1554-the-review-at-the-end)."""
+    text = _flat(prompt.build(128_000, members=9,
+                              extra_sections=[session.orchestrator_prompt()]))
 
-    assert len(agent.calls) == 1
-
-
-def test_a_run_that_skipped_the_review_is_asked_once(tmp_path):
-    agent = _Agent(tmp_path, ["final_report.md"], ["review.md"])
-    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
-
-    assert len(agent.calls) == 2
-    # It continues the conversation rather than starting a new one: a review
-    # that cannot see the run it is reviewing is a second run.
-    assert session.REVIEW_FOLLOW_UP in agent.calls[1][-1].content
-    assert (tmp_path / "review.md").exists()
-
-
-def test_a_run_that_declines_twice_still_ends(tmp_path):
-    """Advisory, never able to hold a session open. An unreviewed report is
-    worth more than a run stuck arguing about one."""
-    agent = _Agent(tmp_path, ["final_report.md"], [])
-    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
-
-    assert len(agent.calls) == 2
-
-
-def test_a_run_with_nothing_to_show_is_not_asked_to_review_it(tmp_path):
-    """It wrote the request and the plan and no findings. There is nothing to
-    read back, and the follow-up would spend a model call saying so."""
-    agent = _Agent(tmp_path, ["research_request.md", "research_plan.md"])
-    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
-
-    assert len(agent.calls) == 1
-
-
-def test_an_earlier_investigations_review_does_not_count_as_this_ones(tmp_path):
-    """Two questions can share a directory. A review from last week does not
-    say anything about the report written today."""
-    tmp_path.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "review.md").write_text("# reviewed something else",
-                                        encoding="utf-8")
-
-    agent = _Agent(tmp_path, ["final_report-new.md"], ["review-new.md"])
-    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
-
-    assert len(agent.calls) == 2
-
-
-def test_the_workflow_asks_for_the_review_and_says_what_it_checks():
-    text = _flat(session.orchestrator_prompt())
-
+    assert "The last thing you do is the review" in text
+    assert "If you are about to write a final message and there is no review "\
+           "note, you are not finished" in text
     assert "Reviewing your own output" in text
-    assert "answered, partly answered" in session.REVIEW_FOLLOW_UP
-    # The three things the review has to establish, in the prompt's own words.
     assert "was this one answered" in text.lower()
     assert "/research/review.md" in text
     assert "correct what you find, with edit_file" in text.lower()
+
+
+def test_every_tool_description_is_a_file_rather_than_a_string_in_code():
+    """The point of the directory: what the agent is told is edited as text."""
+    names = set(tools.DESCRIPTIONS)
+
+    assert {"read_file", "write_file", "edit_file", "write_todos", "task",
+            "tavily_search", "think_tool", "research_status"} == names
+    assert all(text.strip() for text in tools.DESCRIPTIONS.values())

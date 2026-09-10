@@ -130,13 +130,6 @@ def _summary(final, written, workdir: Path,
         print(f"  {note.relative_to(workdir).as_posix()} "
               f"({note.stat().st_size:,} bytes)")
 
-    # Whether the run checked its own report against the question it was given.
-    # An unreviewed report is still a report; it is just one nobody has read
-    # back (agent/explore/session.py).
-    if notes and not any(n.stem.lower().startswith("review") for n in notes):
-        print("\nNo review note: the report was not checked against the "
-              "request.")
-
     if written:
         print(f"\nrun record: {written}")
 

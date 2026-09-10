@@ -1,4 +1,4 @@
-"""`tavily_search` and `think_tool`, ported onto the account pool.
+"""The tools this project defines: `tavily_search`, `think_tool`, `research_status`.
 
 Source: `langchain-ai/deepagents-quickstarts`, `deep_research/research_agent/
 tools.py` (MIT). The shape is upstream's and the two changes are ours.
@@ -14,6 +14,11 @@ Upstream's tool does not have that failure available: Tavily discovers URLs, the
 tool fetches each page over HTTP and converts it to markdown, and what reaches
 the model *is* the page. Reading is not a choice the agent gets to make. That is
 the structural fix, and it is why this branch exists.
+
+`research_status` is ours rather than upstream's, and it is what `ls` was doing
+badly: the agent asks what its own research holds, when it wants to know, rather
+than being handed a listing on every call
+([15.5.2](../../docs/15-explorer.md#1552-the-research-directory-and-how-to-see-it)).
 
 ### The two adaptations
 
@@ -32,7 +37,10 @@ the structural fix, and it is why this branch exists.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Optional
+
+from agent.explore import tools
 
 logger = logging.getLogger("harness.explore")
 
@@ -77,33 +85,19 @@ def fetch_page(url: str, timeout: float = FETCH_TIMEOUT) -> str:
     return text
 
 
-def make_research_tools(pool, *, max_results: int = DEFAULT_MAX_RESULTS):
-    """`{name: tool}` for the researcher sub-agent, bound to one Tavily pool."""
+def make_research_tools(pool, research_path: Optional[Path] = None,
+                        mount: str = tools.DEFAULT_DIR, *,
+                        max_results: int = DEFAULT_MAX_RESULTS):
+    """`{name: tool}` for the orchestrator and the researcher sub-agent.
+
+    Every description comes from `descriptions/<name>.md`, the same place the
+    framework's rewritten ones come from ([tools.py](tools.py)), so what these
+    tools tell the model is edited as text.
+    """
     from langchain_core.tools import StructuredTool
 
     def tavily_search(query: str) -> str:
-        """Search the web and return the full text of the pages found.
-
-        This is the only way anything from outside this workspace reaches you.
-        It searches, then opens every result and converts it to markdown, so
-        what comes back is the page itself — there is no summary in between and
-        no second tool to open a source with. Each result arrives as its title,
-        its URL, and its content; a page too long to return whole is cut and
-        says where it was cut.
-
-        Ask a whole question, not a string of keywords: `"tavily api pricing
-        free tier"` retrieves, but "What does Tavily's free tier include per
-        month, and what happens at the limit?" retrieves *and* tells the engine
-        what you are trying to learn.
-
-        - Cite the URL this returned, exactly, next to the claim it supports.
-          Never write down a plausible-looking address you did not receive.
-        - A page that would not open comes back saying so. That is information —
-          record it as a source you could not read, do not cite it for figures.
-        - One call costs a search credit from a small monthly pool and a model
-          call from a daily one. Repeating a question you have already asked
-          costs the same as asking the next one.
-        """
+        """Search the web; return each result's title, URL and page."""
         if not query.strip():
             return "error: the query is empty."
         try:
@@ -123,44 +117,35 @@ def make_research_tools(pool, *, max_results: int = DEFAULT_MAX_RESULTS):
         blocks = []
         for hit in hits:
             url, title = hit.get("url", ""), hit.get("title", "(untitled)")
-            blocks.append(f"## {title}\n**URL:** {url}\n\n{fetch_page(url)}\n\n---\n")
+            blocks.append(
+                f"## {title}\n**URL:** {url}\n\n{fetch_page(url)}\n\n---\n")
 
         return (f"Found {len(blocks)} result(s) for '{query}':\n\n"
                 + "\n".join(blocks))
 
     def think_tool(reflection: str) -> str:
-        """Stop and examine your own research before continuing it.
-
-        Use after every search, before deciding whether to search again. It
-        retrieves nothing and changes nothing; it is a step that exists purely
-        so the decision to keep going is made deliberately once, rather than by
-        default a dozen times.
-
-        Write, in plain sentences:
-
-        - **What this search actually established** — the specific fact, with
-          the page it came from. "Useful background" is not a finding.
-        - **What it did not.** Name the question that is still open, and whether
-          the last two searches have started returning the same thing.
-        - **Where the answer is weakest.** Which claim rests on a single source,
-          a vendor's own page, or your inference rather than something you read.
-          That is what the next search should attack — not the part you have
-          already confirmed twice.
-        - **Whether you are done.** Say it either way. Enough evidence to answer,
-          with the gaps named, is a finished job; a run that keeps searching
-          because it has budget left is spending someone's day of requests on
-          confirmation.
-        """
+        """Record a reflection; returns it, changes nothing."""
         return f"Reflection recorded: {reflection}"
 
-    return {
-        "tavily_search": StructuredTool.from_function(
-            func=tavily_search, name="tavily_search",
-            description=tavily_search.__doc__),
-        "think_tool": StructuredTool.from_function(
-            func=think_tool, name="think_tool",
-            description=think_tool.__doc__),
-    }
+    def research_status() -> str:
+        """List what the research has written so far."""
+        notes = sorted(Path(research_path).rglob("*.md")) if research_path else []
+        if not notes:
+            return (f"/{mount}/ is empty -- nothing has been written yet. The "
+                    f"files you write there are this run's only deliverable.")
+        listing = "\n".join(
+            f"/{mount}/{note.relative_to(research_path).as_posix()} "
+            f"({note.stat().st_size:,} bytes)" for note in notes)
+        return f"Files in /{mount}/:\n\n{listing}"
+
+    def described(func, name):
+        return StructuredTool.from_function(
+            func=func, name=name,
+            description=tools.retarget(tools.DESCRIPTIONS[name], mount))
+
+    return {"tavily_search": described(tavily_search, "tavily_search"),
+            "think_tool": described(think_tool, "think_tool"),
+            "research_status": described(research_status, "research_status")}
 
 
 class NoSearchPool(SystemExit):

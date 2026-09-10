@@ -22,31 +22,14 @@ from typing import Optional, Sequence
 
 from agent.code.prompt import (HEADLESS_AMBIGUITY, HEADLESS_PREAMBLE,
                                pool_identity_section, workdir_section)
-from agent.explore import notes
+from agent.explore import tools
 
 logger = logging.getLogger("harness.explore")
 
 _TEMPLATE = Path(__file__).with_name("system_prompt.md")
 
-# What is *absent* -- and only that. Each tool explains itself in its own
-# description, where the explanation is in front of the model at the moment it
-# picks the tool rather than ten thousand characters earlier
-# ([tools.py](tools.py)); a second copy here would be one more thing to keep
-# true. What no description can carry is the shape of the gap, because the tools
-# that would fill it are not there to describe it.
-TOOL_SURFACE = """## What you cannot do
-
-There is no shell, no `ls`, no `glob` and no `grep`, and the project tree is not
-in front of you. You do not explore this repository: you are told which of its
-files matter, and you find everything else out on the web. If an answer needs a
-file nobody named, say so rather than guessing at a path.
-
-`research_status` lists what your own research has written so far. It is the
-only listing you get, and it is the one worth asking for."""
-
-
 def build(floor: int, members: int = 0,
-          research_dir: str = notes.DEFAULT_DIR,
+          research_dir: str = tools.DEFAULT_DIR,
           extra_sections: Optional[Sequence[str]] = None) -> str:
     """The full system prompt for one exploration.
 
@@ -63,7 +46,6 @@ def build(floor: int, members: int = 0,
         _TEMPLATE.read_text(encoding="utf-8")
         .replace("{interactive_preamble}", HEADLESS_PREAMBLE)
         .replace("{ambiguity_guidance}", HEADLESS_AMBIGUITY)
-        .replace("{tool_surface_section}", TOOL_SURFACE)
         .replace("{model_identity_section}", pool_identity_section(floor, members))
         .replace("{working_dir_section}", workdir_section())
     )
@@ -72,8 +54,8 @@ def build(floor: int, members: int = 0,
         result = result.rstrip() + "\n\n" + "\n\n".join(extra_sections) + "\n"
 
     # After assembly, so a section built elsewhere is pointed at this run's
-    # directory too ([notes.retarget](notes.py)).
-    result = notes.retarget(result, research_dir)
+    # directory too ([tools.retarget](tools.py)).
+    result = tools.retarget(result, research_dir)
 
     # A typo in the template would otherwise ship a literal `{placeholder}` to
     # the model, which reads as an instruction it cannot follow rather than as

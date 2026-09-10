@@ -158,6 +158,24 @@ radius of an unattended run drops to the files it writes
 with an empty allowlist there is nothing for it to mirror, and a rule that exists
 in two places is worse than one that exists in one.
 
+**Where the agent's behaviour is written down.** Everything above is a
+property of *text*, and that is a rule this module is held to rather than an
+observation about it:
+
+| what | where |
+| --- | --- |
+| what each tool is for, and how to use it | `agent/explore/descriptions/<tool>.md`, one file per tool |
+| what the agent is for, what it cannot do, when it is finished | [system_prompt.md](../agent/explore/system_prompt.md) |
+| the research method | `agent/explore/prompts/*.md`, ported from upstream; [deep_prompts.py](../agent/explore/deep_prompts.py) is the provenance note |
+| which tools exist, which are dropped, which framework prose is removed | three lists in [tools.py](../agent/explore/tools.py) |
+
+The Python left over is assembly: read the files, filter a list, hand the result
+to `create_deep_agent`. Nothing in it decides what the agent *does*, and a
+change to how the agent works should be a change to a Markdown file. When a
+behaviour was implemented as code here it has been removed again — see the
+review in [15.5.4](#1554-the-review-at-the-end), which was a wrapper for one
+commit and is now four sentences in the prompt.
+
 ### 15.5.1 The surface is chosen, not inherited
 
 *The rows marked — above are the change. Read after the first traces of the
@@ -212,8 +230,7 @@ copy of the filesystem tools.
 
 ### 15.5.2 The research directory, and how to see it
 
-**Which directory is a parameter of the run**, not a constant
-([notes.py](../agent/explore/notes.py)):
+**Which directory is a parameter of the run**, not a constant:
 
 ```bash
 python -m agent.explore ./project research/cv-spain < question.md
@@ -229,8 +246,9 @@ extended and cited. The prompts and tool descriptions go on saying `/research/`
 and are substituted once, at assembly — twice was a bug this caught, and
 `/research/cv-spain/cv-spain/final_report.md` is what it looked like.
 
-**What is in it comes from `research_status`**, a tool: every note's path, size
-and first heading, asked for when the answer is wanted.
+**What is in it comes from `research_status`**
+([research_tools.py](../agent/explore/research_tools.py)), a tool: every note's
+path and size, asked for when the answer is wanted.
 
 That is a reversal. It was first built as a listing injected into the system
 prompt on *every* model call, on the argument that the directory is the agent's
@@ -279,9 +297,9 @@ the removal fail loudly rather than half-apply
 ([tools.py](../agent/explore/tools.py)).
 
 **What this arithmetic comes to.** Measured on the assembled agent, before any
-conversation: system prompt plus every tool schema, 47,187 characters as the
-framework builds it, 24,146 as this agent ships it — a 49% cut, of which about
-half is text that described tools it does not have. Whether a shorter, truer
+conversation: system prompt plus every tool schema is 26,864 characters, against
+47,187 for the same agent with the framework's suite and prose left as they
+come — a 43% cut, most of it text that described tools it does not have. Whether a shorter, truer
 prompt produces better research is exactly what
 [the v3 comparison](../evals/results/reports/2026-09-10-explore-machintl.md)
 says has not been shown.
@@ -326,29 +344,27 @@ model does not retype. This is the job `edit_file` exists for, and until this
 step existed it had none — recorded runs called it zero times
 ([15.5.1](#1551-the-surface-is-chosen-not-inherited)).
 
-**It is asked twice, in code.** `invoke_with_review`
-([session.py](../agent/explore/session.py)) snapshots the review notes, runs the
-agent, and if the run finished having written a deliverable but no review, sends
-one more message asking for step 6 and invokes again over the same conversation.
+**Nothing in the harness makes it happen.** There was, for one commit: a
+wrapper that noticed a run ending without a review and asked once more. It is
+gone, and the reasoning for removing it is the same reasoning this whole page
+keeps arriving at from the other side — *the behaviour of an agent belongs in
+the words it is given, not in the code around it*. A run that only reviews
+because a Python function noticed is a run whose operator has to read Python to
+know what the agent does.
 
-That second half is not decoration. *Every* skipped step in this agent's
-recorded history was one the prompt already asked for: the control run exceeded
-a stated search budget, v2 skipped the verification round it was told to spend,
-v3 never wrote the plan note. Step 6 is the worst one to leave to a model that
-has just decided it is finished, because the model deciding it is finished is
-the thing being checked.
+So the system prompt says it instead, in the place a model reads before it
+decides it is finished: the review is the last thing you do, the report being
+written is step 5 and not the end, and *if you are about to write a final
+message and there is no review note, you are not finished*
+([system_prompt.md](../agent/explore/system_prompt.md)).
 
-It asks **once**, and only when there is something to review. If the agent
-declines, the run ends and the log says the report was never checked. The same
-rule the quota reader follows: advisory, and never able to stall a run
-([4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent)).
-
-**And it is counted.** `research_trajectory` gains two checks — that a review was
-written, and that it came *after* the last edit to a report, since a review
-written before the final edit checked a document that no longer exists
-([research_trajectory.py](../evals/research_trajectory.py)). A FAIL there means
-the agent was asked twice and declined, which is a fact about the configuration
-rather than about one report.
+**And it is counted.** `research_trajectory` gains one check: that a review note
+was written
+([research_trajectory.py](../evals/research_trajectory.py)). That is the whole
+arrangement: **the prompt asks, and the eval counts.** If runs keep shipping
+without a review the check says so, and the answer is better words — or, if
+words demonstrably will not do it, a mechanism argued for by that evidence
+rather than by anticipation.
 
 ## 15.6 What it costs a run
 

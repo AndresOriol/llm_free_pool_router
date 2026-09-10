@@ -302,22 +302,13 @@ def test_a_run_that_wrote_nothing_is_not_asked_to_review_it():
         "reviewed its own report against the request"].ok
 
 
-def test_a_review_written_before_the_last_edit_reviewed_another_document():
-    events = _request() + _deep_search("What is x used for?") + _think()
-    events += _note("/research/review.md") + _note("/research/final_report.md")
-
-    checks = _named(rt.check(events))
-    assert checks["reviewed its own report against the request"].ok
-    assert not checks["reviewed the version that shipped"].ok
-
-
 def test_a_review_named_around_a_collision_still_counts():
     """The prompt allows `review-<topic>.md` when a review about another
     question is already in the directory."""
     events = _request() + _deep_search("What is x used for?") + _think()
     events += (_note("/research/final_report-cv.md")
                + _note("/research/review-cv.md"))
-    assert rt.from_trace(events)["reviewed_what_shipped"]
+    assert rt.from_trace(events)["reviewed"]
 
 
 def test_each_agent_is_scored_against_the_budget_its_own_prompt_set():
