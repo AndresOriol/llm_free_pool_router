@@ -333,7 +333,7 @@ source links: the first candidate reused note-local citation numbers in the
 combined bibliography, binding industrial claims to retail sources. Three sources are sufficient only
 when they cover the assigned questions. These are instructions, not guarantees
 of citation quality or crash recovery. The
-[capability queue](../.Codex/artifacts/2026-09-10-explore-capability-issues.md)
+[capability queue](../.codex/artifacts/2026-09-10-explore-capability-issues.md)
 records the reference, live evidence and future eval contracts; no claim of
 parity with Claude follows from copying its method.
 
