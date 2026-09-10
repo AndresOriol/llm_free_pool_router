@@ -267,16 +267,17 @@ def _recorder():
     return _Recorder(messages=iter([AIMessage("done")]))
 
 
-def test_the_explorer_is_offered_exactly_its_six_capabilities(tmp_path):
-    """Read a named file, write one, edit one, plan, delegate, search, reflect
-    -- and nothing for browsing a repository it was never asked to explore."""
+def test_the_explorer_is_offered_exactly_its_capabilities(tmp_path):
+    """Read a named file, write one, edit one, plan, delegate, search, reflect,
+    and see what it has written -- and nothing for browsing a repository it was
+    never asked to explore."""
     model = _recorder()
     session.build_agent(tmp_path, model, pool=None, members=3).invoke(
         {"messages": [("user", "research something")]})
 
     assert _Recorder.seen[0] == ["write_todos", "read_file", "write_file",
                                  "edit_file", "task", "tavily_search",
-                                 "think_tool"]
+                                 "think_tool", "research_status"]
 
 
 def test_the_researcher_sub_agent_gets_the_same_surface(tmp_path):
@@ -287,8 +288,7 @@ def test_the_researcher_sub_agent_gets_the_same_surface(tmp_path):
 
     model = _recorder()
     spec = session.researcher_subagent(
-        list(research_tools.make_research_tools(pool=None).values()),
-        tmp_path / session.RESEARCH_DIR)
+        list(research_tools.make_research_tools(pool=None).values()))
     create_deep_agent(
         model=model, tools=spec["tools"], system_prompt=spec["system_prompt"],
         middleware=spec["middleware"],
@@ -342,27 +342,41 @@ def test_tailoring_does_not_mutate_the_tools_it_was_given():
 # --- the research directory, in place of `ls` -------------------------------
 
 
-def test_the_research_directory_is_listed_in_every_system_message(tmp_path):
-    """The one listing this agent gets. It is rebuilt per call because it is the
-    agent's own output: a note written an hour ago is gone from the conversation
-    after summarization, and the directory is what still remembers it."""
-    (tmp_path / session.RESEARCH_DIR).mkdir()
-    (tmp_path / session.RESEARCH_DIR / "pricing.md").write_text(
-        "# What the vendors charge\n\nbody\n", encoding="utf-8")
+def test_research_status_lists_the_notes_with_their_titles(tmp_path):
+    """The one listing this agent gets, and it is asked for rather than paid for
+    on every call. A note written an hour ago is gone from the conversation
+    after summarization; it is still on disk."""
+    research = tmp_path / "research"
+    research.mkdir()
+    (research / "pricing.md").write_text("# What the vendors charge\n\nbody\n",
+                                         encoding="utf-8")
+
+    answer = notes.make_status_tool(research).invoke({})
+
+    assert "/research/pricing.md" in answer
+    assert "What the vendors charge" in answer
+
+
+def test_research_status_is_bound_to_this_runs_directory(tmp_path):
+    """Two investigations in one workdir must not see each other's listing."""
+    (tmp_path / "research" / "old").mkdir(parents=True)
+    (tmp_path / "research" / "old" / "prior.md").write_text(
+        "# prior\n", encoding="utf-8")
 
     model = _recorder()
-    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
+    session.build_agent(tmp_path, model, pool=None, members=3,
+                        research_dir="research/new").invoke(
         {"messages": [("user", "research something")]})
 
-    text = _Recorder.system[0]
-    assert "/research/pricing.md" in text
-    assert "What the vendors charge" in text
+    assert "research_status" in _Recorder.seen[0]
+    assert "/research/new/" in _Recorder.system[0]
+    assert "/research/old/" not in _Recorder.system[0]
 
 
 def test_an_empty_research_directory_says_so(tmp_path):
     """Silence would read as "no directory". "Nothing is written yet" is the
     state in which a crash costs the whole run."""
-    assert "empty" in notes.section(tmp_path / "research")
+    assert "empty" in notes.make_status_tool(tmp_path / "research").invoke({})
 
 
 def test_the_listing_survives_a_note_it_cannot_read(tmp_path):
@@ -396,3 +410,135 @@ def test_the_prompt_names_the_surface_and_the_missing_tools(tmp_path):
 
     assert "There is no shell, no `ls`, no `glob` and no `grep`" in text
     assert "`ls /research`" not in text
+
+
+# --- the prompt the framework writes ----------------------------------------
+# `create_deep_agent` appends its own sections describing the tool suite it
+# installs. After the surface above, four of them describe an agent this is not,
+# and one of those instructs the opposite of this agent's contract.
+
+
+def test_the_framework_sections_about_tools_it_lacks_are_removed(tmp_path):
+    model = _recorder()
+    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
+        {"messages": [("user", "research something")]})
+    text = _Recorder.system[0]
+
+    for label, section in tools._framework_sections().items():
+        assert section not in text, f"the {label} section survived"
+    # The three tools the agent does not have must not be named as available.
+    assert "## Filesystem Tools" not in text
+    assert "## Execute Tool" not in text
+
+
+def test_the_generated_list_of_subagents_survives_the_pruning(tmp_path):
+    """It is appended after the section that is removed, and it is the only
+    place the agent is told what it can delegate to."""
+    model = _recorder()
+    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
+        {"messages": [("user", "research something")]})
+
+    assert "Available subagent types" in _Recorder.system[0]
+    assert "research-agent" in _Recorder.system[0]
+
+
+def test_the_agent_is_not_told_its_final_message_is_the_deliverable(tmp_path):
+    """The todo middleware ends with "write your final answer in the message
+    AFTER your last write_todos call". This agent's answer is a file, and a run
+    that recites its report into a reply pays for the report twice."""
+    model = _recorder()
+    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
+        {"messages": [("user", "research something")]})
+
+    assert "Finishing a task" not in _Recorder.system[0]
+    assert "belongs in a file" in _Recorder.system[0]
+
+
+def test_a_reworded_upstream_section_is_reported_rather_than_missed(caplog):
+    """The removals match imported constants. If upstream rewords one the
+    import still resolves, the removal silently does nothing, and this is the
+    only thing that would say so."""
+    tools._warned.clear()
+    with caplog.at_level("WARNING"):
+        assert tools._prune("nothing to remove here") == "nothing to remove here"
+    assert "reworded upstream" in caplog.text
+    tools._warned.clear()
+
+
+# --- one directory per investigation ----------------------------------------
+
+
+def test_a_named_research_directory_reaches_prompts_and_tools(tmp_path):
+    model = _recorder()
+    session.build_agent(tmp_path, model, pool=None, members=3,
+                        research_dir="research/cv-spain").invoke(
+        {"messages": [("user", "research something")]})
+
+    text = _Recorder.system[0]
+    assert "/research/cv-spain/final_report.md" in text
+    # Nothing may still point at the default, or the agent writes to two places.
+    assert "/research/final_report.md" not in text
+    assert "/research/cv-spain/" in _Recorder.described["write_file"]
+    assert (tmp_path / "research" / "cv-spain").is_dir()
+
+
+def test_the_default_directory_is_left_exactly_as_written():
+    """`retarget` is a substitution over assembled prose; on the default it must
+    be the identity, or every prompt assertion is testing the rewriter."""
+    text = "write it to /research/final_report.md"
+    assert notes.retarget(text, "research") == text
+    assert notes.retarget(text, "/research/") == text
+
+
+def test_a_continued_investigation_sees_what_the_last_run_left(tmp_path):
+    """The reason the directory is a parameter: point a second question at the
+    first one's directory and its notes are there to read, extend and cite."""
+    earlier = tmp_path / "research" / "cv-spain"
+    earlier.mkdir(parents=True)
+    (earlier / "retail.md").write_text("# Retail security in Spain\n",
+                                       encoding="utf-8")
+
+    answer = notes.make_status_tool(earlier, "research/cv-spain").invoke({})
+
+    assert "/research/cv-spain/retail.md" in answer
+    assert "Retail security in Spain" in answer
+
+
+def test_a_delegated_exploration_can_be_given_its_own_directory(monkeypatch,
+                                                                tmp_path):
+    """A2A callers get the same seam: one directory per delegated question."""
+    from agent.explore import a2a
+
+    class _Fake:
+        def invoke(self, state, config=None):
+            path = tmp_path / "research" / "delegated" / "note.md"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# delegated\n", encoding="utf-8")
+            return {"messages": [AIMessage("done")]}
+
+    monkeypatch.setattr(session, "build_agent", lambda *a, **kw: _Fake())
+    handler = a2a.make_handler(model=None, workdir=tmp_path, pool=None,
+                               floor=128_000, members=1, recursion_limit=10,
+                               research_dir="research/delegated")
+    task = handler(_task())
+
+    assert [a.parts[0].uri for a in task.artifacts] == [
+        "research/delegated/note.md"]
+
+
+# --- the sub-agents are held to the same surface ----------------------------
+
+
+def test_the_general_purpose_subagent_is_declared_rather_than_defaulted():
+    """The framework adds one when the caller declares none, and the default
+    inherits the filesystem tools without our middleware -- so an agent with no
+    `grep` could delegate to one that has, under no search budget either."""
+    from langchain.agents.middleware import ToolCallLimitMiddleware
+
+    spec = session.general_purpose_subagent([])
+
+    assert spec["name"] == "general-purpose"
+    kinds = {type(m) for m in spec["middleware"]}
+    assert tools.ToolSurfaceMiddleware in kinds
+    assert ToolCallLimitMiddleware in kinds
+    assert "no shell" in spec["description"]

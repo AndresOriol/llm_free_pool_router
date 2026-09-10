@@ -63,10 +63,16 @@ from agent.runtime.trace import tracer_from_env
 
 logger = logging.getLogger("harness.explore")
 
-# Where the notes go unless the task says otherwise. Stated in the prompt and
-# here, because the launcher creates it: an agent that has to `mkdir` before its
-# first write spends a step discovering that, and sometimes writes to `/` instead.
-RESEARCH_DIR = "research"
+# Where the notes go unless the caller names somewhere else. The launcher
+# creates it, because an agent that has to `mkdir` before its first write spends
+# a step discovering that and sometimes writes to `/` instead.
+#
+# It is a *parameter* rather than a constant because a directory is what
+# separates one investigation from the next, and what lets a second run continue
+# the first: point two questions at one directory and their notes interleave
+# under names nobody chose to be distinct
+# ([notes.py](notes.py), [15.5.2](../../docs/15-explorer.md#1552-the-research-directory-and-how-to-see-it)).
+RESEARCH_DIR = notes.DEFAULT_DIR
 
 # Upstream's numbers, kept. The defaults bias to one sub-agent anyway, and
 # lowering a documented limit before observing it spend anything would be
@@ -77,7 +83,13 @@ MAX_SEARCHES_PER_SUBAGENT = 5
 
 
 def orchestrator_prompt() -> str:
-    """Upstream's two orchestrator sections, joined the way upstream joins them."""
+    """Upstream's two orchestrator sections, joined the way upstream joins them.
+
+    Left saying `/research/`. `prompt.build` retargets the whole assembly at the
+    end, and a section that retargeted itself first would be substituted twice --
+    `/research/cv-spain/cv-spain/final_report.md`, which is a real path this
+    caught ([notes.retarget](notes.py)).
+    """
     return (
         f"Today's research date is {date.today().isoformat()}. Use this date for "
         "the report; distinguish it from publication dates of sources.\n\n"
@@ -91,53 +103,84 @@ def orchestrator_prompt() -> str:
     )
 
 
-def researcher_subagent(tools: list,
-                        research_dir: Optional[Path] = None) -> dict:
+def researcher_subagent(tools: list, research_dir: str = RESEARCH_DIR) -> dict:
     """The `research-agent` sub-agent, as upstream declares it.
 
-    `research_dir` is what makes its `/research/` listing current. A sub-agent
-    gets its own copy of the filesystem tools from the framework, so it gets its
-    own copy of the surface middleware too -- without it the researcher would be
-    the only thing in this system still able to `grep` the project.
+    It gets its own copy of the surface middleware because the framework hands
+    it its own copy of the filesystem tools -- without it the researcher would
+    be the one thing in this system still able to `grep` the project.
     """
     from langchain.agents.middleware import ToolCallLimitMiddleware
-
-    middleware = [
-        # Keep the stated budget real, but let the researcher save findings
-        # and explain gaps after search is exhausted. State is per invocation.
-        ToolCallLimitMiddleware(
-            tool_name="tavily_search", run_limit=MAX_SEARCHES_PER_SUBAGENT,
-            exit_behavior="continue"),
-        tool_surface.ToolSurfaceMiddleware(),
-    ]
-    if research_dir is not None:
-        # Parallel researchers pick their own filenames. The listing is how one
-        # of them finds out the other has already taken the path it wanted.
-        middleware.append(notes.ResearchNotesMiddleware(research_dir))
 
     return {
         "name": "research-agent",
         "description": ("Delegate research to the sub-agent researcher. Only "
                         "give this researcher one topic at a time."),
-        "system_prompt": deep_prompts.RESEARCHER_INSTRUCTIONS.format(
-            date=date.today().isoformat(),
-            max_searches=MAX_SEARCHES_PER_SUBAGENT),
+        "system_prompt": notes.retarget(
+            deep_prompts.RESEARCHER_INSTRUCTIONS.format(
+                date=date.today().isoformat(),
+                max_searches=MAX_SEARCHES_PER_SUBAGENT),
+            research_dir),
         "tools": tools,
-        "middleware": middleware,
+        "middleware": [
+            # Keep the stated budget real, but let the researcher save findings
+            # and explain gaps after search is exhausted. Per invocation.
+            ToolCallLimitMiddleware(
+                tool_name="tavily_search", run_limit=MAX_SEARCHES_PER_SUBAGENT,
+                exit_behavior="continue"),
+            tool_surface.ToolSurfaceMiddleware(research_dir),
+        ],
     }
+
+
+def general_purpose_subagent(tools: list, research_dir: str = RESEARCH_DIR) -> dict:
+    """Upstream's fallback sub-agent, held to this agent's tool surface.
+
+    `create_deep_agent` adds a `general-purpose` sub-agent whenever the caller
+    does not declare one, and the only way to decline it is a harness profile
+    keyed to the model -- which here is the pool, shared with every other agent
+    in this repo ([tools.py](tools.py)). So it is declared rather than left to
+    the default.
+
+    Declaring it is also the fix for a hole. The default inherits the framework's
+    filesystem tools and *not* our middleware, so an agent that has no `grep`
+    could delegate to one that has -- and to one under no search budget either.
+    Same surface, same limit, or the tailoring only holds for the agent that
+    happens to be in front.
+    """
+    from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
+
+    spec = dict(GENERAL_PURPOSE_SUBAGENT)
+    spec["description"] = (
+        "General-purpose sub-agent with this agent's own tools and a fresh "
+        "context. It searches the web and reads files; it cannot list, glob or "
+        "grep the project, and it has no shell. Prefer `research-agent` for "
+        "anything that is research.")
+    spec["tools"] = tools
+    spec["middleware"] = researcher_subagent(tools, research_dir)["middleware"]
+    return spec
 
 
 def build_agent(workdir: Path, model, pool, *,
                 floor: int = CONTEXT_FLOOR, members: int = 0,
+                research_dir: str = RESEARCH_DIR,
                 extra_middleware: Optional[Sequence] = None):
-    """The compiled research orchestrator over a jailed backend and the pool."""
+    """The compiled research orchestrator over a jailed backend and the pool.
+
+    `research_dir` is a path *inside* the workdir -- `research`, or
+    `research/2026-09-cv-spain` for one investigation among several. An existing
+    one is continued rather than replaced: its notes are there to be listed,
+    read and cited, which is the whole reason the run says which directory it
+    is working in.
+    """
     from deepagents import create_deep_agent
 
     from agent.runtime.backend import RestrictedShellBackend
 
     workdir = Path(workdir)
-    research_dir = workdir / RESEARCH_DIR
-    research_dir.mkdir(parents=True, exist_ok=True)
+    research_dir = research_dir.strip("/") or notes.DEFAULT_DIR
+    research_path = workdir / research_dir
+    research_path.mkdir(parents=True, exist_ok=True)
 
     # No programs at all, unchanged. `execute` is still installed -- the backend
     # satisfies SandboxBackendProtocol either way -- but every command comes back
@@ -146,6 +189,10 @@ def build_agent(workdir: Path, model, pool, *,
                                      allow_git=False, allow_shell=False)
 
     tools = list(research_tools.make_research_tools(pool).values())
+    # The one tool that is neither upstream's nor the framework's. It is what
+    # `ls` was doing badly: the agent asks what its own research holds, when it
+    # wants to know, rather than being told on every call.
+    tools.append(notes.make_status_tool(research_path, research_dir))
 
     # This project's own preamble first, then upstream's workflow. The preamble
     # carries facts about *this* system that upstream cannot know -- which pool
@@ -158,13 +205,13 @@ def build_agent(workdir: Path, model, pool, *,
     # worth reading belong in the brief that asked it. A tree here is a hundred
     # lines inviting the one thing the tool surface no longer supports.
     system_prompt = prompt.build(
-        floor, members=members, extra_sections=[orchestrator_prompt()])
+        floor, members=members, research_dir=research_dir,
+        extra_sections=[orchestrator_prompt()])
 
     # Ours, after everything the framework installs: the surface middleware has
     # to run late enough to see the tools the filesystem and subagent middleware
     # inject, which is exactly where `create_deep_agent` puts caller middleware.
-    middleware = [tool_surface.ToolSurfaceMiddleware(),
-                  notes.ResearchNotesMiddleware(research_dir),
+    middleware = [tool_surface.ToolSurfaceMiddleware(research_dir),
                   *(extra_middleware or [])]
 
     return create_deep_agent(
@@ -177,12 +224,14 @@ def build_agent(workdir: Path, model, pool, *,
         system_prompt=system_prompt,
         backend=backend,
         middleware=middleware,
-        subagents=[researcher_subagent(tools, research_dir)],
+        subagents=[researcher_subagent(tools, research_dir),
+                   general_purpose_subagent(tools, research_dir)],
     )
 
 
 def run_session(model, task: str, workdir: Path, pool, config=None,
                 floor: int = CONTEXT_FLOOR, members: int = 0,
+                research_dir: str = RESEARCH_DIR,
                 trace_path: Optional[Path] = None) -> tuple:
     """Run one exploration. Returns (final_state, trace_written)."""
     config = dict(config or {})
@@ -193,7 +242,8 @@ def run_session(model, task: str, workdir: Path, pool, config=None,
     if jsonl is not None:
         config["callbacks"] = list(config.get("callbacks") or []) + [jsonl]
 
-    agent = build_agent(workdir, model, pool, floor=floor, members=members)
+    agent = build_agent(workdir, model, pool, floor=floor, members=members,
+                        research_dir=research_dir)
 
     with collect_runs() as collected:
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
@@ -209,6 +259,7 @@ def run_session(model, task: str, workdir: Path, pool, config=None,
             "project_id": project_id,
             "workdir": str(workdir),
             "harness": "explore",
+            "research_dir": research_dir,
             "context_floor": floor,
             "eligible_providers": members,
             "search_accounts": len(getattr(pool, "accounts", []) or []),

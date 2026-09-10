@@ -35,10 +35,15 @@ The adaptations, in full:
    their quality must be measured rather than inferred from the instructions.
 6. **No `ls`, and a tool list that matches the tools.** The surface here is
    chosen rather than inherited ([tools.py](tools.py)), so upstream's `ls
-   /research` becomes the listing that arrives in the system prompt on every
-   call ([notes.py](notes.py)), and the researcher's "two specific research
-   tools" -- which was never true, since it has always been asked to save its
-   findings to a file -- names the ones it actually holds.
+   /research` becomes `research_status` ([notes.py](notes.py)), and the
+   researcher's "two specific research tools" -- which was never true, since it
+   has always been asked to save its findings to a file -- names the ones it
+   actually holds.
+7. **The reply is a pointer, not a second copy of the findings.** Upstream has
+   the researcher return its findings in full and the orchestrator summarize
+   the report it just wrote. Both were observed here: a run pays for its
+   conclusions twice, once into the file that is the deliverable and once into
+   a message that is clipped before anyone reads it.
 """
 
 from __future__ import annotations
@@ -50,11 +55,11 @@ RESEARCH_WORKFLOW_INSTRUCTIONS = """# Research Workflow
 Follow this workflow for all research requests:
 
 1. **Plan**: Create a todo list with write_todos to break down the research into focused tasks
-2. **Save the request**: Use write_file() to save the user's research question to `/research/research_request.md`
+2. **Save the request**: Use write_file() to save the user's research question to `/research/research_request.md`, and the plan beside it as `/research/research_plan.md` — `ADAPTED`: the todo list is this session's working copy and dies with it; the plan note is what a later reader, or a rerun into this same directory, actually gets
 3. **Research**: Delegate research tasks to sub-agents using the task() tool - ALWAYS use sub-agents for research, never conduct research yourself
 4. **Challenge and synthesize**: Review all sub-agent findings against the evidence requirements. Verify decision-critical gaps before choosing a recommendation; preserve exact source URLs when combining findings.
 5. **Write Report**: Write a comprehensive final report to `/research/final_report.md` (see Report Writing Guidelines below)
-6. **Verify**: Read the saved report and `/research/research_request.md`. Check the research date, scenario coverage, source links and units. Correct unsupported claims before finishing.
+6. **Verify**: Read the saved report and `/research/research_request.md`. Check the research date, scenario coverage, source links and units. `ADAPTED` — correct what you find with edit_file, one claim at a time: rewriting the whole report to fix a sentence costs the whole report and drops whatever you forget to retype. A claim its source does not support is either corrected, attributed to what the source does say, or removed.
 
 ## Research Planning Guidelines
 - Batch similar research tasks into a single TODO to minimize overhead
@@ -104,9 +109,9 @@ the camera sees and what the product controls; otherwise these are open question
 ## Naming the report
 
 `ADAPTED` — this directory outlives your run and another agent will be asked a
-different question in it tomorrow. Before writing, read the research directory
-listing in your system prompt; it is current and it is the only listing you get.
-If a `final_report.md` is already there **about a different topic**, write yours as
+different question in it tomorrow. Before writing, call `research_status`; it is
+the only listing you get. If a `final_report.md` is already there **about a
+different topic**, write yours as
 `/research/final_report-<topic-slug>.md` instead of overwriting it, and say in
 your closing message which file you wrote. Never delete someone else's report.
 
@@ -238,10 +243,10 @@ Two research tools:
 
 `ADAPTED` — and three tools for the record you leave behind: **write_file** and
 **edit_file** to save your findings to the path your brief assigned, and
-**read_file** to open a note or a project file by exact path. You have no `ls`,
-`glob`, `grep` or shell; the listing of `/research/` in your system prompt is
-current and is the only listing there is. Everything you learn that you do not
-write down is lost when you return.
+**read_file** to open a note or a project file by exact path. **research_status**
+lists what has been written so far; you have no `ls`, `glob`, `grep` or shell, so
+it is the only listing there is. Everything you learn that you do not write down
+is lost when you return.
 </Available Research Tools>
 
 <Instructions>
@@ -285,9 +290,15 @@ After each search tool call, use think_tool to analyze the results:
 </Show Your Thinking>
 
 <Final Response Format>
-When providing your findings back to the orchestrator:
+`ADAPTED` — **the note is the deliverable; your reply is a pointer to it.**
+Everything below about structure, citation and qualification describes what you
+write to the file. The orchestrator can read that file, and paying for the same
+findings twice — once into the note, once into a reply — spends the request
+budget of another search.
 
-1. **Structure your response**: Organize findings with clear headings and detailed explanations
+What you write to your assigned `/research/` path:
+
+1. **Structure the findings**: clear headings and detailed explanations
 2. **Cite sources inline**: `ADAPTED` — use direct Markdown links with source title
    and the exact URL returned by the tool. Never use note-local citation numbers.
 3. **Include Sources section**: End with ### Sources identifying the linked sources
@@ -304,26 +315,31 @@ legal conclusion unresolved. For numerical estimates give their assumptions,
 units and calculation, or omit the number. Report date is today's date given
 above, not the date of the newest article you happened to find.
 
-Save findings to the unique `/research/` path assigned in your brief after the
-first useful evidence, then update it before returning. Include remaining gaps
-and source URLs so partial research survives an interruption. Return a concise
-summary, decisive evidence, unresolved questions and the saved path; the
-orchestrator can read the note for the details. If no path was assigned, choose
-a descriptive unused path under `/research/`; never overwrite another topic.
+Save the note after the first useful evidence and update it before returning, so
+partial research survives an interruption. If no path was assigned, choose a
+descriptive unused path under `/research/`; never overwrite another topic.
 
-Example:
+What you return, in **under 200 words**:
+
+- the path you saved, first;
+- the two or three findings that actually bear on the decision, one line each,
+  each with the link that supports it;
+- what you could not establish, and what it would take to establish it.
+
+Do not restate the note. Do not include the Sources section in your reply — it
+is in the file. If the orchestrator needs the detail, it will read the path.
+
+Example reply:
 ```
-## Key Findings
+Saved to /research/retail-pricing.md.
 
-The documentation describes how context is passed to the model
-([Documentation](https://example.com/context-guide)). This alone does not
-establish a measured performance improvement.
+- Per-camera subscription pricing is published only by two of the five vendors;
+  both are €30-45/camera/month ([Vendor pricing](https://example.com/pricing)).
+- No independent figure for installation time; the 30-minute claim is the
+  vendor's own ([Vendor docs](https://example.com/install)).
 
-### Sources
-[Documentation](https://example.com/context-guide): describes the interface;
-no performance measurement reported. (Illustrative citation syntax only.)
+Unresolved: nothing from a Spanish reseller, which is where a local quote would
+come from. A search in Spanish for a distributor price list would settle it.
 ```
-
-The orchestrator will preserve these source links when combining findings.
 </Final Response Format>
 """

@@ -1,4 +1,4 @@
-"""CLI: python -m agent.explore [workdir] < brief.md
+"""CLI: python -m agent.explore [workdir] [research-dir] < brief.md
 
 Same shape as `python -m agent.code` -- workdir as an argument, task on stdin,
 exit at EOF -- so the two are interchangeable in a script or an eval
@@ -6,6 +6,14 @@ configuration, and so the obvious workflow needs no glue:
 
     python -m agent.explore  ./project < question.md   # research, writes /research
     python -m agent.code     ./project < brief.md      # build, reads /research
+
+The second argument is the directory the notes go in, relative to the workdir,
+and it defaults to `research`. Name one per investigation to keep them apart,
+and name an existing one to continue it -- a second run reads, extends and cites
+what the first left there:
+
+    python -m agent.explore ./project research/cv-spain < question.md
+    python -m agent.explore ./project research/cv-spain < follow-up.md
 
 Environment:
   ROUTER_CONFIG      pool config to load; unset uses llm_router/config.yaml
@@ -72,6 +80,7 @@ def build(floor: int):
 def main() -> None:
     workdir = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
     workdir.mkdir(parents=True, exist_ok=True)
+    research_dir = sys.argv[2] if len(sys.argv) > 2 else RESEARCH_DIR
 
     task = sys.stdin.read().strip() if not sys.stdin.isatty() else ""
     if not task:
@@ -93,13 +102,15 @@ def main() -> None:
     with keep_awake():
         final, written = run_session(
             model, task, workdir, search, floor=floor, members=members,
+            research_dir=research_dir,
             trace_path=Path(trace_file) if trace_file else None)
 
-    _summary(final, written, workdir)
+    _summary(final, written, workdir, research_dir)
     sys.exit(0)
 
 
-def _summary(final, written, workdir: Path) -> None:
+def _summary(final, written, workdir: Path,
+             research_dir: str = RESEARCH_DIR) -> None:
     messages = (final or {}).get("messages") or []
     print(f"\n=== DONE after {len(messages)} message(s) ===")
     if messages:
@@ -113,8 +124,8 @@ def _summary(final, written, workdir: Path) -> None:
     # The notes are the deliverable, so the summary names them rather than
     # leaving the operator to go looking. An empty list is the loudest thing
     # this can print: the run talked to itself and left nothing behind.
-    notes = sorted((workdir / RESEARCH_DIR).rglob("*.md"))
-    print(f"\nnotes in /{RESEARCH_DIR}: {len(notes)}")
+    notes = sorted((workdir / research_dir).rglob("*.md"))
+    print(f"\nnotes in /{research_dir}: {len(notes)}")
     for note in notes:
         print(f"  {note.relative_to(workdir).as_posix()} "
               f"({note.stat().st_size:,} bytes)")

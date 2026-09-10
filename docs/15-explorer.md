@@ -145,7 +145,7 @@ Same jail as the coding agent, rooted at `workdir`, with one difference:
 | `write_todos`, `task` | ✓ | ✓ |
 | `ls`, `glob`, `grep` | ✓ | — |
 | `execute` — `python`, `pytest`, `git` | ✓ | — |
-| `tavily_search`, `think_tool` | — | ✓ |
+| `tavily_search`, `think_tool`, `research_status` | — | ✓ |
 
 The coding agent needs a shell to close its own loop — write a test, run it,
 react to the result. A researcher has no loop to close, so the allowlist is
@@ -172,9 +172,9 @@ them are removed here ([tools.py](../agent/explore/tools.py)), each for a reason
 about the same scarce thing, a model call against a per-day request budget:
 
 - **`ls`, `glob`, `grep` are repository discovery**, and this agent has two
-  sources of paths that cost nothing. Its own directory arrives in the system
-  prompt on every call ([15.5.2](#1552-the-research-directory-in-place-of-ls)),
-  and a project file worth reading is one the *request* named — the caller is
+  other sources of paths. `research_status` says what its own research holds
+  ([15.5.2](#1552-the-research-directory-and-how-to-see-it)), and a project file
+  worth reading is one the *request* named — the caller is
   usually the coding agent, which knows the repository already
   ([16](16-agent-protocol.md)). Searching a repo with the research budget is
   doing the other agent's job with the wrong account.
@@ -210,29 +210,92 @@ it. Filtering the request applies to exactly the agent it is installed on. The
 researcher sub-agent gets its own copy, because the framework hands it its own
 copy of the filesystem tools.
 
-### 15.5.2 The research directory, in place of `ls`
+### 15.5.2 The research directory, and how to see it
 
-Every model call carries the current contents of `/research/` — each note's
-path, size and first heading ([notes.py](../agent/explore/notes.py)).
+**Which directory is a parameter of the run**, not a constant
+([notes.py](../agent/explore/notes.py)):
 
-Per call, unlike the coding agent's project tree, and the difference is what
-makes it worth the tokens: **this listing is the agent's own output.** It changes
-exactly when a note is written, which is the moment it starts mattering — the
-orchestrator has to know whether a `final_report.md` about someone else's
-question is already sitting there before it writes over it
-([15.8.2](#1582-what-this-pool-forced-us-to-change)), two researchers working in
-parallel have to not choose the same filename, and after summarization a note
-written an hour ago is no longer anywhere in the conversation. The directory is
-the only thing that still remembers it.
+```bash
+python -m agent.explore ./project research/cv-spain < question.md
+python -m agent.explore ./project research/cv-spain < follow-up.md   # continues it
+```
 
-It costs a directory read and no model call. An empty directory says so rather
-than being omitted: "nothing is written yet" is the state in which a crash costs
-the whole run ([15.8.3](#1583-what-it-costs-and-what-was-given-up)).
+That is what makes a second question a continuation rather than a collision.
+Point two investigations at one directory and their notes interleave under names
+nobody chose to be distinct, and "is this note about my question?" becomes
+something the agent has to infer from filenames; point the second run at the
+first one's directory deliberately and its notes are there to be listed, read,
+extended and cited. The prompts and tool descriptions go on saying `/research/`
+and are substituted once, at assembly — twice was a bug this caught, and
+`/research/cv-spain/cv-spain/final_report.md` is what it looked like.
 
-**Unmeasured.** This is a configuration change argued from traces, not a result.
-The number that would say whether it helped is `tokens_in` per run and the count
-of tool calls spent before the first search; nothing has read them against a
-control yet.
+**What is in it comes from `research_status`**, a tool: every note's path, size
+and first heading, asked for when the answer is wanted.
+
+That is a reversal. It was first built as a listing injected into the system
+prompt on *every* model call, on the argument that the directory is the agent's
+own output and therefore, unlike the coding agent's project tree, changes exactly
+when it starts mattering. The argument is still true and no longer decides it:
+the injection was paid for on every call including the great majority that never
+needed it, it fed the prompt this agent already had too much of
+([15.5.3](#1553-what-the-framework-says-that-is-not-true-here)), and it could
+only ever answer *what notes exist* — where the next question is always *what is
+in this one*, which is `read_file` and a path. A tool is asked, and it is the
+seam where "list the paths" becomes "say what state the research is in" without
+touching a prompt.
+
+The reasons it exists at all are unchanged: the orchestrator has to know whether
+a `final_report.md` about someone else's question is sitting there before it
+writes over it ([15.8.2](#1582-what-this-pool-forced-us-to-change)), parallel
+researchers must not choose the same filename, and after summarization a note
+written an hour ago is nowhere in the conversation but is still on disk. An empty
+directory says so rather than returning nothing: "nothing is written yet" is the
+state in which a crash costs the whole run
+([15.8.3](#1583-what-it-costs-and-what-was-given-up)).
+
+### 15.5.3 What the framework says that is not true here
+
+Removing tools left the framework describing an agent this is not.
+`create_deep_agent` appends its own prompt sections, and after the filtering
+above four of them were wrong in a way that costs more than tokens:
+
+| section | what it said | why it goes |
+| --- | --- | --- |
+| `FILESYSTEM_SYSTEM_PROMPT` | lists `ls`, `glob`, `grep` among the tools available | three of the six are not offered |
+| `EXECUTION_SYSTEM_PROMPT` | "You have access to an `execute` tool" | not offered, and the backend refuses every command |
+| `TASK_SYSTEM_PROMPT` | 3,700 characters on when to spawn a sub-agent | the ported research workflow answers this three sections earlier |
+| `WRITE_TODOS_SYSTEM_PROMPT` | "write your final answer in the message AFTER your last `write_todos` call … The user wants the result" | the answer is a file; the closing message is clipped before its caller reads it ([a2a.py](../agent/explore/a2a.py)) |
+| `BASE_AGENT_PROMPT` | "The user can see your responses and tool outputs in real time", plus progress updates and clarifying questions | nobody is watching, and the headless preamble says so two thousand characters earlier |
+
+The last two are the expensive ones. A run that recites its report into a reply
+pays for the report twice — once into the file that is the deliverable and once
+into a message nobody reads — and that is a measured behaviour of the runs in
+[15.8.4](#1584-decision-led-research-candidate), not a hypothetical. The same
+correction is made on the researcher sub-agent, whose instructions now say the
+reply is a pointer to its note and cap it at 200 words.
+
+They are matched as the **imported constants**, so an upstream rewording makes
+the removal fail loudly rather than half-apply
+([tools.py](../agent/explore/tools.py)).
+
+**What this arithmetic comes to.** Measured on the assembled agent, before any
+conversation: system prompt plus every tool schema, 47,187 characters as the
+framework builds it, 24,146 as this agent ships it — a 49% cut, of which about
+half is text that described tools it does not have. Whether a shorter, truer
+prompt produces better research is exactly what
+[the v3 comparison](../evals/results/reports/2026-09-10-explore-machintl.md)
+says has not been shown.
+
+**One hole this closed.** `create_deep_agent` adds a `general-purpose` sub-agent
+whenever the caller declares none, and the default inherits the framework's
+filesystem tools *without* the middleware above — so an agent with no `grep`
+could delegate to one that had it, under no search budget either. It is declared
+explicitly now, with the same surface and the same limit
+([session.py](../agent/explore/session.py)). A tailoring that only holds for the
+agent in front is not a tailoring.
+
+**Unmeasured.** All of this is argued from traces and from a deterministic
+character count, not from a result.
 
 ## 15.6 What it costs a run
 

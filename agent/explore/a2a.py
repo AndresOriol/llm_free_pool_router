@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Optional
 
 from langchain_core.messages import HumanMessage
 
@@ -65,7 +66,7 @@ def _notes(research_dir: Path) -> dict:
 
 
 def make_handler(model, workdir: Path, pool, *, floor: int, members: int,
-                 recursion_limit: int):
+                 recursion_limit: int, research_dir: Optional[str] = None):
     """The handler the registry serves for `explore`.
 
     Takes the pool and the workdir once, at wiring time, and closes over them --
@@ -76,7 +77,8 @@ def make_handler(model, workdir: Path, pool, *, floor: int, members: int,
     from agent.explore.session import RESEARCH_DIR, build_agent
 
     workdir = Path(workdir)
-    research_dir = workdir / RESEARCH_DIR
+    mount = (research_dir or RESEARCH_DIR).strip("/") or RESEARCH_DIR
+    research_path = workdir / mount
 
     def handle(task: Task) -> Task:
         request = task.history[-1].text if task.history else ""
@@ -87,7 +89,7 @@ def make_handler(model, workdir: Path, pool, *, floor: int, members: int,
         # Only the notes *this* task wrote. Without the before-shot a second
         # delegation reports the first one's files as its own findings, and the
         # caller reads a stale note believing it answers the new question.
-        before = _notes(research_dir)
+        before = _notes(research_path)
 
         # No callbacks of its own. The delegate runs inside the caller's tool
         # call, so LangChain's run context already hands it the caller's
@@ -103,10 +105,11 @@ def make_handler(model, workdir: Path, pool, *, floor: int, members: int,
         # comparison rests on.
         config = {"recursion_limit": recursion_limit}
 
-        agent = build_agent(workdir, model, pool, floor=floor, members=members)
+        agent = build_agent(workdir, model, pool, floor=floor, members=members,
+                            research_dir=mount)
         final = agent.invoke({"messages": [HumanMessage(request)]}, config)
 
-        after = _notes(research_dir)
+        after = _notes(research_path)
         written = [p for p, size in after.items()
                    if before.get(p) != size]
 
