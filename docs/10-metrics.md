@@ -56,6 +56,12 @@ Two things the same tables now refuse to average:
 
 ## 10.2 Automatic metrics
 
+Token totals exclude end events belonging to a known router wrapper: its
+response repeats the underlying provider's usage metadata. The September 10
+Machintl research traces exposed a double count when both were summed.
+Recompute older totals from their JSONL before comparing costs; existing stored
+run summaries and historical reports are not rewritten by this correction.
+
 Every one is a count or sum over `trace.jsonl`, the diff, and the verification
 output ([7.3](07-observability.md#73-the-local-trace)).
 
