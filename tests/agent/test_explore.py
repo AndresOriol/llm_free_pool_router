@@ -542,3 +542,85 @@ def test_the_general_purpose_subagent_is_declared_rather_than_defaulted():
     assert tools.ToolSurfaceMiddleware in kinds
     assert ToolCallLimitMiddleware in kinds
     assert "no shell" in spec["description"]
+
+
+# --- step 6: the review at the end ------------------------------------------
+# The prompt asks for it and `invoke_with_review` asks again when a run ends
+# without it. Every skipped step in this agent's recorded history was one the
+# prompt already asked for, and this is the step that decides whether the
+# deliverable answers the question (agent/explore/session.py).
+
+
+class _Agent:
+    """A compiled agent, faked: writes the files each invocation is told to."""
+
+    def __init__(self, research: Path, *writes):
+        self.research, self.writes, self.calls = research, list(writes), []
+
+    def invoke(self, state, config=None):
+        self.calls.append(list(state.get("messages") or []))
+        for name in (self.writes.pop(0) if self.writes else []):
+            path = self.research / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# " + name, encoding="utf-8")
+        return {"messages": [AIMessage("done")]}
+
+
+def test_a_run_that_reviewed_is_left_alone(tmp_path):
+    agent = _Agent(tmp_path, ["final_report.md", "review.md"])
+    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
+
+    assert len(agent.calls) == 1
+
+
+def test_a_run_that_skipped_the_review_is_asked_once(tmp_path):
+    agent = _Agent(tmp_path, ["final_report.md"], ["review.md"])
+    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
+
+    assert len(agent.calls) == 2
+    # It continues the conversation rather than starting a new one: a review
+    # that cannot see the run it is reviewing is a second run.
+    assert session.REVIEW_FOLLOW_UP in agent.calls[1][-1].content
+    assert (tmp_path / "review.md").exists()
+
+
+def test_a_run_that_declines_twice_still_ends(tmp_path):
+    """Advisory, never able to hold a session open. An unreviewed report is
+    worth more than a run stuck arguing about one."""
+    agent = _Agent(tmp_path, ["final_report.md"], [])
+    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
+
+    assert len(agent.calls) == 2
+
+
+def test_a_run_with_nothing_to_show_is_not_asked_to_review_it(tmp_path):
+    """It wrote the request and the plan and no findings. There is nothing to
+    read back, and the follow-up would spend a model call saying so."""
+    agent = _Agent(tmp_path, ["research_request.md", "research_plan.md"])
+    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
+
+    assert len(agent.calls) == 1
+
+
+def test_an_earlier_investigations_review_does_not_count_as_this_ones(tmp_path):
+    """Two questions can share a directory. A review from last week does not
+    say anything about the report written today."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "review.md").write_text("# reviewed something else",
+                                        encoding="utf-8")
+
+    agent = _Agent(tmp_path, ["final_report-new.md"], ["review-new.md"])
+    session.invoke_with_review(agent, {"messages": []}, {}, tmp_path)
+
+    assert len(agent.calls) == 2
+
+
+def test_the_workflow_asks_for_the_review_and_says_what_it_checks():
+    text = _flat(session.orchestrator_prompt())
+
+    assert "Reviewing your own output" in text
+    assert "answered, partly answered" in session.REVIEW_FOLLOW_UP
+    # The three things the review has to establish, in the prompt's own words.
+    assert "was this one answered" in text.lower()
+    assert "/research/review.md" in text
+    assert "correct what you find, with edit_file" in text.lower()

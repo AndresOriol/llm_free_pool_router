@@ -81,6 +81,36 @@ MAX_CONCURRENT_RESEARCH_UNITS = 3
 MAX_RESEARCHER_ITERATIONS = 3
 MAX_SEARCHES_PER_SUBAGENT = 5
 
+# Files the run produces that answer nothing: the question it was given and the
+# plan for answering it. A run that wrote only these has not researched anything,
+# and there is nothing for a review to review.
+_NOT_A_DELIVERABLE = ("research_request", "research_plan", "review")
+
+# The last step of the workflow, asked again when the run finished without it.
+#
+# **Why this exists as code and not only as prose.** Every skipped step in this
+# agent's recorded history was a step the prompt already asked for: the control
+# run exceeded a stated search budget, the v2 candidate skipped the verification
+# round it was told to spend, the v3 candidate never wrote the plan note. Step 6
+# is the one that decides whether the deliverable answers the question, so it is
+# the worst one to leave to a model that has just decided it is finished.
+#
+# It asks **once**, and only when the run produced something to review. If the
+# agent declines, the run ends anyway: this can cost a model call, and it must
+# never be able to hold a session open.
+REVIEW_FOLLOW_UP = (
+    "Before this session ends: you have not written the review. Step 6 of your "
+    "workflow is not optional and it is not a formality.\n\n"
+    "Read the research request from disk, then read the report you saved. Go "
+    "through what the request actually asked for, one item at a time, and say "
+    "for each whether it was answered, partly answered, or not answered, naming "
+    "the section that answers it. Correct what you find with `edit_file` rather "
+    "than rewriting a file whole. Then save the review as described in "
+    "\"Reviewing your own output\".\n\n"
+    "If you conclude the request *was* fully answered, that is a fine outcome — "
+    "write the review saying so, and say what you checked to be sure."
+)
+
 
 def orchestrator_prompt() -> str:
     """Upstream's two orchestrator sections, joined the way upstream joins them.
@@ -159,6 +189,61 @@ def general_purpose_subagent(tools: list, research_dir: str = RESEARCH_DIR) -> d
     spec["tools"] = tools
     spec["middleware"] = researcher_subagent(tools, research_dir)["middleware"]
     return spec
+
+
+def _notes_by_kind(research_path: Path) -> tuple:
+    """`(reviews, deliverables)` under the research directory, path -> size.
+
+    Reviews are matched on the filename the prompt asks for -- `review.md`, or
+    `review-<topic>.md` when one about another question is already there -- so a
+    second question in the same directory gets its own review rather than
+    counting the first one's.
+    """
+    reviews, deliverables = {}, {}
+    if not Path(research_path).is_dir():
+        return reviews, deliverables
+    for note in sorted(Path(research_path).rglob("*.md")):
+        stem = note.stem.lower()
+        if stem.startswith("review"):
+            reviews[note] = note.stat().st_size
+        elif not stem.startswith(_NOT_A_DELIVERABLE):
+            deliverables[note] = note.stat().st_size
+    return reviews, deliverables
+
+
+def invoke_with_review(agent, state, config, research_path: Path) -> dict:
+    """Run the agent, and ask once more if it finished without reviewing.
+
+    Returns the final state, whichever invocation produced it. The follow-up is
+    a second `invoke` over the conversation the first one left, which is exactly
+    what a person reading the closing message would do -- no graph surgery, and
+    the review lands in the same trace and the same jail as everything else.
+    """
+    before_reviews, _ = _notes_by_kind(research_path)
+    final = agent.invoke(state, config)
+
+    reviews, deliverables = _notes_by_kind(research_path)
+    reviewed = any(before_reviews.get(path) != size
+                   for path, size in reviews.items())
+    if reviewed or not deliverables:
+        if not deliverables:
+            logger.info("No deliverable was written, so there is nothing to "
+                        "review; ending the run.")
+        return final
+
+    logger.info("The run finished without a review. Asking for step 6 once.")
+    messages = list(final.get("messages") or []) + [
+        HumanMessage(REVIEW_FOLLOW_UP)]
+    final = agent.invoke({"messages": messages}, config)
+
+    after, _ = _notes_by_kind(research_path)
+    if not any(before_reviews.get(path) != size for path, size in after.items()):
+        # Said, not enforced. A research note nobody reviewed is still worth
+        # more than a run held open arguing about it.
+        logger.warning("The run ended without a review note even after being "
+                       "asked. Its report has not been checked against the "
+                       "request it answers.")
+    return final
 
 
 def build_agent(workdir: Path, model, pool, *,
@@ -246,7 +331,8 @@ def run_session(model, task: str, workdir: Path, pool, config=None,
                         research_dir=research_dir)
 
     with collect_runs() as collected:
-        final = agent.invoke({"messages": [HumanMessage(task)]}, config)
+        final = invoke_with_review(agent, {"messages": [HumanMessage(task)]},
+                                   config, workdir / research_dir)
 
     trace_id, project_id = _trace_locator(collected.traced_runs)
     project_id = run_trace.resolve_project_id(project_id)

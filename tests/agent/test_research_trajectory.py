@@ -277,8 +277,47 @@ def test_a_well_behaved_deep_run_fails_nothing():
     events = _request()
     for i in range(3):
         events += _deep_search(f"What is thing {i} used for?") + _think()
-    events += _note("/research/final_report.md")
+    events += _note("/research/final_report.md") + _note("/research/review.md")
     assert rt.failures(events) == [], [str(c) for c in rt.failures(events)]
+
+
+def test_a_report_nobody_read_back_is_a_failure():
+    """Step 6. An unreviewed report reads exactly like a reviewed one, which is
+    why its absence has to be counted rather than noticed."""
+    events = _request()
+    for i in range(3):
+        events += _deep_search(f"What is thing {i} used for?") + _think()
+    events += _note("/research/final_report.md")
+
+    checks = _named(rt.check(events))
+    assert not checks["reviewed its own report against the request"].ok
+    assert not rt.from_trace(events)["reviewed"]
+
+
+def test_a_run_that_wrote_nothing_is_not_asked_to_review_it():
+    """No deliverable is already a failure of its own; a second FAIL for not
+    reviewing the report it never wrote measures the same thing twice."""
+    events = _request() + _deep_search("what is x?") + _think()
+    assert _named(rt.check(events))[
+        "reviewed its own report against the request"].ok
+
+
+def test_a_review_written_before_the_last_edit_reviewed_another_document():
+    events = _request() + _deep_search("What is x used for?") + _think()
+    events += _note("/research/review.md") + _note("/research/final_report.md")
+
+    checks = _named(rt.check(events))
+    assert checks["reviewed its own report against the request"].ok
+    assert not checks["reviewed the version that shipped"].ok
+
+
+def test_a_review_named_around_a_collision_still_counts():
+    """The prompt allows `review-<topic>.md` when a review about another
+    question is already in the directory."""
+    events = _request() + _deep_search("What is x used for?") + _think()
+    events += (_note("/research/final_report-cv.md")
+               + _note("/research/review-cv.md"))
+    assert rt.from_trace(events)["reviewed_what_shipped"]
 
 
 def test_each_agent_is_scored_against_the_budget_its_own_prompt_set():

@@ -81,7 +81,11 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   every call carries before the conversation starts
   ([15.5.1](docs/15-explorer.md#1551-the-surface-is-chosen-not-inherited)).
   Which directory it writes to is named per run, so one investigation can
-  continue another. It hands off to the coding agent by writing `/research/*.md`
+  continue another. A run ends by reading its own report back against the
+  request and saving what it found as `review.md`; the session asks a second
+  time if it skipped that
+  ([15.5.4](docs/15-explorer.md#1554-the-review-at-the-end)). It hands off to
+  the coding agent by writing `/research/*.md`
   ([15. The web explorer](docs/15-explorer.md)). Every deviation from upstream is
   marked `ADAPTED` in [deep_prompts.py](agent/explore/deep_prompts.py).
 - [agent/improve](agent/improve/) — the agent whose project is the other

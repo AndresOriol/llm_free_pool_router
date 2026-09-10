@@ -74,7 +74,8 @@ def make_handler(model, workdir: Path, pool, *, floor: int, members: int,
     their cooldown, which is the main reason this transport is local at all
     ([16.3](../../docs/16-agent-protocol.md#163-why-the-transport-is-local)).
     """
-    from agent.explore.session import RESEARCH_DIR, build_agent
+    from agent.explore.session import (RESEARCH_DIR, build_agent,
+                                       invoke_with_review)
 
     workdir = Path(workdir)
     mount = (research_dir or RESEARCH_DIR).strip("/") or RESEARCH_DIR
@@ -107,7 +108,11 @@ def make_handler(model, workdir: Path, pool, *, floor: int, members: int,
 
         agent = build_agent(workdir, model, pool, floor=floor, members=members,
                             research_dir=mount)
-        final = agent.invoke({"messages": [HumanMessage(request)]}, config)
+        # Same ending as a run started from the command line: the report is
+        # checked against the request before the task is reported complete
+        # ([15.5.4](../../docs/15-explorer.md#1554-the-review-at-the-end)).
+        final = invoke_with_review(agent, {"messages": [HumanMessage(request)]},
+                                   config, research_path)
 
         after = _notes(research_path)
         written = [p for p, size in after.items()

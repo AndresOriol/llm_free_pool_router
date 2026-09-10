@@ -297,6 +297,59 @@ agent in front is not a tailoring.
 **Unmeasured.** All of this is argued from traces and from a deterministic
 character count, not from a result.
 
+### 15.5.4 The review at the end
+
+*Step 6 of the workflow, and the only step whose absence is invisible in the
+output: an unreviewed report reads exactly like a reviewed one.*
+
+The run does not end when the report is written. It ends when the agent has read
+the request back off disk, read the report it saved, and answered **one question
+per thing the request asked for** — answered, partly, or not answered, naming
+the section that answers it — corrected what it found with `edit_file`, and
+saved that account as `/research/review.md`
+([deep_prompts.py](../agent/explore/deep_prompts.py)).
+
+Three things about the shape of it:
+
+**It is asked against the request, not against the prose.** A long report is not
+evidence that the question was answered, and the failure this catches is the one
+the runs in [15.8.4](#1584-decision-led-research-candidate) actually made: a
+report that answers a neighbouring question well while the asked one goes
+untouched. The review is also where a decision-critical claim gets named as
+resting on a vendor's own page, a single source, or an inference — which is
+precisely the defect the v3 comparison found and no reader of the report alone
+could see.
+
+**Corrections are edits, not rewrites.** `write_file` on a thirty-thousand
+character report costs the whole report in output tokens and drops whatever the
+model does not retype. This is the job `edit_file` exists for, and until this
+step existed it had none — recorded runs called it zero times
+([15.5.1](#1551-the-surface-is-chosen-not-inherited)).
+
+**It is asked twice, in code.** `invoke_with_review`
+([session.py](../agent/explore/session.py)) snapshots the review notes, runs the
+agent, and if the run finished having written a deliverable but no review, sends
+one more message asking for step 6 and invokes again over the same conversation.
+
+That second half is not decoration. *Every* skipped step in this agent's
+recorded history was one the prompt already asked for: the control run exceeded
+a stated search budget, v2 skipped the verification round it was told to spend,
+v3 never wrote the plan note. Step 6 is the worst one to leave to a model that
+has just decided it is finished, because the model deciding it is finished is
+the thing being checked.
+
+It asks **once**, and only when there is something to review. If the agent
+declines, the run ends and the log says the report was never checked. The same
+rule the quota reader follows: advisory, and never able to stall a run
+([4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent)).
+
+**And it is counted.** `research_trajectory` gains two checks — that a review was
+written, and that it came *after* the last edit to a report, since a review
+written before the final edit checked a document that no longer exists
+([research_trajectory.py](../evals/research_trajectory.py)). A FAIL there means
+the agent was asked twice and declined, which is a fact about the configuration
+rather than about one report.
+
 ## 15.6 What it costs a run
 
 Per `tavily_search` call:

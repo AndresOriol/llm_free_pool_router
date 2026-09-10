@@ -38,6 +38,11 @@ READ_TOOLS = {"read_url"}
 REFLECT_TOOLS = {"think_tool"}
 WRITE_TOOLS = {"write_file", "edit_file"}
 REQUEST_NOTE = "research_request.md"
+# Step 6's note: `review.md`, or `review-<topic>.md` when one about another
+# question is already in the directory (agent/explore/deep_prompts.py). Matched
+# on the filename rather than the directory, because which directory a run
+# writes to is now named per run.
+REVIEW_NOTE = "review"
 
 # A note is a research deliverable; anything else the agent writes is scratch.
 _NOTE = re.compile(r"/research/.+\.md$", re.IGNORECASE)
@@ -152,6 +157,13 @@ def from_trace(events: list) -> dict:
 
     queries = [str(_args(e).get("query") or "") for e in searches]
 
+    review_at = next((i for i, e in enumerate(order)
+                      if e.get("tool") in WRITE_TOOLS
+                      and _is_review(_note_path(e))), None)
+    last_report_at = next((i for i in range(len(order) - 1, -1, -1)
+                           if order[i].get("tool") in WRITE_TOOLS
+                           and _is_report(_note_path(order[i]))), None)
+
     return {
         "vocabulary": vocabulary(events),
         "searches": len(searches),
@@ -163,9 +175,29 @@ def from_trace(events: list) -> dict:
         "reports": len([n for n in set(notes) if REQUEST_NOTE not in n]),
         "saved_the_request": any(REQUEST_NOTE in n for n in notes),
         "searches_before_first_note": searches_before_first_note,
+        "reviewed": review_at is not None,
+        # A review written *before* the last edit to the report reviewed a
+        # different document than the one that shipped.
+        "reviewed_what_shipped": (review_at is not None
+                                  and last_report_at is not None
+                                  and review_at > last_report_at),
         "question_shaped_queries": sum(1 for q in queries
                                        if _looks_like_a_question(q)),
     }
+
+
+def _is_review(path: Optional[str]) -> bool:
+    """Whether a written path is step 6's review note."""
+    name = (path or "").rsplit("/", 1)[-1].lower()
+    return name.startswith(REVIEW_NOTE) and name.endswith(".md")
+
+
+def _is_report(path: Optional[str]) -> bool:
+    """Whether a written path is a deliverable rather than bookkeeping."""
+    name = (path or "").rsplit("/", 1)[-1].lower()
+    if not name.endswith(".md") or _is_review(path):
+        return False
+    return not name.startswith(("research_request", "research_plan"))
 
 
 def vocabulary(events: list) -> str:
@@ -282,6 +314,26 @@ def check(events: list, *, budget: Optional[int] = None) -> list:
             "think_tool is a forced pause between retrieving and deciding to "
             "retrieve again. Skipping it is how a run spends its whole budget "
             "confirming what its second search already said.")
+
+        # Step 6, and the one step whose absence is invisible in the output:
+        # an unreviewed report reads exactly like a reviewed one. The session
+        # asks for it a second time when a run ends without it, so a FAIL here
+        # means the agent was asked twice and declined
+        # (agent/explore/session.py).
+        add("reviewed its own report against the request",
+            m["reviewed"] or m["reports"] == 0,
+            "wrote a review note" if m["reviewed"] else "no review note",
+            "A long report is not evidence that the question was answered. "
+            "Step 6 reads the request back, says item by item whether each was "
+            "answered, and corrects what the sources do not support.")
+
+        add("reviewed the version that shipped",
+            m["reviewed_what_shipped"] or not m["reviewed"],
+            "the review came after the last edit to a report"
+            if m["reviewed_what_shipped"]
+            else "a report was written or edited after the review",
+            "A review written before the last edit checked a document that no "
+            "longer exists.")
 
         add("saved the request",
             m["saved_the_request"],
