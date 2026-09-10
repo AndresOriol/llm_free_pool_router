@@ -56,8 +56,9 @@ Two things the same tables now refuse to average:
 
 ## 10.2 Automatic metrics
 
-Token totals exclude end events belonging to a known router wrapper: its
-response repeats the underlying provider's usage metadata. The September 10
+Token totals exclude a router wrapper's usage only when the corresponding
+provider usage is also present: the wrapper repeats the provider's metadata.
+Wrapper-only legacy/direct traces retain their reported usage. The September 10
 Machintl research traces exposed a double count when both were summed.
 Recompute older totals from their JSONL before comparing costs; existing stored
 run summaries and historical reports are not rewritten by this correction.

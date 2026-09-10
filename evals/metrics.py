@@ -159,11 +159,19 @@ def from_trace(events: list) -> dict:
     """Counts over the event stream."""
     llm_starts = [e for e in events if e.get("event") == "llm_start"]
     provider_starts = [e for e in llm_starts if e.get("model") not in ROUTER_MODELS]
-    # The router returns the provider's message, including usage metadata.
-    # Its llm_end repeats those tokens; counting both doubles research cost.
-    router_ids = {e["run_id"] for e in llm_starts
-                  if e.get("model") in ROUTER_MODELS and e.get("run_id")}
-    usage_events = [e for e in events if e.get("run_id") not in router_ids]
+    # Drop a wrapper's repeated usage only when its provider's usage is present.
+    # Direct/legacy calls may trace only the wrapper; their tokens are still real.
+    usage_ids = {e.get("run_id") for e in events if e.get("event") == "llm_end"
+                 and (e.get("tokens_in") is not None or e.get("tokens_out") is not None)}
+    provider_parents = {e["parent_run_id"] for e in provider_starts
+                        if e.get("run_id") in usage_ids and e.get("parent_run_id")}
+    # Under LangGraph these spans are siblings under the model node; an explicit
+    # child callback instead parents the provider directly under the router.
+    duplicate_router_ids = {e["run_id"] for e in llm_starts
+                            if e.get("model") in ROUTER_MODELS and e.get("run_id")
+                            and (e["run_id"] in provider_parents
+                                 or e.get("parent_run_id") in provider_parents)}
+    usage_events = [e for e in events if e.get("run_id") not in duplicate_router_ids]
     tokens_in = sum(e.get("tokens_in") or 0 for e in usage_events)
     tokens_out = sum(e.get("tokens_out") or 0 for e in usage_events)
     tool_starts = [e for e in events if e.get("event") == "tool_start"]
