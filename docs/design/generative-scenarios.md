@@ -185,7 +185,7 @@ functions, hand over a rendered spec plus the visible contract tests. Fully
 mechanical, no model in the loop, and the upstream test suite is the oracle —
 written by the code's author against the code's intent, which is exactly the
 property that makes it a fair judge. **This is the pipeline to build first**, and
-this repo is its own best corpus: `llm_router/quota/`, `agent/protocol/` and
+this repo is its own best corpus: `llm_router/quota/`, `agent/serve/` and
 `evals/verify.py` are self-contained, well-tested modules that would each strip
 into a scenario.
 
@@ -286,7 +286,7 @@ Two findings the plan did not have:
 
 - **`input_tokens` did not exist.** [CLAUDE.md](../../CLAUDE.md),
   [6](../06-agent.md), [11](../11-eval-status.md), [13](../13-roadmap.md),
-  [16](../16-agent-protocol.md), `CONFIGS.md` and both agent configs named
+  [16](../16-delegation.md), `CONFIGS.md` and both agent configs named
   `input_tokens` as the column to read first on every batch. The key
   `metrics.py` emits is **`tokens_in`**, so anyone — or any agent — following
   the documented instruction got nothing. Renamed across all nine places on this

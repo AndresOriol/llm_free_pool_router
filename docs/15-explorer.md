@@ -36,7 +36,7 @@ there.
 
 > **Amended.** *"They meet on disk"* used to read *"and nowhere else… no message
 > bus, no protocol to keep in step"*, and the coding agent can now ask the explorer for a report directly
-> ([16. The agent protocol](16-agent-protocol.md)). What the protocol carries is
+> ([16. Delegation](16-delegation.md)) — by running this command. What that adds is
 > the *request* and the *status*, never the deliverable: a research note is still
 > a file on disk that outlives the exchange, so everything above still holds. A
 > human sequencing the two runs by hand still works and is still the default way
@@ -277,9 +277,9 @@ can diff against the source rather than guess:
 1. **`/research/` rather than the workdir root.** Upstream writes
    `/research_request.md` and `/final_report.md` at the root. Here the workdir is
    a project a coding agent then works in, and a report at the root lands in the
-   diff it produces. The A2A handler collects `/research/*.md` as artifacts, so
-   this is also what makes a delegated report come back as one
-   ([16.4](16-agent-protocol.md#164-what-maps-onto-what)).
+   diff it produces. The command's summary names the `/research/*.md` notes a
+   run wrote, so this is also what makes a delegated report come back as one
+   ([16](16-delegation.md)).
 2. **A pool, not a client.** Upstream builds one `TavilyClient`. Search here goes
    through `TavilyPoolRouter`, so an account at its monthly credit wall fails
    over instead of ending the run — the argument the model pool already rests on.
@@ -349,4 +349,4 @@ measured once. `git log` has it.
 
 ---
 
-**Previous:** [← 14. Quota panel](14-quota-panel.md) · **Next:** [16. The agent protocol →](16-agent-protocol.md)
+**Previous:** [← 14. Quota panel](14-quota-panel.md) · **Next:** [16. Delegation →](16-delegation.md)

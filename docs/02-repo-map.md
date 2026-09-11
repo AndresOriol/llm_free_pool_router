@@ -63,8 +63,7 @@ its tools pointed outward and no shell at all. See
 | [deep_prompts.py](../agent/explore/deep_prompts.py) | *Whose method is this?* — LangChain's deep-research prompts, ported close to verbatim, with every deviation marked `ADAPTED` ([15.8](15-explorer.md#158-the-deep-research-port)) |
 | [session.py](../agent/explore/session.py) | *How does it differ from the coding agent?* — an orchestrator over a `research-agent` sub-agent, the web tools in, every program out, `/research/` created before the first write |
 | [prompt.py](../agent/explore/prompt.py) + [system_prompt.md](../agent/explore/system_prompt.md) | *What does it know that upstream cannot?* — which pool serves a call, where the jail's `/` is, that nobody is watching. The method comes from `deep_prompts.py` |
-| [a2a.py](../agent/explore/a2a.py) | *How does another agent ask it for a report?* — its `AgentCard` and the handler behind it; the notes it wrote become `Artifact`s pointing at paths ([16](16-agent-protocol.md)) |
-| [`__main__.py`](../agent/explore/__main__.py) | CLI: same shape as the coding agent, and it lists the notes it wrote |
+| [`__main__.py`](../agent/explore/__main__.py) | CLI, and how another agent reaches it: same shape as the coding agent, final message first, then the notes *this* run wrote ([16](16-delegation.md)) |
 
 `agent/improve/` is the **improvement agent**: the same loop and the same jail,
 pointed at what the other two *recorded* rather than at a project. It is the one
@@ -78,20 +77,16 @@ agent here that cannot write a file. See
 | [tools.py](../agent/improve/tools.py) | *What can it do?* — six tools, one per stage of the loop; every section bounded, because a `trace.json` is megabytes |
 | [readonly.py](../agent/improve/readonly.py) | *Why can't it just fix it?* — the filesystem writes, refused as a readable message, so the diff is always someone else's |
 | [session.py](../agent/improve/session.py) | *How does it differ from the coding agent?* — write tools refused, `git` and nothing else executable, the open ledger in the prompt, `code` as its only peer |
-| [a2a.py](../agent/improve/a2a.py) | *How does another agent ask for a pass?* — its `AgentCard`, and the issues it moved as `Artifact`s; a pass that moved none says so |
-| [`__main__.py`](../agent/improve/__main__.py) | CLI: same shape again, and with nothing on stdin it runs the standing pass over the ledger |
+| [`__main__.py`](../agent/improve/__main__.py) | CLI: same shape again, and with no task it runs the standing pass over the ledger |
 
-`agent/protocol/` is **how one agent asks another for work**. The vocabulary is
-[A2A](https://a2a-protocol.org)'s and is not ours to change; the transport is a
-local Python call. See [16. The agent protocol](16-agent-protocol.md).
+**How one agent asks another for work: it runs it.** Every agent is a command,
+and the coding agent already has `execute`. See [16. Delegation](16-delegation.md).
 
 | File | The question it answers |
 | --- | --- |
-| [types.py](../agent/protocol/types.py) | *What are the nouns?* — `AgentCard`, `Task`, `Message`/`Part`, `Artifact`, serialized to the spec's own JSON |
-| [registry.py](../agent/protocol/registry.py) | *Who is reachable, and how is the caller told?* — the cards, rendered into the system prompt rather than into a second tool |
-| [local.py](../agent/protocol/local.py) | *What happens on a delegation?* — `message/send` and `tasks/get` with the network taken out, plus the task record on disk |
-| [tools.py](../agent/protocol/tools.py) | *What does the calling agent see?* — one `delegate` tool, whose description admits what a call costs |
-| [peers.py](../agent/protocol/peers.py) | *Which agents exist in this process?* — the only module that knows about both, and it registers `explore` only if the pool can really search |
+| [agent/delegation.py](../agent/delegation.py) | *Which agents may this one run, and how is it told?* — the one module that knows about all of them: the prompt paragraph naming each command, the probe that offers `explore` only if the pool can really search, and the `subprocess.run` `delegate_fix` uses |
+| [agent/runtime/cli.py](../agent/runtime/cli.py) | *How does a command take its task?* — workdir plus `--task` or stdin, shared by all three, because `execute` has no stdin to pipe a brief into |
+| [agent/code/gitstate.py](../agent/code/gitstate.py) | *Did the delegate actually do anything?* — what git says moved, rendered verdict-first, above whatever the session said about itself |
 
 ## 2.4 `evals/` — the measurement harness
 
