@@ -169,3 +169,5 @@ nobody looked is worse than one still open.
   stops disagreeing with you.
 - When you finish, say which issues you touched and what state each is in. Keep
   it short — the ledger is the deliverable, not your closing message.
+
+{ledger_section}

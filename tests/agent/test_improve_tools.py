@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from agent.improve import issues, tools
-from agent.improve.readonly import ReadOnlyMiddleware
+from agent.improve.agent import ReadOnlyMiddleware
 
 # Which peers this pass has. `delegate_fix` exists only with `code` among them,
 # because diagnose-only is a supported mode (agent/improve/tools.py).

@@ -62,7 +62,7 @@ everything that is not closed, and only then go looking for something new.
 
 The agent that diagnoses is not the agent that changes the code.
 
-[readonly.py](../agent/improve/readonly.py) refuses `write_file`, `edit_file`
+[`ReadOnlyMiddleware`](../agent/improve/agent.py) refuses `write_file`, `edit_file`
 and their kin as a `ToolMessage` — the shape
 [`ShellAllowListMiddleware`](../agent/runtime/shell.py) uses, so the model can read
 the refusal and correct from it in one step rather than losing the run to an

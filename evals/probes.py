@@ -138,7 +138,7 @@ PROBE_PEERS = ("code",)
 def _build(probe: Probe, workdir: Path, model, floor: int, members: int):
     """The real compiled agent for this probe's target."""
     if probe.agent == "improve":
-        from agent.improve.session import build_agent
+        from agent.improve.agent import build_agent
         return build_agent(workdir, model, floor=floor, members=members,
                            peers=PROBE_PEERS)
     from agent.code.agent import build_agent

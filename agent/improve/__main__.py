@@ -7,9 +7,9 @@ argument means: for the other two it is a project to work on, and here it is a
 project whose *recorded runs* are to be read. In practice that is this
 repository.
 
-With no task at all it runs the standing pass: work the ledger. That is the job
-on most days, and an unattended schedule should not have to carry a prompt file
-around to say so.
+With no task at all it runs the standing pass, `prompts/standing_pass.md`: work
+the ledger. That is the job on most days, and an unattended schedule should not
+have to carry a prompt file around to say so.
 
     python -m agent.improve .                     # work the ledger
     echo "..." | python -m agent.improve .        # look into something specific
@@ -30,6 +30,8 @@ Environment:
                      unset looks for `agent_evals` beside this one
   HARNESS_SHELL=1    give the *delegated* coding agent an unrestricted shell.
                      This agent never gets one: it runs no programs but `git`.
+
+What the agent is and how it is built is [agent.py](agent.py).
 """
 
 import logging
@@ -40,12 +42,12 @@ from pathlib import Path
 from langchain_core.messages import AIMessage
 
 from agent import delegation
+from agent.improve.agent import (CONTEXT_FLOOR, RECURSION_LIMIT,
+                                 NothingToImproveOn, check_records, connect,
+                                 prompt, run)
 from agent.improve.issues import IssueStore
-from agent.improve.session import (RECURSION_LIMIT, NothingToImproveOn,
-                                   check_records, run_session)
 from agent.runtime import cli
 from agent.runtime.awake import keep_awake
-from agent.runtime.pool import CONTEXT_FLOOR, connect
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(levelname)s - %(message)s")
@@ -60,16 +62,6 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):  # not a reconfigurable stream
         pass
 
-STANDING_PASS = (
-    "Work the ledger.\n\n"
-    "1. Check every issue that is not closed against the runs recorded since it "
-    "was delegated, and close or reopen it on what you find.\n"
-    "2. Then look for a failure that recurs across the runs and is not in the "
-    "ledger yet. Diagnose it against the source, open it with a signature, and "
-    "delegate the fix.\n\n"
-    "Finish one issue end to end rather than opening several."
-)
-
 
 def main() -> None:
     workdir, task = cli.parse(
@@ -80,7 +72,7 @@ def main() -> None:
     if not workdir.is_dir():
         raise SystemExit(f"{workdir} is not a directory.")
     if not task:
-        task = STANDING_PASS
+        task = prompt("standing_pass.md", {})
         print("No task given; running the standing pass over the ledger.",
               file=sys.stderr)
 
@@ -114,7 +106,7 @@ def main() -> None:
     # machine to Windows, and this agent has the longest gaps of the three:
     # one `run_evals` call can be an hour of somebody else's runs.
     with keep_awake():
-        final, written = run_session(
+        final, written = run(
             model, task, workdir, config={"recursion_limit": budget},
             floor=floor, members=members, peers=peers,
             trace_path=Path(trace_file) if trace_file else None)

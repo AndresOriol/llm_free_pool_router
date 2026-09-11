@@ -70,16 +70,18 @@ directories of Markdown, and the Markdown is the behaviour. See
 
 `agent/improve/` is the **improvement agent**: the same loop and the same jail,
 pointed at what the other two *recorded* rather than at a project. It is the one
-agent here that cannot write a file. See
+agent here that cannot write a file. It is built like the other two — `agent.py`,
+`__main__.py`, and Markdown the model reads — plus what its tools do and read. See
 [19. The improvement agent](19-improvement-agent.md).
 
 | File | The question it answers |
 | --- | --- |
 | [records.py](../agent/improve/records.py) | *What evidence is there?* — every recorded run under `evals/results/runs/` and any live root, whether it carries a hidden-test verdict, and whether a stored signature matches it |
 | [issues.py](../agent/improve/issues.py) | *What is already known?* — the ledger: a named failure, its signature, what was delegated, and the check that closed or reopened it |
-| [tools.py](../agent/improve/tools.py) | *What can it do?* — six tools, one per stage of the loop; every section bounded, because a `trace.json` is megabytes |
-| [readonly.py](../agent/improve/readonly.py) | *Why can't it just fix it?* — the filesystem writes, refused as a readable message, so the diff is always someone else's |
-| [session.py](../agent/improve/session.py) | *How does it differ from the coding agent?* — write tools refused, `git` and nothing else executable, the open ledger in the prompt, `code` as its only peer |
+| [tools.py](../agent/improve/tools.py) | *What can it do?* — seven tools, one per stage of the loop, and what each returns; every section bounded, because a `trace.json` is megabytes |
+| [agent.py](../agent/improve/agent.py) | *How is it built?* — the whole harness, top to bottom: `git` and nothing else executable, the open ledger in the prompt, the filesystem writes refused as a readable message so the diff is always someone else's, the agent, and one pass |
+| [prompts/](../agent/improve/prompts/) | *What is it told?* — `system.md`, the standing pass it runs with no task, and the refusal a write gets |
+| [tool_descriptions/](../agent/improve/tool_descriptions/) | *What is each tool for?* — one Markdown file per tool, and that file is the description the model reads |
 | [`__main__.py`](../agent/improve/__main__.py) | CLI: same shape again, and with no task it runs the standing pass over the ledger |
 
 **How one agent asks another for work: it runs it.** Every agent is a command,

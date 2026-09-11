@@ -46,6 +46,8 @@ docs/
 *.md
 !agent/code/prompts/*.md
 !agent/runtime/prompts/*.md
+!agent/improve/prompts/*.md
+!agent/improve/tool_descriptions/*.md
 !agent/explore/prompts/*.md
 !agent/explore/tool_descriptions/*.md
 

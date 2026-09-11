@@ -99,13 +99,15 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   Engine](https://docs.langchain.com/langsmith/engine). It reads the runs this
   project has recorded — eval runs, which carry a hidden-test verdict, and live
   ones, which do not — names what recurs as an *issue* in
-  `evals/results/issues/`, hands the fix to the coding agent over A2A, and
+  `evals/results/issues/`, hands the fix to the coding agent by running it, and
   re-checks the issue's signature against runs recorded afterwards, closing it
   or reopening it. **It cannot edit a file**
-  ([readonly.py](agent/improve/readonly.py)): the agent that diagnoses is not
+  ([`ReadOnlyMiddleware`](agent/improve/agent.py)): the agent that diagnoses is not
   the agent that changes the code, which is what makes a diff reviewable against
   a diagnosis written before it. An issue never closes because nobody looked
-  ([19. The improvement agent](docs/19-improvement-agent.md)). **Unmeasured** —
+  ([19. The improvement agent](docs/19-improvement-agent.md)). Built like the
+  other two: [agent.py](agent/improve/agent.py) builds it, and what the model
+  reads is Markdown in `prompts/` and `tool_descriptions/`. **Unmeasured** —
   `IMPROVE_FIX=0` is the diagnose-only arm.
 - [agent/delegation.py](agent/delegation.py) — how one agent asks another for
   work: **it runs it.** Every agent is a command (`python -m agent.<name>

@@ -2,24 +2,18 @@
 
 `agent/code` changes a project. `agent/explore` reads the web. This one reads
 what the *other two did* -- the runs they left behind -- and turns recurring
-misbehaviour into a fix that someone else makes.
-
-It is modelled on LangSmith Engine, which replaces the manual cycle of reading
-traces, spotting a pattern and writing a fix with a loop that runs on its own:
-detect a recurring failure in the recorded traces, diagnose it against the
-source, propose the fix, then track whether it actually stopped happening --
-closing the issue when it did and reopening it when it comes back
+misbehaviour into a fix that someone else makes. It is modelled on LangSmith
+Engine: detect a recurring failure, diagnose it against the source, have the
+fix made, then track whether it stopped -- closing the issue when it did and
+reopening it when it comes back
 ([19. The improvement agent](../../docs/19-improvement-agent.md)).
 
-Two properties are load-bearing and both are inherited rather than invented:
-
-1. **It does not edit the harness.** The fix is delegated to `agent/code` by
-   running it, the same way the coding agent reaches the explorer. The
-   agent that diagnoses is not the agent that changes the code, so the diff
-   that lands is reviewable against a written diagnosis rather than being the
-   only account of itself.
-2. **An issue outlives the session that found it.** The ledger under
-   `evals/results/issues/` is the memory: a named failure, its signature, the
-   runs that showed it, what was done about it, and whether it came back. A
-   pass that starts cold reads the ledger before it reads a single trace.
+- `agent.py` builds it -- settings, templating, model, the ledger, the
+  read-only boundary, agent, and one run, top to bottom.
+- `__main__.py` runs it: `python -m agent.improve . --task "..."`, or with no
+  task, the standing pass.
+- `prompts/` is what it is told: `system.md`, the standing pass, and the
+  refusal a write gets. `tool_descriptions/` is what each tool is for.
+- `tools.py` is what the tools do, over `records.py` (the evidence),
+  `issues.py` (the ledger), `repo.py` (git) and `scenarios.py` (drafts).
 """

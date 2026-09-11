@@ -1,0 +1,1 @@
+`{tool}` is not available here. This agent does not change the project. Diagnosing and fixing are deliberately different agents, so that a diff can be reviewed against a diagnosis that was written before it. Use `write_issue` to record what is wrong and `delegate_fix` to have the coding agent make the change.
