@@ -19,7 +19,7 @@ from langchain_core.messages import AIMessage
 
 from agent.explore import agent as explore
 from agent.runtime import web
-from agent.runtime.backend import RestrictedShellBackend
+from agent.runtime.backend import JailedFilesystemBackend
 
 
 def _flat(text):
@@ -105,22 +105,21 @@ def test_one_tavily_account_works_and_is_warned_about():
 
 # -- What it is allowed to do ------------------------------------------------
 
-def test_the_explorer_runs_no_programs_at_all():
-    root = Path(tempfile.mkdtemp())
-    backend = RestrictedShellBackend(root_dir=str(root), allowed_programs=())
-    result = backend.execute("python -c 'print(1)'")
-    assert result.exit_code == 1
-    # Refused readably, as a tool result rather than an exception -- and without
-    # the "only runs []" that reads to a model like a bug to work around.
-    assert "no shell here" in result.output
-    assert "[]" not in result.output
+def test_the_explorer_has_nothing_to_run_programs_with():
+    """Not a shell that refuses every command: no shell. The framework offers
+    `execute` only on a backend that can execute, so it is never offered."""
+    from deepagents.backends.protocol import SandboxBackendProtocol
+
+    backend = JailedFilesystemBackend(root_dir=tempfile.mkdtemp())
+    assert not isinstance(backend, SandboxBackendProtocol)
+    assert not hasattr(backend, "execute")
 
 
 def test_the_explorer_still_reads_and_writes_files():
     # The handoff to the coding agent is the filesystem, so this is the one
     # capability the explorer cannot lose.
     root = Path(tempfile.mkdtemp())
-    backend = RestrictedShellBackend(root_dir=str(root), allowed_programs=())
+    backend = JailedFilesystemBackend(root_dir=str(root))
     backend.write("/research/notes.md", "# what I found\n")
     assert (root / "research" / "notes.md").read_text() == "# what I found\n"
     assert "what I found" in (backend.read("/research/notes.md")
@@ -320,11 +319,10 @@ def test_the_researcher_sub_agent_gets_the_same_surface(tmp_path):
     create_deep_agent(
         model=_recorder(), tools=spec["tools"],
         system_prompt=spec["system_prompt"], middleware=spec["middleware"],
-        backend=RestrictedShellBackend(root_dir=str(tmp_path),
-                                       allowed_programs=()),
+        backend=JailedFilesystemBackend(root_dir=str(tmp_path)),
     ).invoke({"messages": [("user", "research something")]})
 
-    for excluded in explore.EXCLUDED_TOOLS:
+    for excluded in (*explore.EXCLUDED_TOOLS, "execute"):
         assert excluded not in _Recorder.seen[0]
     assert "tavily_search" in _Recorder.seen[0]
 

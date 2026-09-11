@@ -4,7 +4,7 @@ from langchain_core.messages import AIMessage
 
 from agent.explore import agent as explore
 from agent.runtime import web
-from agent.runtime.backend import RestrictedShellBackend
+from agent.runtime.backend import JailedFilesystemBackend
 
 
 def test_search_budget_blocks_overflow_but_allows_notes_and_resets_per_run(
@@ -38,7 +38,7 @@ def test_search_budget_blocks_overflow_but_allows_notes_and_resets_per_run(
     agent = create_deep_agent(
         model=Model(messages=iter(replies)), tools=spec["tools"],
         system_prompt=spec["system_prompt"], middleware=spec["middleware"],
-        backend=RestrictedShellBackend(root_dir=str(tmp_path), allowed_programs=()))
+        backend=JailedFilesystemBackend(root_dir=str(tmp_path)))
     for run in range(2):
         agent.invoke({"messages": [("user", "Research and save findings")]})
         assert pool.calls == (run + 1) * explore.MAX_SEARCHES_PER_SUBAGENT

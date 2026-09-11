@@ -46,7 +46,7 @@ docs/
 *.md
 !agent/code/system_prompt.md
 !agent/explore/prompts/*.md
-!agent/explore/tools/*.md
+!agent/explore/tool_descriptions/*.md
 
 Dockerfile
 .dockerignore

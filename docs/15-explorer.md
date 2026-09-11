@@ -148,15 +148,15 @@ Same jail as the coding agent, rooted at `workdir`, with one difference:
 | `tavily_search`, `think_tool`, `research_status` | — | ✓ |
 
 The coding agent needs a shell to close its own loop — write a test, run it,
-react to the result. A researcher has no loop to close, so the allowlist is
-empty and the backend refuses every command with its own explanation, as a
-readable tool result rather than an exception. Nothing is lost, and the blast
-radius of an unattended run drops to the files it writes
+react to the result. A researcher has no loop to close, so its backend is
+the jail alone ([`JailedFilesystemBackend`](../agent/runtime/backend.py)): it
+cannot run a program, and because it cannot, the framework never offers
+`execute` at all. Nothing is lost, and the blast radius of an unattended run
+drops to the files it writes
 ([6.2](06-agent.md#62-the-blast-radius)).
 
 `ShellAllowListMiddleware` is not installed here, unlike on the coding agent:
-with an empty allowlist there is nothing for it to mirror, and a rule that exists
-in two places is worse than one that exists in one.
+there is no shell for it to mirror.
 
 **Where the agent's behaviour is written down.** Everything above is a
 property of *text*, and that is a rule this agent is held to rather than an
@@ -167,7 +167,7 @@ Markdown:
 | --- | --- |
 | what the agent is for, what it cannot do, when it is finished | [prompts/system.md](../agent/explore/prompts/system.md) |
 | the research method, ported from upstream | `prompts/workflow.md`, `delegation.md`, `researcher.md` |
-| what each tool is for, and how to use it | `tools/<tool>.md`, one file per tool |
+| what each tool is for, and how to use it | `tool_descriptions/<tool>.md`, one file per tool |
 | the budgets, the tools taken away, the framework prose removed, and the assembly | [agent.py](../agent/explore/agent.py), read top to bottom |
 | running it | [`__main__.py`](../agent/explore/__main__.py) |
 
@@ -190,9 +190,10 @@ had been handed a coding agent's tools and was using them as one.*
 `create_deep_agent` installs one suite on everything built with it —
 `write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`,
 `execute`, `task` — and that suite is shaped for the job [6](06-agent.md) does:
-find your way around a repository you were dropped into, then change it. Four of
-them are removed here ([agent.py](../agent/explore/agent.py)), each for a reason
-about the same scarce thing, a model call against a per-day request budget:
+find your way around a repository you were dropped into, then change it. Three of
+them are removed here ([agent.py](../agent/explore/agent.py)) and the fourth is
+never offered, each for a reason about the same scarce thing, a model call
+against a per-day request budget:
 
 - **`ls`, `glob`, `grep` are repository discovery**, and this agent has two
   other sources of paths. `research_status` says what its own research holds
@@ -201,12 +202,13 @@ about the same scarce thing, a model call against a per-day request budget:
   usually the coding agent, which knows the repository already
   ([16](16-agent-protocol.md)). Searching a repo with the research budget is
   doing the other agent's job with the wrong account.
-- **`execute` was offered by the framework and refused by the backend** on every
-  command. An always-refused tool can only ever cost a step to learn what the
-  schema could have said — this project's own measured lesson, that a
+- **`execute` used to be offered by the framework and refused by the backend**
+  on every command. An always-refused tool can only ever cost a step to learn
+  what the schema could have said — this project's own measured lesson, that a
   description advertising a capability the backend does not have causes failed
-  calls ([agent/runtime/tools.py](../agent/runtime/tools.py)). The jail is
-  unchanged; what is gone is the invitation.
+  calls ([agent/runtime/tools.py](../agent/runtime/tools.py)). The backend is
+  now the jail without the shell, and the framework offers `execute` only on a
+  backend that can execute, so there is nothing left to hide.
 
 **The project tree went with them.** The coding agent's prompt opens with a
 depth-limited listing of the repository ([agent/code/context.py](../agent/code/context.py))
@@ -284,7 +286,6 @@ above four of them were wrong in a way that costs more than tokens:
 | section | what it said | why it goes |
 | --- | --- | --- |
 | `FILESYSTEM_SYSTEM_PROMPT` | lists `ls`, `glob`, `grep` among the tools available | three of the six are not offered |
-| `EXECUTION_SYSTEM_PROMPT` | "You have access to an `execute` tool" | not offered, and the backend refuses every command |
 | `TASK_SYSTEM_PROMPT` | 3,700 characters on when to spawn a sub-agent | the ported research workflow answers this three sections earlier |
 | `WRITE_TODOS_SYSTEM_PROMPT` | "write your final answer in the message AFTER your last `write_todos` call … The user wants the result" | the answer is a file; the closing message only points its caller at it ([`__main__.py`](../agent/explore/__main__.py)) |
 | `BASE_AGENT_PROMPT` | "The user can see your responses and tool outputs in real time", plus progress updates and clarifying questions | nobody is watching, and the headless preamble says so two thousand characters earlier |
@@ -378,7 +379,7 @@ which is how to change what the agent does:
 | | orchestrator | `research-agent` |
 | --- | --- | --- |
 | system prompt | `system.md`, `workflow.md`, `delegation.md`, then the framework's list of sub-agents | `researcher.md` |
-| tool schemas | one per tool, each described by `tools/<name>.md` | the same |
+| tool schemas | one per tool, each described by `tool_descriptions/<name>.md` | the same |
 | conversation | the request, its own tool calls, and each sub-agent's *reply* | the brief it was given, its searches, and the pages they returned |
 | what outlives it | the files in the research directory | the note it saved there |
 

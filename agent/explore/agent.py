@@ -4,7 +4,8 @@ This file is the whole harness. Read top to bottom:
 
 1. **Settings** -- the budgets, the research directory, what is taken away.
 2. **Text** -- every word the model reads is a Markdown file beside this one:
-   `prompts/` for the job and the method, `tools/` for one description per tool.
+   `prompts/` for the job and the method, `tool_descriptions/` for one
+   description per tool.
    Each is a template, and `{name}` is filled from `template_values()`.
 3. **Model and search pool** -- `connect()`.
 4. **Tools** -- the three this agent adds, and `ToolSurface`, which fits the
@@ -22,7 +23,7 @@ Every orchestrator call carries:
 
 - the system prompt: `prompts/system.md`, `workflow.md` and `delegation.md`,
   then the list of sub-agents the framework generates;
-- one schema per tool, described by `tools/<name>.md`;
+- one schema per tool, described by `tool_descriptions/<name>.md`;
 - the conversation so far -- the request, its own tool calls, and each
   sub-agent's reply. The framework summarizes it when it grows too long.
 
@@ -43,8 +44,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from deepagents.graph import BASE_AGENT_PROMPT
-from deepagents.middleware.filesystem import (EXECUTION_SYSTEM_PROMPT,
-                                              FILESYSTEM_SYSTEM_PROMPT)
+from deepagents.middleware.filesystem import FILESYSTEM_SYSTEM_PROMPT
 from deepagents.middleware.subagents import TASK_SYSTEM_PROMPT
 from langchain.agents.middleware.todo import WRITE_TODOS_SYSTEM_PROMPT
 from langchain.agents.middleware.types import AgentMiddleware
@@ -82,21 +82,21 @@ ORCHESTRATOR_PROMPTS = ("system.md", "workflow.md", "delegation.md")
 RESEARCHER_PROMPTS = ("researcher.md",)
 
 # Framework tools this agent is not offered: repository discovery it does not
-# do, and an `execute` the backend would refuse (15.5.1).
-EXCLUDED_TOOLS = ("ls", "glob", "grep", "execute")
+# do (15.5.1). There is no `execute` to remove: the backend cannot run anything,
+# so the framework never offers one.
+EXCLUDED_TOOLS = ("ls", "glob", "grep")
 
 # Framework prompt sections that describe those tools, or say the answer is the
 # final message. Imported, so an upstream rewording fails a test (15.5.3).
 PRUNED_SECTIONS = (BASE_AGENT_PROMPT, FILESYSTEM_SYSTEM_PROMPT,
-                   EXECUTION_SYSTEM_PROMPT, TASK_SYSTEM_PROMPT,
-                   WRITE_TODOS_SYSTEM_PROMPT)
+                   TASK_SYSTEM_PROMPT, WRITE_TODOS_SYSTEM_PROMPT)
 
 
 # --- 2. Text --------------------------------------------------------------------
 
 def template_values(floor: int = CONTEXT_FLOOR, members: int = 0,
                     research_dir: str = RESEARCH_DIR) -> dict:
-    """What every `{placeholder}` in `prompts/` and `tools/` is filled with."""
+    """What every `{placeholder}` in `prompts/` and `tool_descriptions/` is filled with."""
     return {
         "research_dir": research_dir,
         "date": date.today().isoformat(),
@@ -130,9 +130,9 @@ def prompt(names, values: dict) -> str:
 
 
 def descriptions(values: dict) -> dict:
-    """`{tool name: description}`, one per file in `tools/`."""
+    """`{tool name: description}`, one per file in `tool_descriptions/`."""
     return {path.stem: fill(path, values)
-            for path in sorted((HERE / "tools").glob("*.md"))}
+            for path in sorted((HERE / "tool_descriptions").glob("*.md"))}
 
 
 # --- 3. Model and search pool ---------------------------------------------------
@@ -163,7 +163,7 @@ def connect(floor: int = CONTEXT_FLOOR):
 
 def research_tools(pool, workdir: Path, research_dir: str,
                    described: dict) -> list:
-    """`tavily_search`, `think_tool` and `research_status`, described by `tools/`."""
+    """`tavily_search`, `think_tool` and `research_status`, described by `tool_descriptions/`."""
     from langchain_core.tools import StructuredTool
 
     def tavily_search(query: str) -> str:
@@ -191,7 +191,7 @@ class ToolSurface(AgentMiddleware):
 
     `create_deep_agent` injects its tool suite and its prompt sections per call,
     so this is where they can be edited: drop `EXCLUDED_TOOLS`, describe every
-    tool from `tools/`, and cut `PRUNED_SECTIONS` out of the system prompt.
+    tool from `tool_descriptions/`, and cut `PRUNED_SECTIONS` out of the system prompt.
     Tools are copied rather than changed, because the graph shares them.
     """
 
@@ -230,9 +230,11 @@ class ToolSurface(AgentMiddleware):
 def subagents(tools: list, values: dict, described: dict) -> list:
     """The two agents the orchestrator can delegate to.
 
-    Each gets this surface and its own search limit. `general-purpose` is
-    declared rather than left to the framework, whose default would inherit
-    `grep` and no limit (15.5.3).
+    Each gets this surface and its own search limit. `general-purpose` is not
+    ours to remove: the framework adds it unless a harness profile keyed on the
+    model says otherwise, and every agent here shares one model. So it is
+    declared, to hold it to the same surface -- the framework's default would
+    inherit `grep` and no search limit (15.5.3).
     """
     from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
     from langchain.agents.middleware import ToolCallLimitMiddleware
@@ -260,7 +262,7 @@ def build_agent(workdir: Path, model, pool, *, floor: int = CONTEXT_FLOOR,
     """The research orchestrator over a jailed workdir, the pool and the web."""
     from deepagents import create_deep_agent
 
-    from agent.runtime.backend import RestrictedShellBackend
+    from agent.runtime.backend import JailedFilesystemBackend
 
     workdir = Path(workdir)
     research_dir = research_dir.strip("/") or RESEARCH_DIR
@@ -275,12 +277,11 @@ def build_agent(workdir: Path, model, pool, *, floor: int = CONTEXT_FLOOR,
         model=model,
         tools=tools,
         system_prompt=prompt(ORCHESTRATOR_PROMPTS, values),
-        # No programs at all. The backend still has `execute`, refuses every
-        # command, and `ToolSurface` does not offer it.
-        backend=RestrictedShellBackend(root_dir=str(workdir), allowed_programs=(),
-                                       allow_git=False, allow_shell=False),
-        # Caller middleware runs after the framework's, so it sees the tools
-        # and prompt sections those inject.
+        # Where read_file, write_file and edit_file read and write: the
+        # workdir, jailed. Files only -- it has no `execute`, so none is offered.
+        # Sub-agents share it.
+        backend=JailedFilesystemBackend(root_dir=str(workdir)),
+        # Caller middleware runs after the framework's, so it sees the tools and prompt sections those inject.
         middleware=[ToolSurface(described)],
         subagents=subagents(tools, values, described),
     )

@@ -80,7 +80,7 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   ([15.5.1](docs/15-explorer.md#1551-the-surface-is-chosen-not-inherited)).
   **Its behaviour is text:** [agent.py](agent/explore/agent.py) builds it and
   `__main__.py` runs it, and everything the model reads is Markdown in
-  `prompts/` and `tools/`, so changing how it works is an edit to prose
+  `prompts/` and `tool_descriptions/`, so changing how it works is an edit to prose
   ([15.5.5](docs/15-explorer.md#1555-what-each-call-carries)). Which directory
   it writes to is named per run (`--research-dir`), so one investigation can
   continue another. A run ends by reading its own report back against the

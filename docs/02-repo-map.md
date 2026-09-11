@@ -35,7 +35,7 @@ what a session is.
 | File | The question it answers |
 | --- | --- |
 | [chat_model.py](../agent/runtime/chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
-| [backend.py](../agent/runtime/backend.py) | *What is the agent allowed to execute?* — a filesystem jail plus an `execute` allowlist of `python`/`pytest`/`git` |
+| [backend.py](../agent/runtime/backend.py) | *What is the agent allowed to execute?* — a filesystem jail (`JailedFilesystemBackend`, the explorer's, which runs nothing) plus an `execute` allowlist of `python`/`pytest`/`git` (`RestrictedShellBackend`, the coding agent's) |
 | [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
 | [web.py](../agent/runtime/web.py) | *How does an agent reach the web?* — Tavily finds URLs, httpx fetches each page, markdownify converts it, so the **page** reaches the model; and the check that refuses a run with no search account |
 | [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
@@ -63,7 +63,7 @@ directories of Markdown, and the Markdown is the behaviour. See
 | --- | --- |
 | [agent.py](../agent/explore/agent.py) | *How is it built?* — the whole harness, top to bottom: the budgets and the tools taken away, the templating that fills every Markdown file, the model and search pools, the three tools it adds, the middleware that fits the framework's tools and prompt to it, the two sub-agents, and one run |
 | [prompts/](../agent/explore/prompts/) | *What is it told?* — `system.md` (its job, what it cannot do, when it is finished), then LangChain's deep-research method, ported close to verbatim with every deviation marked `ADAPTED` ([15.8](15-explorer.md#158-the-deep-research-port)) |
-| [tools/](../agent/explore/tools/) | *What is each tool for?* — one Markdown file per tool, and that file is the description the model reads ([15.5](15-explorer.md#155-what-it-is-allowed-to-do)) |
+| [tool_descriptions/](../agent/explore/tool_descriptions/) | *What is each tool for?* — one Markdown file per tool, and that file is the description the model reads ([15.5](15-explorer.md#155-what-it-is-allowed-to-do)) |
 | [`__main__.py`](../agent/explore/__main__.py) | CLI, and how another agent reaches it: same shape as the coding agent, final message first, then the notes *this* run wrote ([16](16-delegation.md)) |
 
 `agent/improve/` is the **improvement agent**: the same loop and the same jail,

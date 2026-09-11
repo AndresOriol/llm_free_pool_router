@@ -1,9 +1,10 @@
 """The filesystem jail, plus enough `execute` for the agent to run its own tests.
 
 Built on deepagents' `FilesystemBackend`, which is where the path-jailed
-`glob`/`grep`/`read`/`write` come from. Both agents sit on it -- the coding
-agent (agent/code) and the web explorer (agent/explore) -- and both take the
-agent loop from deepagents as well.
+`glob`/`grep`/`read`/`write` come from. `JailedFilesystemBackend` is that jail
+alone, and is what the web explorer (agent/explore) sits on: it runs nothing,
+so it is offered nothing to run. `RestrictedShellBackend` is the jail plus the
+`execute` described below, for the coding agent (agent/code).
 
 `FilesystemBackend` alone exposes no `execute`, so an agent on it can write code
 but never run it -- it cannot close its own loop (write a test, run it, react to
@@ -159,19 +160,17 @@ def _unprefixed(path: Path) -> Path:
     return path
 
 
-class RestrictedShellBackend(FilesystemBackend, SandboxBackendProtocol):
-    """FilesystemBackend jail + an `execute` limited to allowlisted programs."""
+class JailedFilesystemBackend(FilesystemBackend):
+    """`FilesystemBackend` confined to `root_dir`, and nothing else.
 
-    def __init__(self, root_dir, allowed_programs=DEFAULT_ALLOWED,
-                 timeout=DEFAULT_TIMEOUT, allow_git=False, allow_shell=False):
-        # virtual_mode=True keeps the file tools jailed under root_dir, as before.
+    For an agent that reads and writes files and runs no programs
+    (agent/explore). It does not implement `SandboxBackendProtocol`, so the
+    framework offers no `execute` tool and no prompt section about one.
+    """
+
+    def __init__(self, root_dir):
+        # virtual_mode=True keeps the file tools jailed under root_dir.
         super().__init__(root_dir=root_dir, virtual_mode=True, max_file_size_mb=10)
-        self._allowed = set(allowed_programs)
-        if allow_git:
-            self._allowed.add("git")
-        self._allow_shell = allow_shell
-        self._timeout = timeout
-        self._sandbox_id = f"restricted-{uuid.uuid4().hex[:8]}"
 
     def _resolve_path(self, key):
         """`FilesystemBackend._resolve_path`, made deterministic on Windows.
@@ -207,6 +206,20 @@ class RestrictedShellBackend(FilesystemBackend, SandboxBackendProtocol):
             raise ValueError(
                 f"Path:{full} outside root directory: {root}") from None
         return full
+
+
+class RestrictedShellBackend(JailedFilesystemBackend, SandboxBackendProtocol):
+    """The same jail + an `execute` limited to allowlisted programs."""
+
+    def __init__(self, root_dir, allowed_programs=DEFAULT_ALLOWED,
+                 timeout=DEFAULT_TIMEOUT, allow_git=False, allow_shell=False):
+        super().__init__(root_dir=root_dir)
+        self._allowed = set(allowed_programs)
+        if allow_git:
+            self._allowed.add("git")
+        self._allow_shell = allow_shell
+        self._timeout = timeout
+        self._sandbox_id = f"restricted-{uuid.uuid4().hex[:8]}"
 
     def _refusal(self, argv) -> str:
         """Why this command is not allowed to run, or '' if it may.
