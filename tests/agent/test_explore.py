@@ -17,26 +17,67 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-from agent.explore import prompt, research_tools, session, tools
+from agent.explore import agent as explore
+from agent.runtime import web
 from agent.runtime.backend import RestrictedShellBackend
+
+
+def _flat(text):
+    """Text with its line wrapping removed, so an assertion can quote a
+    sentence the way it reads rather than the way it happens to be folded."""
+    return " ".join(text.split())
+
+
+def _values(research_dir="research"):
+    return explore.template_values(128_000, members=9, research_dir=research_dir)
+
+
+def _orchestrator(research_dir="research"):
+    return explore.prompt(explore.ORCHESTRATOR_PROMPTS, _values(research_dir))
+
+
+def _researcher():
+    return explore.prompt(explore.RESEARCHER_PROMPTS, _values())
+
+
+def _tools(workdir, research_dir="research", pool=None):
+    """The three tools this agent adds, by name."""
+    described = explore.descriptions(_values(research_dir))
+    return {t.name: t for t in explore.research_tools(
+        pool, Path(workdir), research_dir, described)}
+
+
+def _subagents(workdir):
+    values = _values()
+    described = explore.descriptions(values)
+    return explore.subagents(list(_tools(workdir).values()), values, described)
 
 
 # -- What the model is told -------------------------------------------------
 
-def test_prompt_leaves_no_placeholder_unreplaced():
-    text = prompt.build(128_000, members=9)
-    assert not re.findall(r"\{[a-z_]+\}", text)
+def test_no_text_file_leaves_a_placeholder_unfilled():
+    for text in [_orchestrator(), _researcher(),
+                 *explore.descriptions(_values()).values()]:
+        assert not re.findall(r"\{[a-z_]+\}", text)
 
 
 def test_prompt_names_the_web_tools_and_the_deliverable():
-    text = prompt.build(128_000, members=9,
-                        extra_sections=[session.orchestrator_prompt()])
+    text = _orchestrator()
     # The deleted pair must not survive in prose: a prompt describing a tool
     # the agent does not have is a measured cause of failed calls.
     assert "web_search" not in text and "read_url" not in text
     # The whole point of this agent: the files are the output, not the reply.
     assert "/research/" in text
     assert "128,000 input tokens" in text
+
+
+def test_every_tool_description_is_a_file_rather_than_a_string_in_code():
+    """The point of the directory: what the agent is told is edited as text."""
+    described = explore.descriptions(_values())
+
+    assert {"read_file", "write_file", "edit_file", "write_todos", "task",
+            "tavily_search", "think_tool", "research_status"} == set(described)
+    assert all(text.strip() for text in described.values())
 
 
 # -- Whether it can search at all ------------------------------------------
@@ -46,8 +87,8 @@ def test_a_run_with_no_tavily_account_is_refused_before_it_starts():
         accounts = []
 
     try:
-        session.check_pool(_EmptyPool())
-    except session.NoSearchPool as exc:
+        web.check_pool(_EmptyPool())
+    except web.NoSearchPool as exc:
         assert "TAVILY_API_KEY_1" in str(exc)
     else:
         raise AssertionError("a run with no way to search must refuse up front")
@@ -59,8 +100,7 @@ def test_one_tavily_account_works_and_is_warned_about():
     class _OnePool:
         accounts = [object()]
 
-    assert session.check_pool(_OnePool()) == 1
-
+    assert web.check_pool(_OnePool()) == 1
 
 
 # -- What it is allowed to do ------------------------------------------------
@@ -87,8 +127,6 @@ def test_the_explorer_still_reads_and_writes_files():
                               .file_data or {}).get("content", "")
 
 
-
-
 # --- what the command reports ------------------------------------------------
 # The explorer is reached by running it (docs/16-delegation.md), so its stdout
 # is what a caller -- a person, or the coding agent that ran the command --
@@ -100,7 +138,7 @@ from agent.explore import __main__ as explore_cli  # noqa: E402
 
 def _report(capsys, workdir, notes, before=None, reply="done"):
     """`_summary` over a research directory holding `notes`. Returns stdout."""
-    directory = workdir / session.RESEARCH_DIR
+    directory = workdir / explore.RESEARCH_DIR
     directory.mkdir(parents=True, exist_ok=True)
     for name, text in notes.items():
         (directory / name).write_text(text, encoding="utf-8")
@@ -170,48 +208,48 @@ def test_a_run_that_wrote_nothing_says_so_loudly(capsys, tmp_path):
 # start measuring an opinion, which is the one thing they must not do.
 
 
-def _flat(text):
-    """The prompt with its line wrapping removed, so an assertion can quote a
-    sentence the way it reads rather than the way it happens to be folded."""
-    return " ".join(text.split())
-
-
 def test_the_search_budget_the_checks_enforce_is_the_one_the_prompt_allows():
     """Not a number of ours. The ceiling a compliant run cannot exceed is the
     per-sub-agent budget times the parallel limit, both of them upstream's."""
     from evals.research_trajectory import SEARCH_BUDGET
 
-    assert SEARCH_BUDGET == (session.MAX_SEARCHES_PER_SUBAGENT
-                             * session.MAX_CONCURRENT_RESEARCH_UNITS)
+    assert SEARCH_BUDGET == (explore.MAX_SEARCHES_PER_SUBAGENT
+                             * explore.MAX_CONCURRENT_RESEARCH_UNITS)
 
 
 def test_the_researcher_prompt_states_its_own_budget_and_stop_rule():
-    text = _flat(session.researcher_subagent([])["system_prompt"])
-    assert f"{session.MAX_SEARCHES_PER_SUBAGENT} search tool calls maximum" in text
+    text = _flat(_researcher())
+    assert f"{explore.MAX_SEARCHES_PER_SUBAGENT} search tool calls maximum" in text
     assert "You have 3+ relevant examples/sources for the question" in text
     assert "Your last 2 searches returned similar information" in text
 
 
 def test_the_orchestrator_is_told_the_delegation_limits():
-    text = _flat(session.orchestrator_prompt())
-    assert (f"at most {session.MAX_CONCURRENT_RESEARCH_UNITS} parallel "
+    text = _flat(_orchestrator())
+    assert (f"at most {explore.MAX_CONCURRENT_RESEARCH_UNITS} parallel "
             f"sub-agents") in text
-    assert (f"Stop after {session.MAX_RESEARCHER_ITERATIONS} delegation rounds"
+    assert (f"Stop after {explore.MAX_RESEARCHER_ITERATIONS} delegation rounds"
             ) in text
-    assert "ALWAYS use sub-agents for research, never conduct research yourself"         in text
+    assert "ALWAYS use sub-agents for research, never conduct research yourself" \
+        in text
 
 
-def test_reading_the_page_is_structural_rather_than_instructed():
+def test_the_orchestrator_is_told_todays_date():
+    from datetime import date
+
+    assert f"Today's research date is {date.today().isoformat()}" in _orchestrator()
+
+
+def test_reading_the_page_is_structural_rather_than_instructed(tmp_path):
     """The old prompt asked the agent to open a source and it never did. The
     replacement removes the choice: the search tool returns the page."""
-    made = research_tools.make_research_tools(pool=None)
+    made = _tools(tmp_path)
     assert set(made) == {"tavily_search", "think_tool", "research_status"}
     assert "full text of the pages" in made["tavily_search"].description
 
 
 def test_the_researcher_is_told_to_reflect_after_every_search():
-    text = _flat(session.researcher_subagent([])["system_prompt"])
-    assert "Use think_tool after each search" in text
+    assert "Use think_tool after each search" in _flat(_researcher())
 
 
 def test_the_prompt_no_longer_teaches_keyword_search():
@@ -221,7 +259,7 @@ def test_the_prompt_no_longer_teaches_keyword_search():
     of a recorded run's thirteen queries was keyword-shaped."""
     from evals.research_trajectory import _looks_like_a_question
 
-    text = _flat(session.researcher_subagent([])["system_prompt"])
+    text = _flat(_researcher())
     assert '"gemini api google_search tool request format"' not in text
     example = ("What fields does a SWE-bench instance carry and what is each "
                "for?")
@@ -232,8 +270,7 @@ def test_the_prompt_no_longer_teaches_keyword_search():
 # What the model is *offered*. The jail is the boundary and is checked above;
 # this is about what the schema invites, which is a different failure: a tool
 # that is always refused, or a listing tool whose answer is already in the
-# prompt, costs a request out of a daily budget to learn nothing
-# (agent/explore/tools.py).
+# prompt, costs a request out of a daily budget to learn nothing.
 
 
 class _Recorder(GenericFakeChatModel):
@@ -255,13 +292,18 @@ def _recorder():
     return _Recorder(messages=iter([AIMessage("done")]))
 
 
+def _invoke(tmp_path, **kwargs):
+    """Build the agent over the recorder and run it one step."""
+    explore.build_agent(tmp_path, _recorder(), pool=None, members=3,
+                        **kwargs).invoke(
+        {"messages": [("user", "research something")]})
+
+
 def test_the_explorer_is_offered_exactly_its_capabilities(tmp_path):
     """Read a named file, write one, edit one, plan, delegate, search, reflect,
     and see what it has written -- and nothing for browsing a repository it was
     never asked to explore."""
-    model = _recorder()
-    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
-        {"messages": [("user", "research something")]})
+    _invoke(tmp_path)
 
     assert _Recorder.seen[0] == ["write_todos", "read_file", "write_file",
                                  "edit_file", "task", "tavily_search",
@@ -274,28 +316,39 @@ def test_the_researcher_sub_agent_gets_the_same_surface(tmp_path):
     this system able to grep the project."""
     from deepagents import create_deep_agent
 
-    model = _recorder()
-    spec = session.researcher_subagent(
-        list(research_tools.make_research_tools(pool=None).values()))
+    spec = _subagents(tmp_path)[0]
     create_deep_agent(
-        model=model, tools=spec["tools"], system_prompt=spec["system_prompt"],
-        middleware=spec["middleware"],
+        model=_recorder(), tools=spec["tools"],
+        system_prompt=spec["system_prompt"], middleware=spec["middleware"],
         backend=RestrictedShellBackend(root_dir=str(tmp_path),
                                        allowed_programs=()),
     ).invoke({"messages": [("user", "research something")]})
 
-    for excluded in tools.EXCLUDED:
+    for excluded in explore.EXCLUDED_TOOLS:
         assert excluded not in _Recorder.seen[0]
     assert "tavily_search" in _Recorder.seen[0]
+
+
+def test_every_subagent_is_held_to_the_same_surface(tmp_path):
+    """The framework adds a `general-purpose` sub-agent when the caller declares
+    none, and its default inherits the filesystem tools without our middleware --
+    so an agent with no `grep` could delegate to one that has, under no search
+    budget either. Both are declared, and both get this list."""
+    from langchain.agents.middleware import ToolCallLimitMiddleware
+
+    specs = _subagents(tmp_path)
+
+    assert [s["name"] for s in specs] == ["research-agent", "general-purpose"]
+    for spec in specs:
+        assert {type(m) for m in spec["middleware"]} == {
+            explore.ToolSurface, ToolCallLimitMiddleware}
 
 
 def test_the_rewritten_descriptions_reach_the_model(tmp_path):
     """Upstream's are a coding agent's: `read_file` explains itself in terms of
     codebase exploration and `write_todos` ends by saying the deliverable is the
     final message, which is the opposite of what this agent is told."""
-    model = _recorder()
-    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
-        {"messages": [("user", "research something")]})
+    _invoke(tmp_path)
 
     described = {name: _flat(text)
                  for name, text in _Recorder.described.items()}
@@ -319,20 +372,27 @@ def test_describing_a_tool_does_not_mutate_the_one_it_was_given():
         """Original description."""
         return ""
 
+    class _Request:
+        tools, system_message = [], None
+
+        def override(self, **changes):
+            return changes
+
     original = StructuredTool.from_function(func=read_file, name="read_file",
                                             description="Original description.")
-    described = tools.ToolSurfaceMiddleware()._describe(original)
+    request = _Request()
+    request.tools = [original]
+    applied = explore.ToolSurface({"read_file": "Ours."})._apply(request)
 
-    assert described.description == tools.DESCRIPTIONS["read_file"]
+    assert applied["tools"][0].description == "Ours."
     assert original.description == "Original description."
 
 
 # --- the research directory, in place of `ls` -------------------------------
 
 
-def _status(research, mount="research"):
-    return research_tools.make_research_tools(
-        None, research, mount)["research_status"].invoke({})
+def _status(workdir, research_dir="research"):
+    return _tools(workdir, research_dir)["research_status"].invoke({})
 
 
 def test_research_status_lists_what_has_been_written(tmp_path):
@@ -343,7 +403,7 @@ def test_research_status_lists_what_has_been_written(tmp_path):
     research.mkdir()
     (research / "pricing.md").write_text("body", encoding="utf-8")
 
-    assert "/research/pricing.md" in _status(research)
+    assert "/research/pricing.md" in _status(tmp_path)
 
 
 def test_research_status_is_bound_to_this_runs_directory(tmp_path):
@@ -352,20 +412,18 @@ def test_research_status_is_bound_to_this_runs_directory(tmp_path):
     (tmp_path / "research" / "old" / "prior.md").write_text(
         "# prior\n", encoding="utf-8")
 
-    model = _recorder()
-    session.build_agent(tmp_path, model, pool=None, members=3,
-                        research_dir="research/new").invoke(
-        {"messages": [("user", "research something")]})
+    _invoke(tmp_path, research_dir="research/new")
 
     assert "research_status" in _Recorder.seen[0]
     assert "/research/new/" in _Recorder.system[0]
     assert "/research/old/" not in _Recorder.system[0]
+    assert "empty" in _status(tmp_path, "research/new")
 
 
 def test_an_empty_research_directory_says_so(tmp_path):
     """Silence would read as "no directory". "Nothing is written yet" is the
     state in which a crash costs the whole run."""
-    assert "empty" in _status(tmp_path / "research")
+    assert "empty" in _status(tmp_path)
 
 
 def test_an_empty_note_is_still_listed(tmp_path):
@@ -374,7 +432,7 @@ def test_an_empty_note_is_still_listed(tmp_path):
     research.mkdir()
     (research / "started.md").write_text("", encoding="utf-8")
 
-    assert "/research/started.md" in _status(research)
+    assert "/research/started.md" in _status(tmp_path)
 
 
 def test_the_project_tree_is_not_in_the_prompt(tmp_path):
@@ -384,18 +442,15 @@ def test_the_project_tree_is_not_in_the_prompt(tmp_path):
     surface no longer supports."""
     (tmp_path / "some_package").mkdir()
 
-    model = _recorder()
-    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
-        {"messages": [("user", "research something")]})
+    _invoke(tmp_path)
 
     assert "some_package" not in _Recorder.system[0]
 
 
-def test_the_prompt_names_the_surface_and_the_missing_tools(tmp_path):
+def test_the_prompt_names_the_surface_and_the_missing_tools():
     """A prompt that describes a tool the agent does not have is a measured
     cause of failed calls; so is one that stays silent about a gap."""
-    text = _flat(prompt.build(128_000, members=9,
-                              extra_sections=[session.orchestrator_prompt()]))
+    text = _flat(_orchestrator())
 
     assert "There is no shell, no `ls`, no `glob` and no `grep`" in text
     assert "`ls /research`" not in text
@@ -408,12 +463,10 @@ def test_the_prompt_names_the_surface_and_the_missing_tools(tmp_path):
 
 
 def test_the_framework_sections_about_tools_it_lacks_are_removed(tmp_path):
-    model = _recorder()
-    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
-        {"messages": [("user", "research something")]})
+    _invoke(tmp_path)
     text = _Recorder.system[0]
 
-    for section in tools.PRUNED:
+    for section in explore.PRUNED_SECTIONS:
         assert section not in text, "a framework section survived the pruning"
     # The three tools the agent does not have must not be named as available.
     assert "## Filesystem Tools" not in text
@@ -423,9 +476,7 @@ def test_the_framework_sections_about_tools_it_lacks_are_removed(tmp_path):
 def test_the_generated_list_of_subagents_survives_the_pruning(tmp_path):
     """It is appended after the section that is removed, and it is the only
     place the agent is told what it can delegate to."""
-    model = _recorder()
-    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
-        {"messages": [("user", "research something")]})
+    _invoke(tmp_path)
 
     assert "Available subagent types" in _Recorder.system[0]
     assert "research-agent" in _Recorder.system[0]
@@ -435,9 +486,7 @@ def test_the_agent_is_not_told_its_final_message_is_the_deliverable(tmp_path):
     """The todo middleware ends with "write your final answer in the message
     AFTER your last write_todos call". This agent's answer is a file, and a run
     that recites its report into a reply pays for the report twice."""
-    model = _recorder()
-    session.build_agent(tmp_path, model, pool=None, members=3).invoke(
-        {"messages": [("user", "research something")]})
+    _invoke(tmp_path)
 
     assert "Finishing a task" not in _Recorder.system[0]
     assert "belongs in a file" in _Recorder.system[0]
@@ -447,25 +496,16 @@ def test_the_agent_is_not_told_its_final_message_is_the_deliverable(tmp_path):
 
 
 def test_a_named_research_directory_reaches_prompts_and_tools(tmp_path):
-    model = _recorder()
-    session.build_agent(tmp_path, model, pool=None, members=3,
-                        research_dir="research/cv-spain").invoke(
-        {"messages": [("user", "research something")]})
+    _invoke(tmp_path, research_dir="research/cv-spain")
 
     text = _Recorder.system[0]
     assert "/research/cv-spain/final_report.md" in text
-    # Nothing may still point at the default, or the agent writes to two places.
+    # Nothing may still point at the default, or the agent writes to two places;
+    # and nothing may be substituted twice.
     assert "/research/final_report.md" not in text
+    assert "cv-spain/cv-spain" not in text
     assert "/research/cv-spain/" in _Recorder.described["write_file"]
     assert (tmp_path / "research" / "cv-spain").is_dir()
-
-
-def test_the_default_directory_is_left_exactly_as_written():
-    """`retarget` is a substitution over assembled prose; on the default it must
-    be the identity, or every prompt assertion is testing the rewriter."""
-    text = "write it to /research/final_report.md"
-    assert tools.retarget(text, "research") == text
-    assert tools.retarget(text, "/research/") == text
 
 
 def test_a_continued_investigation_sees_what_the_last_run_left(tmp_path):
@@ -475,24 +515,7 @@ def test_a_continued_investigation_sees_what_the_last_run_left(tmp_path):
     earlier.mkdir(parents=True)
     (earlier / "retail.md").write_text("body", encoding="utf-8")
 
-    assert "/research/cv-spain/retail.md" in _status(earlier, "research/cv-spain")
-
-
-# --- the sub-agents are held to the same surface ----------------------------
-
-
-def test_every_subagent_is_held_to_the_same_surface():
-    """The framework adds a `general-purpose` sub-agent when the caller declares
-    none, and its default inherits the filesystem tools without our middleware --
-    so an agent with no `grep` could delegate to one that has, under no search
-    budget either. Both are declared, and both get this list."""
-    from langchain.agents.middleware import ToolCallLimitMiddleware
-
-    kinds = {type(m) for m in session.subagent_middleware()}
-
-    assert kinds == {tools.ToolSurfaceMiddleware, ToolCallLimitMiddleware}
-
-
+    assert "/research/cv-spain/retail.md" in _status(tmp_path, "research/cv-spain")
 
 
 # --- step 6: the review, which only the prompt asks for ---------------------
@@ -503,8 +526,7 @@ def test_the_prompt_makes_the_review_the_last_thing_it_does():
     finished until the request has been read back and the review written, and
     the workflow says what the review has to establish -- so these sentences
     are the whole mechanism (docs/15-explorer.md#1554-the-review-at-the-end)."""
-    text = _flat(prompt.build(128_000, members=9,
-                              extra_sections=[session.orchestrator_prompt()]))
+    text = _flat(_orchestrator())
 
     assert "The last thing you do is the review" in text
     assert "If you are about to write a final message and there is no review "\
@@ -513,12 +535,3 @@ def test_the_prompt_makes_the_review_the_last_thing_it_does():
     assert "was this one answered" in text.lower()
     assert "/research/review.md" in text
     assert "correct what you find, with edit_file" in text.lower()
-
-
-def test_every_tool_description_is_a_file_rather_than_a_string_in_code():
-    """The point of the directory: what the agent is told is edited as text."""
-    names = set(tools.DESCRIPTIONS)
-
-    assert {"read_file", "write_file", "edit_file", "write_todos", "task",
-            "tavily_search", "think_tool", "research_status"} == names
-    assert all(text.strip() for text in tools.DESCRIPTIONS.values())

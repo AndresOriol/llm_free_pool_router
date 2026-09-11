@@ -9,7 +9,7 @@ the conversation behind it is compacted away.
 One workstream: a question whose answer could change the reader's decision, the
 evidence that would settle it, and where its findings will be written. Not
 "search for competitors" but "who already sells this locally, and at what
-price -- vendor pages and a local quote -- to /research/market-vendors.md".
+price -- vendor pages and a local quote -- to /{research_dir}/market-vendors.md".
 
 ## How to use it
 
@@ -31,6 +31,6 @@ price -- vendor pages and a local quote -- to /research/market-vendors.md".
 
 It is not the deliverable, and neither is your final message. Ignore any
 guidance saying the answer must appear as text in your last turn: here the
-answer is the file under `/research/`, and the reply that ends the run is a
+answer is the file under `/{research_dir}/`, and the reply that ends the run is a
 sentence naming which files you wrote. Skip this tool entirely for a single
 factual question that one sub-agent can answer.

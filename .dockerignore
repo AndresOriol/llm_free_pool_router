@@ -45,7 +45,8 @@ evals/results/reviews/
 docs/
 *.md
 !agent/code/system_prompt.md
-!agent/explore/system_prompt.md
+!agent/explore/prompts/*.md
+!agent/explore/tools/*.md
 
 Dockerfile
 .dockerignore

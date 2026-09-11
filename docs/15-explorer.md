@@ -29,7 +29,7 @@ hours apart, or to run the explorer once and the coding agent five times against
 what it found.
 
 That constraint is also why the prompt spends most of its length on the written
-record ([system_prompt.md](../agent/explore/system_prompt.md)). The explorer's
+record ([prompts/system.md](../agent/explore/prompts/system.md)). The explorer's
 closing message is not the deliverable: it is printed for whoever ran the
 command, and says which files to open. The files are the deliverable, because the thing that reads them next is an agent that was not
 there.
@@ -48,7 +48,7 @@ Search is [Tavily](https://tavily.com): a search API built for agents, whose fre
 tier is **1,000 credits a month** on a key you get by signing up. One
 `tavily_search` spends one credit for the URL discovery; fetching the pages costs
 nothing but the HTTP round trips, because the tool does that itself
-([research_tools.py](../agent/explore/research_tools.py)).
+([agent/runtime/web.py](../agent/runtime/web.py)).
 
 Held against everything else here, that budget is comfortable and genuinely
 scarce at the same time. Comfortable next to the *model* pool — twenty requests
@@ -65,7 +65,7 @@ touching config.
 
 **Today the pool holds one account**, which means failover has nowhere to go. A
 run says so once at startup rather than letting you find out at the wall
-([check_pool](../agent/explore/research_tools.py)).
+([check_pool](../agent/runtime/web.py)).
 
 ### 15.2.1 A capability is a fact to probe, not to infer
 
@@ -159,18 +159,23 @@ with an empty allowlist there is nothing for it to mirror, and a rule that exist
 in two places is worse than one that exists in one.
 
 **Where the agent's behaviour is written down.** Everything above is a
-property of *text*, and that is a rule this module is held to rather than an
-observation about it:
+property of *text*, and that is a rule this agent is held to rather than an
+observation about it. The package is two Python files and two directories of
+Markdown:
 
 | what | where |
 | --- | --- |
-| what each tool is for, and how to use it | `agent/explore/descriptions/<tool>.md`, one file per tool |
-| what the agent is for, what it cannot do, when it is finished | [system_prompt.md](../agent/explore/system_prompt.md) |
-| the research method | `agent/explore/prompts/*.md`, ported from upstream; [deep_prompts.py](../agent/explore/deep_prompts.py) is the provenance note |
-| which tools exist, which are dropped, which framework prose is removed | three lists in [tools.py](../agent/explore/tools.py) |
+| what the agent is for, what it cannot do, when it is finished | [prompts/system.md](../agent/explore/prompts/system.md) |
+| the research method, ported from upstream | `prompts/workflow.md`, `delegation.md`, `researcher.md` |
+| what each tool is for, and how to use it | `tools/<tool>.md`, one file per tool |
+| the budgets, the tools taken away, the framework prose removed, and the assembly | [agent.py](../agent/explore/agent.py), read top to bottom |
+| running it | [`__main__.py`](../agent/explore/__main__.py) |
 
-The Python left over is assembly: read the files, filter a list, hand the result
-to `create_deep_agent`. Nothing in it decides what the agent *does*, and a
+Every Markdown file is a template filled from one dictionary
+(`template_values` in [agent.py](../agent/explore/agent.py)): the research
+directory, the budgets, today's date, and the three sections shared with the
+coding agent. The Python left over is assembly: fill the files, filter a list,
+hand the result to `create_deep_agent`. Nothing in it decides what the agent *does*, and a
 change to how the agent works should be a change to a Markdown file. When a
 behaviour was implemented as code here it has been removed again — see the
 review in [15.5.4](#1554-the-review-at-the-end), which was a wrapper for one
@@ -186,7 +191,7 @@ had been handed a coding agent's tools and was using them as one.*
 `write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`,
 `execute`, `task` — and that suite is shaped for the job [6](06-agent.md) does:
 find your way around a repository you were dropped into, then change it. Four of
-them are removed here ([tools.py](../agent/explore/tools.py)), each for a reason
+them are removed here ([agent.py](../agent/explore/agent.py)), each for a reason
 about the same scarce thing, a model call against a per-day request budget:
 
 - **`ls`, `glob`, `grep` are repository discovery**, and this agent has two
@@ -233,8 +238,8 @@ copy of the filesystem tools.
 **Which directory is a parameter of the run**, not a constant:
 
 ```bash
-python -m agent.explore ./project research/cv-spain < question.md
-python -m agent.explore ./project research/cv-spain < follow-up.md   # continues it
+python -m agent.explore ./project --research-dir research/cv-spain < question.md
+python -m agent.explore ./project --research-dir research/cv-spain < follow-up.md   # continues it
 ```
 
 That is what makes a second question a continuation rather than a collision.
@@ -242,12 +247,11 @@ Point two investigations at one directory and their notes interleave under names
 nobody chose to be distinct, and "is this note about my question?" becomes
 something the agent has to infer from filenames; point the second run at the
 first one's directory deliberately and its notes are there to be listed, read,
-extended and cited. The prompts and tool descriptions go on saying `/research/`
-and are substituted once, at assembly — twice was a bug this caught, and
-`/research/cv-spain/cv-spain/final_report.md` is what it looked like.
+extended and cited. The prompts and tool descriptions write the path as
+`/{research_dir}/`, filled in with every other template value.
 
 **What is in it comes from `research_status`**
-([research_tools.py](../agent/explore/research_tools.py)), a tool: every note's
+([agent.py](../agent/explore/agent.py)), a tool: every note's
 path and size, asked for when the answer is wanted.
 
 That is a reversal. It was first built as a listing injected into the system
@@ -294,7 +298,7 @@ reply is a pointer to its note and cap it at 200 words.
 
 They are matched as the **imported constants**, so an upstream rewording makes
 the removal fail loudly rather than half-apply
-([tools.py](../agent/explore/tools.py)).
+([agent.py](../agent/explore/agent.py)).
 
 **What this arithmetic comes to.** Measured on the assembled agent, before any
 conversation: system prompt plus every tool schema is 26,864 characters, against
@@ -309,7 +313,7 @@ whenever the caller declares none, and the default inherits the framework's
 filesystem tools *without* the middleware above — so an agent with no `grep`
 could delegate to one that had it, under no search budget either. It is declared
 explicitly now, with the same surface and the same limit
-([session.py](../agent/explore/session.py)). A tailoring that only holds for the
+([agent.py](../agent/explore/agent.py)). A tailoring that only holds for the
 agent in front is not a tailoring.
 
 **Unmeasured.** All of this is argued from traces and from a deterministic
@@ -325,7 +329,7 @@ the request back off disk, read the report it saved, and answered **one question
 per thing the request asked for** — answered, partly, or not answered, naming
 the section that answers it — corrected what it found with `edit_file`, and
 saved that account as `/research/review.md`
-([deep_prompts.py](../agent/explore/deep_prompts.py)).
+([prompts/workflow.md](../agent/explore/prompts/workflow.md)).
 
 Three things about the shape of it:
 
@@ -356,7 +360,7 @@ So the system prompt says it instead, in the place a model reads before it
 decides it is finished: the review is the last thing you do, the report being
 written is step 5 and not the end, and *if you are about to write a final
 message and there is no review note, you are not finished*
-([system_prompt.md](../agent/explore/system_prompt.md)).
+([prompts/system.md](../agent/explore/prompts/system.md)).
 
 **And it is counted.** `research_trajectory` gains one check: that a review note
 was written
@@ -365,6 +369,25 @@ arrangement: **the prompt asks, and the eval counts.** If runs keep shipping
 without a review the check says so, and the answer is better words — or, if
 words demonstrably will not do it, a mechanism argued for by that evidence
 rather than by anticipation.
+
+### 15.5.5 What each call carries
+
+What the model sees is assembled, per call, from a few places, and knowing
+which is how to change what the agent does:
+
+| | orchestrator | `research-agent` |
+| --- | --- | --- |
+| system prompt | `system.md`, `workflow.md`, `delegation.md`, then the framework's list of sub-agents | `researcher.md` |
+| tool schemas | one per tool, each described by `tools/<name>.md` | the same |
+| conversation | the request, its own tool calls, and each sub-agent's *reply* | the brief it was given, its searches, and the pages they returned |
+| what outlives it | the files in the research directory | the note it saved there |
+
+The framework summarizes a conversation that grows too long; the files are
+never summarized. That is the design: pages are read in a sub-agent's
+conversation and end with it, the orchestrator sees only a pointer to the note
+the sub-agent saved, and anything any agent needs later — the plan, the
+findings, the report, the review — is on disk, where `research_status` lists it
+and `read_file` opens it.
 
 ## 15.6 What it costs a run
 
@@ -455,8 +478,8 @@ run could measure. This is the branch that stops arguing and runs theirs.*
 The port is close to verbatim — `RESEARCH_WORKFLOW_INSTRUCTIONS`,
 `SUBAGENT_DELEGATION_INSTRUCTIONS` and `RESEARCHER_INSTRUCTIONS` from
 `langchain-ai/deepagents-quickstarts` (MIT), plus `tavily_search` and
-`think_tool` ([deep_prompts.py](../agent/explore/deep_prompts.py),
-[research_tools.py](../agent/explore/research_tools.py)). This repo already
+`think_tool` ([prompts/](../agent/explore/prompts/),
+[agent.py](../agent/explore/agent.py)). This repo already
 ports `deepagents-code`'s prompt for the coding agent; this is the same move on
 the research side.
 
@@ -480,8 +503,8 @@ affordable because the orchestrator never sees them.
 
 ### 15.8.2 What this pool forced us to change
 
-Four deviations, each marked `ADAPTED` in the ported prompt so the next reader
-can diff against the source rather than guess:
+Each is marked `ADAPTED` in the prompt files, so the next reader can diff
+against the source rather than guess. The first four are forced by this pool:
 
 1. **`/research/` rather than the workdir root.** Upstream writes
    `/research_request.md` and `/final_report.md` at the root. Here the workdir is
@@ -501,6 +524,24 @@ can diff against the source rather than guess:
 4. **The report is named against collision.** Upstream is single-shot; this
    explorer answers repeated delegations into one workdir, so a second question
    would overwrite the first's `final_report.md`.
+
+The rest were argued from this project's own runs:
+
+5. **The orchestrator is told the search budget too.** Upstream bounds only the
+   sub-agent; a pool bounded by requests per day is better served by an
+   orchestrator that knows the numbers than by one left to infer them.
+6. **No `read_url`.** `tavily_search` returns the page, so there is no second
+   tool to skip ([15.7.2](#1572-the-one-difference-that-was-not-copied-and-then-was)).
+7. **Decision-led briefs and saved findings**
+   ([15.8.4](#1584-decision-led-research-candidate)).
+8. **A tool list that matches the tools.** Upstream's `ls /research` becomes
+   `research_status`, and the researcher is told the tools it actually holds
+   ([15.5.1](#1551-the-surface-is-chosen-not-inherited)).
+9. **A review step** after the report
+   ([15.5.4](#1554-the-review-at-the-end)).
+10. **The reply is a pointer, not a second copy of the findings**, for the
+    researcher and the orchestrator alike
+    ([15.5.3](#1553-what-the-framework-says-that-is-not-true-here)).
 
 ### 15.8.3 What it costs, and what was given up
 

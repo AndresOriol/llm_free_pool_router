@@ -13,7 +13,7 @@ of the existing metrics moved. So these exist.
 **Every check here is a divergence observed in a recorded run, not a rule
 invented in advance.** Each one names what the explorer's own prompt or tool
 description already tells it to do
-([agent/explore/system_prompt.md](../agent/explore/system_prompt.md)), so a
+([agent/explore/prompts/system.md](../agent/explore/prompts/system.md)), so a
 failing check is the agent drifting from its instructions rather than this file
 having an opinion. The thresholds are deliberately loose: they are there to
 catch a *regression*, not to score a run.
@@ -39,7 +39,7 @@ REFLECT_TOOLS = {"think_tool"}
 WRITE_TOOLS = {"write_file", "edit_file"}
 REQUEST_NOTE = "research_request.md"
 # Step 6's note: `review.md`, or `review-<topic>.md` when one about another
-# question is already in the directory (agent/explore/deep_prompts.py). Matched
+# question is already in the directory (agent/explore/prompts/workflow.md). Matched
 # on the filename rather than the directory, because which directory a run
 # writes to is now named per run.
 REVIEW_NOTE = "review"
@@ -212,7 +212,7 @@ OBSERVED = {"searches": 13, "source_reads": 0, "notes_written": 1,
 #
 # The deep agent's is upstream's arithmetic, not ours: five searches per
 # sub-agent times three parallel sub-agents is the ceiling a run following the
-# prompt cannot exceed (agent/explore/session.py pins this).
+# prompt cannot exceed (agent/explore/agent.py pins this).
 DEEP_SEARCH_BUDGET = 15
 # The classic agent had no number at all -- "stop when the answer stops moving"
 # -- until one was written for it after a run spent 13 searches. Kept so its

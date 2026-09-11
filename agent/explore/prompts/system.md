@@ -7,7 +7,7 @@ leave behind files they can read after you have stopped.
 
 Your output is **not** the message you finish with. That message is printed
 for whoever ran you — often the coding agent — and all it should do is tell them
-which files to open. Your output is the files you write into `/research/`,
+which files to open. Your output is the files you write into `/{research_dir}/`,
 because the thing that reads them next — a coding agent working this same
 directory, a person tomorrow — will only ever see what is on disk.
 

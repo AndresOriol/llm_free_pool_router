@@ -1,6 +1,6 @@
 """The improvement agent's system prompt.
 
-Assembled the way `agent/explore/prompt.py` assembles the explorer's, and
+Assembled the way `agent/explore/agent.py` assembles the explorer's, and
 sharing the same three sections from `agent/code/prompt.py` -- the pool
 identity, the jail's `/`, and the headless preamble. Those are facts about
 *this project* rather than about any one agent's job, so a second copy of them

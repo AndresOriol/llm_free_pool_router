@@ -76,18 +76,20 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   `think_tool` forces a pause between searches. Its tool surface is tailored
   rather than inherited: no `ls`, `glob`, `grep` or shell, because it never
   explores a repository — a caller names the paths, and `research_status` says
-  what its own research holds. The framework's prompt sections about the tools
-  it does not have are removed with them, which is half of a 49% cut in what
-  every call carries before the conversation starts
+  what its own research holds
   ([15.5.1](docs/15-explorer.md#1551-the-surface-is-chosen-not-inherited)).
-  Which directory it writes to is named per run, so one investigation can
+  **Its behaviour is text:** [agent.py](agent/explore/agent.py) builds it and
+  `__main__.py` runs it, and everything the model reads is Markdown in
+  `prompts/` and `tools/`, so changing how it works is an edit to prose
+  ([15.5.5](docs/15-explorer.md#1555-what-each-call-carries)). Which directory
+  it writes to is named per run (`--research-dir`), so one investigation can
   continue another. A run ends by reading its own report back against the
-  request and saving what it found as `review.md`; the session asks a second
-  time if it skipped that
+  request and saving `review.md`, which the prompt asks for and the eval counts
   ([15.5.4](docs/15-explorer.md#1554-the-review-at-the-end)). It hands off to
   the coding agent by writing `/research/*.md`
   ([15. The web explorer](docs/15-explorer.md)). Every deviation from upstream is
-  marked `ADAPTED` in [deep_prompts.py](agent/explore/deep_prompts.py).
+  marked `ADAPTED` in the prompts and listed in
+  [15.8.2](docs/15-explorer.md#1582-what-this-pool-forced-us-to-change).
 - [agent/improve](agent/improve/) — the agent whose project is the other
   agents, modelled on [LangSmith
   Engine](https://docs.langchain.com/langsmith/engine). It reads the runs this

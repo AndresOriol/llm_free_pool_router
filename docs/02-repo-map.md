@@ -37,6 +37,7 @@ what a session is.
 | [chat_model.py](../agent/runtime/chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
 | [backend.py](../agent/runtime/backend.py) | *What is the agent allowed to execute?* — a filesystem jail plus an `execute` allowlist of `python`/`pytest`/`git` |
 | [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
+| [web.py](../agent/runtime/web.py) | *How does an agent reach the web?* — Tavily finds URLs, httpx fetches each page, markdownify converts it, so the **page** reaches the model; and the check that refuses a run with no search account |
 | [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
 
 `agent/code/` is the **coding agent**: `create_deep_agent` over that backend,
@@ -54,16 +55,15 @@ the loop, the tools and the compaction come from the SDK.
 | [`__main__.py`](../agent/code/__main__.py) | CLI: workdir as an argument, task on stdin |
 
 `agent/explore/` is the **web explorer**: the same loop and the same jail, with
-its tools pointed outward and no shell at all. See
+its tools pointed outward and no shell at all. Two Python files and two
+directories of Markdown, and the Markdown is the behaviour. See
 [15. The web explorer](15-explorer.md).
 
 | File | The question it answers |
 | --- | --- |
-| [research_tools.py](../agent/explore/research_tools.py) | *How does an agent reach the web?* — `tavily_search` (Tavily finds URLs, httpx fetches, markdownify converts, so the **page** reaches the model), `think_tool`, and `research_status`, which lists what the research has written |
-| [tools.py](../agent/explore/tools.py) + [descriptions/](../agent/explore/descriptions/) | *Which tools does it have, and what is it told about them?* — three lists (dropped tools, rewritten descriptions, removed framework prose) and one Markdown file per tool ([15.5](15-explorer.md#155-what-it-is-allowed-to-do)) |
-| [deep_prompts.py](../agent/explore/deep_prompts.py) + [prompts/](../agent/explore/prompts/) | *Whose method is this?* — LangChain's deep-research prompts, ported close to verbatim into three Markdown files, with every deviation marked `ADAPTED`; the module is the provenance ([15.8](15-explorer.md#158-the-deep-research-port)) |
-| [session.py](../agent/explore/session.py) | *How does it differ from the coding agent?* — an orchestrator over a `research-agent` sub-agent, the web tools in, every program out, and the research directory — named per run — created before the first write |
-| [prompt.py](../agent/explore/prompt.py) + [system_prompt.md](../agent/explore/system_prompt.md) | *What does it know that upstream cannot?* — which pool serves a call, where the jail's `/` is, that nobody is watching. The method comes from `deep_prompts.py` |
+| [agent.py](../agent/explore/agent.py) | *How is it built?* — the whole harness, top to bottom: the budgets and the tools taken away, the templating that fills every Markdown file, the model and search pools, the three tools it adds, the middleware that fits the framework's tools and prompt to it, the two sub-agents, and one run |
+| [prompts/](../agent/explore/prompts/) | *What is it told?* — `system.md` (its job, what it cannot do, when it is finished), then LangChain's deep-research method, ported close to verbatim with every deviation marked `ADAPTED` ([15.8](15-explorer.md#158-the-deep-research-port)) |
+| [tools/](../agent/explore/tools/) | *What is each tool for?* — one Markdown file per tool, and that file is the description the model reads ([15.5](15-explorer.md#155-what-it-is-allowed-to-do)) |
 | [`__main__.py`](../agent/explore/__main__.py) | CLI, and how another agent reaches it: same shape as the coding agent, final message first, then the notes *this* run wrote ([16](16-delegation.md)) |
 
 `agent/improve/` is the **improvement agent**: the same loop and the same jail,

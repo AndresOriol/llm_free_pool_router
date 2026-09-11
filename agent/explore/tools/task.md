@@ -18,7 +18,7 @@ nothing. Include:
   narrow the answer;
 - what evidence would settle it, and what would not (a vendor's own page is not
   a regulator's ruling, and three vendor pages are not a market);
-- the exact path under `/research/` to save findings to. Pick an unused one, and
+- the exact path under `/{research_dir}/` to save findings to. Pick an unused one, and
   a different one for every sub-agent you launch in the same round;
 - what to return: the path, the decisive findings, and the gaps.
 

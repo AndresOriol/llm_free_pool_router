@@ -1,7 +1,7 @@
 Create a file, or replace an existing one whole.
 
 This is how research survives the run. Your closing message only points
-whoever ran you at your files; the files under `/research/` are the deliverable,
+whoever ran you at your files; the files under `/{research_dir}/` are the deliverable,
 because the thing that reads them next -- a coding agent, a person, you
 tomorrow -- was not here for the conversation.
 
