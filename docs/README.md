@@ -31,15 +31,24 @@ else on this page is design and changes rarely; this block is state.*
   a run that searched 13 times and opened nothing
   ([15.8](15-explorer.md#158-the-deep-research-port)). Needs a Tavily key; the
   pool holds one.
-- **The coding agent can now ask the explorer for research mid-task**, over
-  A2A's data model on a local transport ([16](16-agent-protocol.md)). It is on
-  by default and a delegation costs a whole explorer session, so a run's
-  `tokens_in` may include one; the record carries `delegated_tasks` and
-  `AGENT_PEERS=` turns it off. **Unmeasured** — `code-peers` has never been run
+- **The coding agent can now ask the explorer for research mid-task**, by
+  running `python -m agent.explore` with `execute` — no protocol, no tool
+  ([16](16-delegation.md)). It is on by default and a delegation costs a whole
+  explorer session, so a run's `tokens_in` may include one; the record carries
+  `peers` and `AGENT_PEERS=` turns it off. **Unmeasured** — `code-peers` has never been run
   against `code`.
+- **A third agent now reads the other two's runs and has the coding agent fix
+  what recurs** ([19](19-improvement-agent.md)). It cannot edit a file — the fix
+  is always delegated — and an issue in `evals/results/issues/` closes only when
+  runs recorded *after* the fix stop matching its signature. **Unmeasured.** Its
+  first live pass went round the whole loop and diagnosed a failure that had
+  already been fixed, then relayed a coding agent's claim to have made a change
+  the diff did not contain — read
+  [19.9](19-improvement-agent.md#199-what-the-first-live-pass-showed) before
+  trusting a pass. `IMPROVE_FIX=0` leaves a diagnose-only arm.
 - **The explorer has been watched once, and it drifted.** A live run searched 13 times, opened **zero** sources, and wrote one file at the end — all against its own prompt, and none of it visible to any existing metric. The prompt now carries numeric rules and
   [evals/research_trajectory.py](../evals/research_trajectory.py) checks them ([15.7](15-explorer.md#157-measured-against-a-reference-research-agent),
-  [16.10](16-agent-protocol.md#1610-what-the-first-live-run-showed)).
+  [16.9](16-delegation.md#169-what-the-first-live-delegation-showed)).
 - **The one L0 scenario is exhausted as a measuring instrument.** Seven
   configurations were run against it; none could be distinguished from another,
   and one scored 3/3 and 1/3 on consecutive batches. Re-running them will
@@ -137,18 +146,30 @@ else on this page is design and changes rarely; this block is state.*
 [15.8](15-explorer.md#158-the-deep-research-port) The deep-research port ·
 [15.9](15-explorer.md#159-what-the-grounded-gemini-search-was) What the grounded-Gemini search was
 
-**[16. The agent protocol](16-agent-protocol.md)** — how one agent asks another for work, in the standard's vocabulary
-&nbsp;&nbsp;&nbsp;&nbsp;[16.1](16-agent-protocol.md#161-the-problem-the-human-was-the-message-bus) The human was the message bus ·
-[16.1.1](16-agent-protocol.md#1611-this-reopens-a-settled-decision-and-how-much-of-it) What it reopens ·
-[16.2](16-agent-protocol.md#162-why-a2a-and-why-not-the-alternatives) Why A2A ·
-[16.3](16-agent-protocol.md#163-why-the-transport-is-local) Why the transport is local ·
-[16.4](16-agent-protocol.md#164-what-maps-onto-what) What maps onto what ·
-[16.5](16-agent-protocol.md#165-one-delegation-end-to-end) One delegation ·
-[16.6](16-agent-protocol.md#166-what-a-delegation-costs) What it costs ·
-[16.7](16-agent-protocol.md#167-what-this-costs-and-what-is-unmeasured) What is unmeasured ·
-[16.8](16-agent-protocol.md#168-what-is-deliberately-not-built) Not built ·
-[16.9](16-agent-protocol.md#169-adding-a-third-agent) Adding a third agent ·
-[16.10](16-agent-protocol.md#1610-what-the-first-live-run-showed) What the first live run showed
+**[16. Delegation](16-delegation.md)** — how one agent asks another for work: it runs the command
+&nbsp;&nbsp;&nbsp;&nbsp;[16.1](16-delegation.md#161-the-problem-the-human-was-the-message-bus) The human was the message bus ·
+[16.1.1](16-delegation.md#1611-this-reopens-a-settled-decision-and-how-much-of-it) What it reopens ·
+[16.2](16-delegation.md#162-why-a-command-and-not-a-protocol) Why a command ·
+[16.3](16-delegation.md#163-what-the-jail-has-to-bend-and-how-far) What the jail bends ·
+[16.4](16-delegation.md#164-why-a-subprocess-costs-something-real) What a subprocess costs ·
+[16.5](16-delegation.md#165-what-a-delegation-costs) What a delegation costs ·
+[16.6](16-delegation.md#166-what-this-costs-and-what-is-unmeasured) What is unmeasured ·
+[16.7](16-delegation.md#167-what-is-deliberately-not-built) Not built ·
+[16.8](16-delegation.md#168-adding-a-fourth-agent) Adding a fourth agent ·
+[16.9](16-delegation.md#169-what-the-first-live-delegation-showed) What the first live delegation showed
+
+**[19. The improvement agent](19-improvement-agent.md)** — the agent whose project is the other agents: it reads their traces, names what recurs, delegates the fix, and checks whether it stopped
+&nbsp;&nbsp;&nbsp;&nbsp;[19.1](19-improvement-agent.md#191-the-problem-the-loop-was-a-person) The loop was a person ·
+[19.2](19-improvement-agent.md#192-the-loop) The loop ·
+[19.3](19-improvement-agent.md#193-it-cannot-change-the-harness-and-that-is-the-point) Why it cannot change the harness ·
+[19.4](19-improvement-agent.md#194-what-counts-as-evidence) What counts as evidence ·
+[19.5](19-improvement-agent.md#195-the-signature-and-why-an-issue-can-close-itself) The signature ·
+[19.6](19-improvement-agent.md#196-the-rule-that-decides-whether-a-fix-worked) The rule that closes an issue ·
+[19.7](19-improvement-agent.md#197-making-new-evidence-costs-real-quota) Making new evidence ·
+[19.8](19-improvement-agent.md#198-what-it-costs-and-what-is-unmeasured) What is unmeasured ·
+[19.9](19-improvement-agent.md#199-what-the-first-live-pass-showed) What the first live pass showed ·
+[19.10](19-improvement-agent.md#1910-what-is-deliberately-not-built) Not built ·
+[19.11](19-improvement-agent.md#1911-running-it) Running it
 
 ### Part IV — Evaluation
 
@@ -182,6 +203,15 @@ else on this page is design and changes rarely; this block is state.*
 [10.4](10-metrics.md#104-the-judge) The judge ·
 [10.5](10-metrics.md#105-ranking-is-lexicographic-not-weighted) Lexicographic ranking ·
 [10.6](10-metrics.md#106-what-a-run-leaves-behind) What a run leaves behind
+
+**[20. Probes](20-probes.md)** — the small tests: one agent, one situation, one decision, and what that can and cannot prove
+&nbsp;&nbsp;&nbsp;&nbsp;[20.1](20-probes.md#201-the-problem-one-test-and-it-is-a-blunt-one) One test, and it is blunt ·
+[20.2](20-probes.md#202-what-a-probe-is) What a probe is ·
+[20.3](20-probes.md#203-what-it-can-and-cannot-say) What it can and cannot say ·
+[20.4](20-probes.md#204-the-expectations) The expectations ·
+[20.5](20-probes.md#205-langsmith-holds-the-runs-git-holds-the-claims) LangSmith holds the runs, git holds the claims ·
+[20.6](20-probes.md#206-running-them) Running them ·
+[20.7](20-probes.md#207-what-the-first-two-live-runs-showed) What the first two live runs showed
 
 **[11. Evaluation status](11-eval-status.md)** — the running state ⟳ *changes often*
 &nbsp;&nbsp;&nbsp;&nbsp;[11.2](11-eval-status.md#112-whats-built) What's built ·

@@ -5,6 +5,8 @@
     run --config NAME [...]                   execute runs and record them
     show [--config NAME]                      summarize recorded runs
     bundle [--config NAME] [--out FILE]       collect a batch's evidence for J2
+    probes [--agent A] [--list] [--push]      one agent, one situation, one
+                                             decision -- the small tests
     mine --out DIR [--sessions DIR]           recorded sessions -> scenario material
 
 Scenarios are data and live in a separate repo (default: the `agent_evals`
@@ -94,7 +96,7 @@ def cmd_validate(args) -> int:
 
 def cmd_run(args) -> int:
     repo = _scenario_repo(args)
-    configs = [agent_config.load(CONFIGS / f"{name}.yaml")
+    configs = [agent_config.load(CONFIGS / f"{name}.yaml", getattr(args, "ref", ""))
                for name in args.config]
     tasks = _selected_tasks(_scenarios(repo, args), args.suite, args.tags or [])
     if not tasks:
@@ -238,6 +240,85 @@ def cmd_bundle(args) -> int:
     return 0
 
 
+def cmd_probes(args) -> int:
+    """One agent, one situation, one decision — the small end of the harness."""
+    from evals import probes as probes_mod
+
+    try:
+        found = probes_mod.load(Path(args.dir) if args.dir
+                                else probes_mod.PROBES_DIR)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    if args.agent:
+        found = [p for p in found if p.agent == args.agent]
+    if args.id:
+        found = [p for p in found if p.id in args.id]
+    if not found:
+        sys.exit("No probes matched.")
+
+    if args.list:
+        for probe in found:
+            print(f"{probe.id}  ({probe.agent})  "
+                  f"{', '.join(f'{k}={v!r}' for k, v in probe.expect.items())}")
+        return 0
+
+    if args.push:
+        from evals import probe_dataset
+        try:
+            pushed = probe_dataset.push(found, args.dataset)
+        except probe_dataset.NoLangSmith as exc:
+            sys.exit(str(exc))
+        print(f"{pushed['examples']} example(s) -> dataset "
+              f"{pushed['dataset']!r} ({pushed['id']})")
+        if not args.run:
+            return 0
+
+    # Building the model is deferred to here so `--list` and `--push` cost no
+    # provider calls and need no keys.
+    from agent.code.session import CONTEXT_FLOOR, check_floor
+    from agent.runtime.chat_model import RouterChatModel
+    from llm_router import AutonomousLLMRouter, load_providers_from_config
+
+    providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG") or None)
+    if not providers:
+        sys.exit("No providers loaded. Set your keys in llm_router/.env.")
+    router = AutonomousLLMRouter(providers)
+    floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
+    members = check_floor(router, floor)
+    model = RouterChatModel(router=router,
+                            max_retries=len(providers) + 3).for_context(
+                                floor, strict=True)
+
+    if args.experiment:
+        from evals import probe_dataset
+        try:
+            done = probe_dataset.evaluate(found, model, floor=floor,
+                                          members=members,
+                                          dataset=args.dataset)
+        except probe_dataset.NoLangSmith as exc:
+            sys.exit(str(exc))
+        print(f"Experiment recorded against {done['dataset']!r}: "
+              f"{done['experiment']}")
+        return 0
+
+    # Serial, for the reason every batch here is serial: the probes share one
+    # free-tier pool, so running them at once makes each one's model mix depend
+    # on the others (evals/run.py).
+    results = []
+    for index, probe in enumerate(found, 1):
+        print(f"[{index}/{len(found)}] {probe.id} ... ", end="", flush=True)
+        decision = probes_mod.first_decision(probe, model, floor=floor,
+                                             members=members)
+        result = probes_mod.score(probe, decision)
+        results.append(result)
+        print("pass" if result["passed"] else "FAIL")
+
+    print()
+    print(probes_mod.report(results))
+    # Non-zero on a failure, so this is usable as a gate.
+    return 0 if all(r["passed"] for r in results) else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="evals")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -264,6 +345,9 @@ def main() -> int:
     run.add_argument("--suite", default="")
     run.add_argument("--tags", nargs="*")
     run.add_argument("--reps", type=int, default=3)
+    run.add_argument("--ref", default="",
+                     help="resolve every config against this ref instead of the "
+                          "one it pins; how a fix on a branch gets measured")
     run.add_argument("--skip-validate", action="store_true")
     # Self-tests point this elsewhere so stub runs never land in the real
     # record -- a leaderboard mixing stubbed and measured runs is worse than
@@ -290,6 +374,24 @@ def main() -> int:
     bundle.add_argument("--results", default=str(RESULTS))
     bundle.add_argument("--out", default="", help="write here instead of stdout")
     bundle.set_defaults(func=cmd_bundle)
+
+    probes = sub.add_parser(
+        "probes", help="one agent, one situation, one decision")
+    probes.add_argument("--agent", default="", help="code | improve")
+    probes.add_argument("--id", nargs="*", help="only these probe ids")
+    probes.add_argument("--dir", default="", help="where the yaml lives")
+    probes.add_argument("--list", action="store_true",
+                        help="show what would run; no provider calls")
+    probes.add_argument("--push", action="store_true",
+                        help="sync the probes to a LangSmith dataset")
+    probes.add_argument("--run", action="store_true",
+                        help="with --push, run them as well as pushing")
+    probes.add_argument("--experiment", action="store_true",
+                        help="run them through LangSmith, recording an "
+                             "experiment against the dataset")
+    probes.add_argument("--dataset", default="",
+                        help="dataset name; default free_coding_agent-probes")
+    probes.set_defaults(func=cmd_probes)
 
     args = parser.parse_args()
     return args.func(args)

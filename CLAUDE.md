@@ -77,25 +77,49 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   hands off to the coding agent by writing `/research/*.md`
   ([15. The web explorer](docs/15-explorer.md)). Every deviation from upstream is
   marked `ADAPTED` in [deep_prompts.py](agent/explore/deep_prompts.py).
-- [agent/protocol](agent/protocol/) — how one agent asks another for work. The
-  vocabulary is [A2A](https://a2a-protocol.org)'s — `AgentCard`, `Task`,
-  `Message`, `Artifact` — and must not drift from it; the transport is a local
-  Python call, so a delegate shares its caller's cooldown and trace. The coding
-  agent gets one `delegate` tool and a directory of cards in its prompt; the
-  deliverable is still a file on disk that the protocol only points at
-  ([16. The agent protocol](docs/16-agent-protocol.md)). **Unmeasured** — it is
-  a configuration, and `AGENT_PEERS=` turns it off for the A/B.
+- [agent/improve](agent/improve/) — the agent whose project is the other
+  agents, modelled on [LangSmith
+  Engine](https://docs.langchain.com/langsmith/engine). It reads the runs this
+  project has recorded — eval runs, which carry a hidden-test verdict, and live
+  ones, which do not — names what recurs as an *issue* in
+  `evals/results/issues/`, hands the fix to the coding agent over A2A, and
+  re-checks the issue's signature against runs recorded afterwards, closing it
+  or reopening it. **It cannot edit a file**
+  ([readonly.py](agent/improve/readonly.py)): the agent that diagnoses is not
+  the agent that changes the code, which is what makes a diff reviewable against
+  a diagnosis written before it. An issue never closes because nobody looked
+  ([19. The improvement agent](docs/19-improvement-agent.md)). **Unmeasured** —
+  `IMPROVE_FIX=0` is the diagnose-only arm.
+- [agent/delegation.py](agent/delegation.py) — how one agent asks another for
+  work: **it runs it.** Every agent is a command (`python -m agent.<name>
+  <workdir> --task "..."`) whose output leads with its final message, and the
+  coding agent already has `execute`, so delegation is a prompt paragraph naming
+  the commands — no protocol, no registry, no tool. A child gets the pool's keys
+  and hours rather than `pytest`'s 300s, and its own name removed from
+  `AGENT_PEERS` so it cannot call back. The deliverable is still a file or a
+  commit on disk ([16. Delegation](docs/16-delegation.md)). **Unmeasured** — it
+  is a configuration, and `AGENT_PEERS=` turns it off for the A/B.
 - [agent/serve](agent/serve/) — the agents as HTTP endpoints, for running this
-  in a container. A2A's methods over `http.server`: a caller POSTs a `Message`
-  to `/v1/agents/<name>/message:send`, gets **202** and a task id, and polls —
-  a run lasts hours and every platform in front kills a request in minutes.
+  in a container. The worker runs the same command a person types; a caller
+  POSTs `{"task", "workspace"}` to `/v1/agents/<name>/run`, gets **202** and a
+  task id, and polls — a run lasts hours and every platform in front kills a
+  request in minutes.
   What an agent is bound to is a workspace *name* resolved under one mounted
   root, never a path from the request, and the server clones a repository into
   a new one on request. Exactly one worker, because per-process cooldown and a
   JSONL ledger both say so. Nothing here changes an agent
   ([18. Serving](docs/18-serving.md)).
 - [evals](evals/) — the harness that decides whether a change to the above
-  helped. Scenarios live in the separate `agent_evals` repo.
+  helped. Scenarios live in the separate `agent_evals` repo. Two instruments:
+  a **scenario run** is the acceptance contract (minutes, one bit, decided by
+  hidden tests), and a **probe** is the small end — the real agent in front of
+  one situation, stopped at its first decision, one model call
+  ([20. Probes](docs/20-probes.md), `python -m evals probes`). A probe cannot
+  say a task was solved; it says the agent started the way it should, which is
+  where the recorded failures live. Probes are defined in
+  [evals/probes/](evals/probes/) with the failure each one guards cited beside
+  it, and pushed one-way to a LangSmith dataset — the files are the claim, the
+  dataset is a projection.
 - Providers today: Groq, Gemini. Expect more free-tier providers (Cerebras,
   OpenRouter free models, Mistral free tier, HuggingFace Inference, etc.) as
   they're evaluated — the provider list is meant to grow, not stay fixed.
@@ -124,8 +148,9 @@ documents, so they go stale; a finding that outlives its artifact belongs in
 Quick pointers: [18. Serving](docs/18-serving.md) for the container and the
 endpoints, [4. Failover](docs/04-failover.md) for how the router works,
 [14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
-[16. The agent protocol](docs/16-agent-protocol.md) for agent-to-agent
-delegation, [5. Providers](docs/05-providers.md) for accounts and limits,
+[16. Delegation](docs/16-delegation.md) for how one agent runs another, [19. The improvement agent](docs/19-improvement-agent.md) for the
+loop that turns recorded runs into fixes,
+[5. Providers](docs/05-providers.md) for accounts and limits,
 [12. Development harness](docs/12-development-harness.md) for which model tier
 does what, [15. The web explorer](docs/15-explorer.md) for web research, [13. Roadmap and scope](docs/13-roadmap.md) for what's next and
 what's already settled.

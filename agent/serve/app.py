@@ -1,8 +1,8 @@
-"""The HTTP binding: A2A's methods over `http.server`, and nothing else.
+"""The HTTP binding: `http.server`, and nothing else.
 
-Parsing and formatting only. Every decision about what runs, on which pool, in
-which workspace, is in [runner.py](runner.py); this file's whole job is to turn
-a request into a call and a `Task` into JSON.
+Parsing and formatting only. Every decision about what runs, in which
+workspace, is in [runner.py](runner.py); this file's whole job is to turn a
+request into a call and a task into JSON.
 
 **Why the standard library and not a framework.** The surface is nine routes
 that take JSON and return JSON, fronted by a queue of depth one. `fastapi` plus
@@ -12,22 +12,20 @@ with the standard library ahead of a dependency ([CLAUDE.md](../../CLAUDE.md)).
 `ThreadingHTTPServer` handles concurrent *polling* fine, which is the only
 concurrency there is: the work itself is single-file behind the worker.
 
-**Why HTTP+JSON rather than JSON-RPC.** A2A defines three transports and this
-is one of them, so `preferredTransport: "HTTP+JSON"` on the card is a true
-statement rather than an invention. The method names are the spec's, spelled
-the way the spec spells them in this binding -- `message:send`, `tasks/get`,
-`tasks:cancel` -- so the vocabulary still does not drift
-([16](../../docs/16-agent-protocol.md), [protocol/types.py](../protocol/types.py)).
+**What a request is.** The same command line a person types, over a socket:
+which agent, which workspace, and the task as one string. There was a protocol
+here -- A2A's `AgentCard`, `Message` and `Task`, with a handler beside every
+agent -- and it is gone with the rest of it
+([16. Delegation](../../docs/16-delegation.md)). An agent is a command; this
+queues one and hands back an id to poll, because a run outlives a request.
 
-    GET  /health                                        liveness, unauthenticated
-    GET  /.well-known/agent-card.json                   the primary agent's card
-    GET  /v1/agents                                     every card served here
-    GET  /v1/agents/<name>/.well-known/agent-card.json  one card
-    POST /v1/agents/<name>/message:send                 submit; 202 + a task
-    GET  /v1/tasks                                      recent tasks
-    GET  /v1/tasks/<id>                                 one task
-    POST /v1/tasks/<id>:cancel                          cancel if not started
-    GET  /v1/workspaces                                 what can be bound
+    GET  /health                    liveness, unauthenticated
+    GET  /v1/agents                 which agents this server can run
+    POST /v1/agents/<name>/run      submit; 202 + a task
+    GET  /v1/tasks                  recent tasks
+    GET  /v1/tasks/<id>             one task
+    POST /v1/tasks/<id>:cancel      cancel if not started
+    GET  /v1/workspaces             what can be bound
 
 **Everything but `/health` requires the bearer token.** This server runs a
 shell in a directory it will happily clone a repository into; an open port
@@ -48,7 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
-from agent.protocol.types import Message
+from agent import delegation
 from agent.serve import workspace
 from agent.serve.runner import Busy, Runner
 
@@ -62,8 +60,7 @@ MAX_BODY = 1_000_000
 # to be talked out of it.
 DISCARD_CEILING = 8 * MAX_BODY
 
-_AGENT_CARD = re.compile(r"^/v1/agents/([^/]+)/\.well-known/agent-card\.json$")
-_AGENT_SEND = re.compile(r"^/v1/agents/([^/]+)/message:send$")
+_AGENT_RUN = re.compile(r"^/v1/agents/([^/]+)/run$")
 _TASK_GET = re.compile(r"^/v1/tasks/([^/:]+)$")
 _TASK_CANCEL = re.compile(r"^/v1/tasks/([^/:]+):cancel$")
 
@@ -183,23 +180,18 @@ class _Handler(BaseHTTPRequestHandler):
     def _get(self, path: str) -> None:
         runner = self.server.runner
 
-        if path == "/.well-known/agent-card.json":
-            # The server's primary agent. A2A expects one card at the root of an
-            # agent's own base URL; this server hosts several, so the root card
-            # is the coding agent and each agent's real card is under its path.
-            card = runner.cards.get("code") or next(iter(runner.cards.values()))
-            return self._send(200, card.to_dict())
-
         if path == "/v1/agents":
-            return self._send(200, {"agents": [c.to_dict()
-                                               for c in runner.cards.values()]})
-
-        match = _AGENT_CARD.match(path)
-        if match:
-            card = runner.cards.get(match.group(1))
-            if card is None:
-                return self._error(404, f"no agent named {match.group(1)!r}")
-            return self._send(200, card.to_dict())
+            # Name, description, and the command it is. The command is the
+            # point: a caller can run exactly the same thing locally, and does
+            # not have to take this server's word for what it did
+            # ([16](../../docs/16-delegation.md)).
+            return self._send(200, {"agents": [
+                {"name": name,
+                 "description": delegation.AGENTS[name][1],
+                 "delivers": delegation.AGENTS[name][2],
+                 "command": (f"python -m {delegation.AGENTS[name][0]} "
+                             f"<workspace> --task ...")}
+                for name in runner.agents]})
 
         if path == "/v1/workspaces":
             return self._send(200, {"root": str(workspace.root()),
@@ -226,9 +218,9 @@ class _Handler(BaseHTTPRequestHandler):
     def _post(self, path: str, raw: bytes) -> None:
         runner = self.server.runner
 
-        match = _AGENT_SEND.match(path)
+        match = _AGENT_RUN.match(path)
         if match:
-            return self._send_message(match.group(1), self._parse(raw))
+            return self._run(match.group(1), self._parse(raw))
 
         match = _TASK_CANCEL.match(path)
         if match:
@@ -241,24 +233,16 @@ class _Handler(BaseHTTPRequestHandler):
 
     # --- the one method that does anything ---------------------------------
 
-    def _send_message(self, agent: str, body: dict) -> None:
-        """A2A `message/send`, answering 202 with the task rather than waiting.
+    def _run(self, agent: str, body: dict) -> None:
+        """Queue one run, answering 202 with the task rather than waiting.
 
-        `text` is accepted as a shorthand for a full A2A `Message`, because the
-        overwhelmingly common call is one line of prose from a shell script and
-        making that spell out a parts array would be ceremony with no reader.
+        The body is the command line: `task` is what would follow `--task`, and
+        `workspace` is what would be the workdir argument.
         """
-        raw = body.get("message")
-        if isinstance(raw, dict):
-            message = Message.from_dict(raw)
-        elif isinstance(body.get("text"), str):
-            message = Message.user(body["text"])
-        else:
-            return self._error(400, "give either `message` (an A2A Message) or "
-                                    "`text` (a string)")
-        if not message.text.strip():
-            return self._error(400, "the message is empty; there is nothing "
-                                    "to ask for")
+        text = body.get("task")
+        if not isinstance(text, str) or not text.strip():
+            return self._error(400, "`task` is required: the string that would "
+                                    "follow --task on the command line")
 
         name = body.get("workspace")
         if not isinstance(name, str) or not name:
@@ -272,8 +256,8 @@ class _Handler(BaseHTTPRequestHandler):
 
         try:
             task = self.server.runner.submit(
-                agent, message, workspace_name=name, repo=body.get("repo"),
-                context_id=body.get("contextId"), metadata=metadata)
+                agent, text.strip(), workspace_name=name,
+                repo=body.get("repo"), metadata=metadata)
         except KeyError as exc:  # unknown agent
             return self._error(404, str(exc).strip("'"))
         except workspace.BadWorkspace as exc:
@@ -304,8 +288,8 @@ class _Handler(BaseHTTPRequestHandler):
         runner = self.server.runner
         self._send(200, {
             "status": "ok",
-            "agents": sorted(runner.cards),
-            "providers": len(runner.router.providers),
+            "agents": sorted(runner.agents),
+            "providers": runner.providers,
             "eligible_providers": runner.members,
             "running": runner.running,
             "queued": runner.queued,
@@ -325,30 +309,13 @@ class Server(ThreadingHTTPServer):
         self.token = token
 
 
-def build(host: str, port: int, *, floor: int, recursion_limit: int,
-          allow_shell: bool, record_dir, token: Optional[str],
-          base_url: str = "") -> Server:
-    """The server, with its pool already built and its worker already running.
+def build(host: str, port: int, *, floor: int, allow_shell: bool, record_dir,
+          token: Optional[str]) -> Server:
+    """The server, with its worker already running.
 
     Everything that can fail at start-up does so here -- no providers, no member
     wide enough, a port already taken -- so a container that comes up is a
     container that can serve.
     """
-    runner = Runner(floor=floor, recursion_limit=recursion_limit,
-                    allow_shell=allow_shell, record_dir=record_dir,
-                    base_url=base_url or _base_url(host, port))
+    runner = Runner(floor=floor, allow_shell=allow_shell, record_dir=record_dir)
     return Server((host, port), runner, token)
-
-
-def _base_url(host: str, port: int) -> str:
-    """What to put on the cards when the operator did not say.
-
-    `PUBLIC_URL` is the honest answer whenever there is a proxy or a published
-    port in front, which there always is in a container -- the address the
-    server binds is not the address a caller reaches it on.
-    """
-    public = os.environ.get("PUBLIC_URL")
-    if public:
-        return public.rstrip("/")
-    shown = "localhost" if host in ("0.0.0.0", "", "::") else host
-    return f"http://{shown}:{port}"

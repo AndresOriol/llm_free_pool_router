@@ -1,0 +1,51 @@
+{
+  "id": "a-delegated-coding-session-leaves-no-record-this",
+  "title": "A delegated coding session leaves no record this loop can read",
+  "status": "open",
+  "severity": "medium",
+  "summary": "delegate_fix runs a whole coding session and the only thing it leaves behind is the A2A task JSON, which records the request, the state and the git artifact -- not a trace. records.py looks for run.json, trace.json or trace.jsonl, so a delegated session is invisible to the corpus the improvement loop reads.",
+  "diagnosis": "peers._register_code calls agent.code.a2a.make_handler without a trace_path, so run_session writes no run tree for the delegate. The flat EVAL_TRACE_FILE trace does capture the delegate's calls -- it is inherited through the run config -- but it lands in the caller's file, so the delegation cannot be read back as a run of its own.\n\nThe consequence is exactly the gap the first pass fell into: the only account of what a delegation did is the delegate's own closing message, which is the one source this project already knows not to trust.",
+  "fix": "Pass a trace_path into make_handler from peers._register_code, under the caller's record directory, so a delegated session writes its own run tree beside the task JSON. Needs LANGSMITH_TRACING to produce anything, so state that limitation rather than assuming it.",
+  "lever": "/agent/protocol/peers.py",
+  "signature": {
+    "grep": "delegate_fix"
+  },
+  "evidence": [],
+  "first_seen": "",
+  "last_seen": "",
+  "created": "2026-09-08T10:53:43+00:00",
+  "updated": "2026-09-08T21:25:13+00:00",
+  "tasks": [],
+  "checks": [
+    {
+      "ts": "2026-09-08T16:38:45+00:00",
+      "since": "",
+      "considered": 105,
+      "matched": 0,
+      "verdict": "closed",
+      "matching_runs": []
+    }
+  ],
+  "history": [
+    {
+      "ts": "2026-09-08T10:53:43+00:00",
+      "event": "opened",
+      "detail": "Filed by hand from the first live improvement pass, 2026-09-08."
+    },
+    {
+      "ts": "2026-09-08T16:38:45+00:00",
+      "event": "status",
+      "detail": "open -> closed (check)"
+    },
+    {
+      "ts": "2026-09-08T21:25:13+00:00",
+      "event": "status",
+      "detail": "closed -> open (review)"
+    },
+    {
+      "ts": "2026-09-08T21:25:13+00:00",
+      "event": "amended",
+      "detail": "Reopened by review. This closed on considered>0, matched=0 while its signature had never matched a run -- there was no baseline to have moved away from, so nothing was learned. The rule that now returns `unproven` instead landed after this closure. The problem is unverified, not gone; the signature is the part that needs work."
+    }
+  ]
+}

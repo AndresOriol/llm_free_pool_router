@@ -146,4 +146,4 @@ one.
 
 ---
 
-**Previous:** [← 16. The agent protocol](16-agent-protocol.md) · **Next:** [18. Serving the agents →](18-serving.md)
+**Previous:** [← 16. Delegation](16-delegation.md) · **Next:** [18. Serving the agents →](18-serving.md)

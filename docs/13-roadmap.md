@@ -161,8 +161,8 @@ Live, unresolved, and worth deciding when the evidence arrives — not before.
 | Where does shared cooldown state live, if it ever needs to be shared across processes? | A second concurrent consumer actually existing. |
 | Where do per-provider curated docs live once the provider list grows? | The provider list growing past what one page holds ([5. Providers](05-providers.md)). |
 | Should the web explorer's notes be read by the coding agent automatically, or only when the brief says to? | A run where the coding agent ignored a `/research/` file that answered its question ([15.1](15-explorer.md#151-what-it-is-for)). |
-| **Does a coding agent that *can* delegate delegate when it should?** | A batch on `harness/agent-protocol` against the non-delegating baseline: `delegated_tasks` per run, and whether the runs that used it were the ones needing outside knowledge ([16.7](16-agent-protocol.md#167-what-this-costs-and-what-is-unmeasured)). |
-| What should a delegation's budget be? | The first observed distribution of `tokens_in` for a delegated task. The slot is `Task.metadata`; the number is not invented before then ([16.6](16-agent-protocol.md#166-what-a-delegation-costs)). |
+| **Does a coding agent that *can* delegate delegate when it should?** | A `code-peers` batch against the non-delegating baseline: how many `python -m agent.explore` calls each run made, and whether the runs that made one were the ones needing outside knowledge ([16.6](16-delegation.md#166-what-this-costs-and-what-is-unmeasured)). |
+| What should a delegation's budget be? | The first observed distribution of `tokens_in` for a delegated task. Only the wall clock is bounded today (`AGENT_DELEGATE_TIMEOUT`); the token number is not invented before then ([16.5](16-delegation.md#165-what-a-delegation-costs)). |
 
 ## 13.5 Settled decisions
 
@@ -181,7 +181,7 @@ still holds.
 | ~~LangSmith is for watching, never for the record.~~ **Reopened.** The record is now the run tree LangSmith already built, *snapshotted* to disk after the run. | The requirement — a verdict rests on files on disk — is met by the snapshot. What expiry forbids is depending on the hosted copy at scoring time, not asking for the tree once while it exists ([7.6](07-observability.md#76-the-record-one-run-tree)). |
 | ~~One architecture; the conversational loop is deleted, not disabled.~~ **Reopened.** | Its inputs changed: the SDK now ships summarization and offloading, and the floor for coding work is 128,000 tokens rather than 6,000. The 39× result still stands, which is why the new arm is a configuration and not a merge ([6.1](06-agent.md#61-one-conversation-on-the-pool)). |
 | Only the sync path is implemented. | Both callers are sync. A hand-written async loop was built, found unused, and removed. |
-| ~~The two agents meet on disk and nowhere else; no message bus, no protocol.~~ **Partly reopened.** The coding agent can ask the explorer for a report; the *deliverable* is still a file. | A human was the message bus, which does not survive an unattended run or a third agent. The vocabulary is A2A's rather than ours, and the transport is local so the delegate shares the caller's cooldown and trace ([16](16-agent-protocol.md)). |
+| ~~The two agents meet on disk and nowhere else; no message bus, no protocol.~~ **Partly reopened.** The coding agent can ask the explorer for a report; the *deliverable* is still a file. | A human was the message bus, which does not survive an unattended run or a third agent. The request is a command line — the agent runs `python -m agent.explore` with `execute` — so there is still no protocol to keep in step ([16](16-delegation.md)). |
 | Docker is optional until L3. | L0–L2 scenarios are authored dependency-free, so the restricted `python`/`pytest` backend suffices. |
 
 ## 13.6 Explicitly out of scope

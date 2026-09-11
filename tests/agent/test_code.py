@@ -87,6 +87,19 @@ def test_the_guard_is_a_configuration_that_can_be_turned_off(monkeypatch):
     assert not re.findall(r"\{[a-z_]+\}", text)
 
 
+def test_the_guard_distinguishes_explicit_doc_and_spec_updates(monkeypatch):
+    """Explicit requests to update docs or migrate specifications are valid work.
+
+    The invariant guard forbids unrequested edits that hide contradictions, but
+    must explicitly allow tasks that ask to update documentation or migrate code
+    and specs to a new data model version.
+    """
+    monkeypatch.delenv("AGENT_INVARIANT_GUARD", raising=False)
+    text = prompt.build(128_000)
+    assert "Explicit Updates and Specification Migrations:" in text
+    assert "explicitly asks to update documentation or migrate code" in text
+
+
 def test_the_project_notes_are_an_exception_to_the_documentation_rule(monkeypatch):
     """R7's deliverable, against a rule that forbade exactly it.
 

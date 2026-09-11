@@ -21,10 +21,10 @@ The three things that changed, and what each was for:
    that never asked whether the twelfth had added anything.
 
 What did *not* change: the loop, the jail, the pool, the failover, and the fact
-that the deliverable is a file on disk that outlives the run. The A2A handler
-above it ([a2a.py](a2a.py)) is untouched -- it still collects `/research/*.md`
-and reports them as artifacts, which is why the report is written there rather
-than at the workdir root the way upstream does.
+that the deliverable is a file on disk that outlives the run. The command's
+summary ([__main__.py](__main__.py)) names the `/research/*.md` notes a run
+wrote, which is why the report is written there rather than at the workdir root
+the way upstream does.
 
 The grounded-Gemini search this replaced (`web_search`/`read_url`, a Gemini
 model searching on the agent's behalf and returning its summary) is deleted

@@ -1,0 +1,90 @@
+{
+  "id": "recursion-limit-crash-on-long-running-sessions",
+  "title": "Recursion limit crash on long-running sessions",
+  "status": "closed",
+  "severity": "high",
+  "summary": "Long-running productive sessions crash with GraphRecursionError upon reaching the 120-step recursion limit, failing to commit completed work or generate a summary.",
+  "diagnosis": "STALE, AND CORRECTED BY HAND. The diagnosis below described the code as it was before 2026-09-07: RECURSION_LIMIT has been 400, WRAP_UP_RESERVE 40 and the loop streamed through _drain since then. The two runs cited are real and their crashes are real, but both predate the fix, so nothing here was ever outstanding.\n\nThe improvement pass that opened this had every fact it needed and did not compare them: it never asked when agent/code/session.py last changed, spent a coding session re-requesting a change that existed, and was then told by that session that the change had been made. It had not: the diff held only a NOTES.md entry, which has been reverted.\n\nOriginal diagnosis, kept: RECURSION_LIMIT was 120 and agent.invoke raised GraphRecursionError on exhaustion, losing uncommitted work and the run summary.",
+  "fix": "Nothing to do. The fix shipped before the evidence was recorded. delegate_fix now refuses an issue whose evidence all predates its lever's last change, which is the check that was missing here.",
+  "lever": "/agent/code/session.py",
+  "signature": {
+    "kind": "eval",
+    "where": {
+      "failure_class": "stopping"
+    },
+    "grep": "GraphRecursionError"
+  },
+  "evidence": [
+    "20260907T085000Z_ui-port-to-typescript_session-from-notes_code_r1",
+    "20260907T085932Z_ui-port-to-typescript_session-from-notes_code_r1"
+  ],
+  "first_seen": "2026-09-07T08:50:00+00:00",
+  "last_seen": "2026-09-07T08:59:32+00:00",
+  "created": "2026-09-08T10:39:41+00:00",
+  "updated": "2026-09-08T16:38:45+00:00",
+  "tasks": [
+    {
+      "ts": "2026-09-08T10:46:49+00:00",
+      "task_id": "e3cec75e-daca-4040-8e5a-6cf3493c3bab",
+      "agent": "code",
+      "state": "completed",
+      "brief": "Increase RECURSION_LIMIT to 400 in agent/code/session.py and implement graceful wrap-up step budget handling.\n\nBehaviour to change:\nLong-running productive agent sessions that exceed 120 supersteps crash with GraphRecursionError out of agent.invoke. When invoke() aborts, the session loses uncommitted work, written handover notes, and run metadata.\n\nFile / lever:\nagent/code/session.py\n\nEvidence:\nRuns 20260907T085000Z_ui-port-to-typescript_session-from-notes_code_r1 and 20260907T085932Z_ui-port-to-typescript_session-from-notes_code_r1 crashed at 120 supersteps with:\nlanggraph.errors.GraphRecursionError: Recursion limit of 120 reached without hitting a stop condition.\n\nRequired change:\nIn agent/code/session.py:\n1. Set RECURSION_LIMIT = 400 and WRAP_UP_RESERVE = 40.\n2. Replace direct agent.invoke with streamed graph execution (_drain with stream_mode=\"values\") so state at step exhaustion is preserved.\n3. If the main step budget (budget - reserve) runs out, settle any dangling tool calls (_"
+    }
+  ],
+  "checks": [
+    {
+      "ts": "2026-09-08T10:39:45+00:00",
+      "since": "",
+      "considered": 105,
+      "matched": 2,
+      "verdict": "open",
+      "matching_runs": [
+        "20260907T085932Z_ui-port-to-typescript_session-from-notes_code_r1",
+        "20260907T085000Z_ui-port-to-typescript_session-from-notes_code_r1"
+      ]
+    },
+    {
+      "ts": "2026-09-08T10:46:55+00:00",
+      "since": "2026-09-08T10:46:49+00:00",
+      "considered": 0,
+      "matched": 0,
+      "verdict": "fixing",
+      "matching_runs": []
+    },
+    {
+      "ts": "2026-09-08T16:38:45+00:00",
+      "since": "2026-09-08T10:46:49+00:00",
+      "considered": 0,
+      "matched": 0,
+      "verdict": "closed",
+      "matching_runs": []
+    }
+  ],
+  "history": [
+    {
+      "ts": "2026-09-08T10:39:41+00:00",
+      "event": "opened",
+      "detail": ""
+    },
+    {
+      "ts": "2026-09-08T10:46:49+00:00",
+      "event": "status",
+      "detail": "open -> fixing"
+    },
+    {
+      "ts": "2026-09-08T10:46:49+00:00",
+      "event": "delegated",
+      "detail": "task e3cec75e to code"
+    },
+    {
+      "ts": "2026-09-08T10:54:12+00:00",
+      "event": "status",
+      "detail": "fixing -> closed"
+    },
+    {
+      "ts": "2026-09-08T10:54:12+00:00",
+      "event": "amended",
+      "detail": "Closed by hand: stale diagnosis, not a verified fix. No run was recorded after the delegation and none was needed."
+    }
+  ]
+}
