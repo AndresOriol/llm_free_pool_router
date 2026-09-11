@@ -232,7 +232,7 @@ class Runner:
 def _check_pool(floor: int) -> tuple:
     """(providers, members wide enough). Raises SystemExit if it cannot serve."""
     from llm_router import AutonomousLLMRouter, load_providers_from_config
-    from agent.code.session import check_floor
+    from agent.runtime.pool import check_floor
 
     providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG")
                                            or None)

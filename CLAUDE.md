@@ -60,35 +60,54 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   [14. Quota panel](docs/14-quota-panel.md)).
 - [agent/runtime](agent/runtime/) — the substrate: `RouterChatModel` (the
   failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
-  `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
-  nothing about sessions.
+  `python`/`pytest`/`git` execution, the tools over it, the pool held to a
+  context floor ([pool.py](agent/runtime/pool.py)), what every agent is told
+  about where it runs ([prompts/](agent/runtime/prompts/)), and the record: the
+  JSONL trace and the LangSmith run tree
+  ([run_tree.py](agent/runtime/run_tree.py)). Knows nothing about sessions.
 - [agent/code](agent/code/) — the coding agent: `create_deep_agent` over that
-  jailed backend, with the configuration ported from `deepagents-code`
-  ([prompt.py](agent/code/prompt.py), [context.py](agent/code/context.py),
-  [shell.py](agent/code/shell.py)). Its record is one LangSmith run tree
-  ([trace.py](agent/code/trace.py)) plus the `EVAL_TRACE_FILE` JSONL every
-  metric is summed over.
+  jailed backend, with the configuration ported from `deepagents-code`.
+  **Its behaviour is text:** [agent.py](agent/code/agent.py) builds it and
+  `__main__.py` runs it, and everything the model reads is Markdown in
+  `prompts/` ([6.5.3](docs/06-agent.md#653-what-each-call-carries)). Its record
+  is one LangSmith run tree plus the `EVAL_TRACE_FILE` JSONL every metric is
+  summed over.
 - [agent/explore](agent/explore/) — the web researcher: LangChain's
   deep-research agent, ported close to verbatim, on the pool. An orchestrator
   plans and delegates to a `research-agent` sub-agent and never searches itself;
   `tavily_search` finds URLs through a pool of Tavily accounts, fetches each page
   and converts it, so the **page** reaches the model rather than a summary of it;
-  `think_tool` forces a pause between searches. It runs no programs at all, and
-  hands off to the coding agent by writing `/research/*.md`
+  `think_tool` forces a pause between searches. Its tool surface is tailored
+  rather than inherited: no `ls`, `glob`, `grep` or shell, because it never
+  explores a repository — a caller names the paths, and `research_status` says
+  what its own research holds
+  ([15.5.1](docs/15-explorer.md#1551-the-surface-is-chosen-not-inherited)).
+  **Its behaviour is text:** [agent.py](agent/explore/agent.py) builds it and
+  `__main__.py` runs it, and everything the model reads is Markdown in
+  `prompts/` and `tool_descriptions/`, so changing how it works is an edit to prose
+  ([15.5.5](docs/15-explorer.md#1555-what-each-call-carries)). Which directory
+  it writes to is named per run (`--research-dir`), so one investigation can
+  continue another. A run ends by reading its own report back against the
+  request and saving `review.md`, which the prompt asks for and the eval counts
+  ([15.5.4](docs/15-explorer.md#1554-the-review-at-the-end)). It hands off to
+  the coding agent by writing `/research/*.md`
   ([15. The web explorer](docs/15-explorer.md)). Every deviation from upstream is
-  marked `ADAPTED` in [deep_prompts.py](agent/explore/deep_prompts.py).
+  marked `ADAPTED` in the prompts and listed in
+  [15.8.2](docs/15-explorer.md#1582-what-this-pool-forced-us-to-change).
 - [agent/improve](agent/improve/) — the agent whose project is the other
   agents, modelled on [LangSmith
   Engine](https://docs.langchain.com/langsmith/engine). It reads the runs this
   project has recorded — eval runs, which carry a hidden-test verdict, and live
   ones, which do not — names what recurs as an *issue* in
-  `evals/results/issues/`, hands the fix to the coding agent over A2A, and
+  `evals/results/issues/`, hands the fix to the coding agent by running it, and
   re-checks the issue's signature against runs recorded afterwards, closing it
   or reopening it. **It cannot edit a file**
-  ([readonly.py](agent/improve/readonly.py)): the agent that diagnoses is not
+  ([`ReadOnlyMiddleware`](agent/improve/agent.py)): the agent that diagnoses is not
   the agent that changes the code, which is what makes a diff reviewable against
   a diagnosis written before it. An issue never closes because nobody looked
-  ([19. The improvement agent](docs/19-improvement-agent.md)). **Unmeasured** —
+  ([19. The improvement agent](docs/19-improvement-agent.md)). Built like the
+  other two: [agent.py](agent/improve/agent.py) builds it, and what the model
+  reads is Markdown in `prompts/` and `tool_descriptions/`. **Unmeasured** —
   `IMPROVE_FIX=0` is the diagnose-only arm.
 - [agent/delegation.py](agent/delegation.py) — how one agent asks another for
   work: **it runs it.** Every agent is a command (`python -m agent.<name>

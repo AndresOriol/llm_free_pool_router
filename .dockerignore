@@ -38,14 +38,18 @@ evals/results/reviews/
 # container reads it.
 #
 # `*.md` is root-level only -- a pattern's `*` does not cross `/` -- which is
-# why the two system prompts survive it. They are **not** prose: `prompt.build`
-# reads `agent/*/system_prompt.md` at run time, so an image without them starts
-# and then fails on the first task. The negations below say so out loud, so
-# that broadening this to `**/*.md` fails the build instead of a run.
+# why the prompts survive it. They are **not** prose: every agent reads its
+# Markdown under `agent/` at run time, so an image without them starts and then
+# fails on the first task. The negations below say so out loud, so that
+# broadening this to `**/*.md` fails the build instead of a run.
 docs/
 *.md
-!agent/code/system_prompt.md
-!agent/explore/system_prompt.md
+!agent/code/prompts/*.md
+!agent/runtime/prompts/*.md
+!agent/improve/prompts/*.md
+!agent/improve/tool_descriptions/*.md
+!agent/explore/prompts/*.md
+!agent/explore/tool_descriptions/*.md
 
 Dockerfile
 .dockerignore

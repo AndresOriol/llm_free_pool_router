@@ -369,7 +369,6 @@ class LLMProvider(ABC):
             return False
         if not self.is_available and time.time() > self.cooldown_until:
             self.is_available = True
-            self.consecutive_failures = 0
             logger.info(f"{self.name} has finished its cooldown and is available again.")
 
         return self.is_available

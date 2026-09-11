@@ -12,8 +12,8 @@ is told about it in time to land its work.
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.errors import GraphRecursionError
 
-from agent.code.session import (RECURSION_LIMIT, WRAP_UP_RESERVE, _WRAP_UP,
-                                _drain, _settle)
+from agent.code.agent import (RECURSION_LIMIT, WRAP_UP_RESERVE, _drain,
+                              _settle, prompt, system_prompt, template_values)
 
 
 class _Agent:
@@ -107,7 +107,7 @@ def test_the_budget_is_sized_past_the_run_that_exposed_it():
 
 
 def test_the_wrap_up_asks_for_a_commit_and_a_handover():
-    text = _WRAP_UP.format(used=360, limit=400, left=40)
+    text = prompt("wrap_up.md", {"used": 360, "limit": 400, "left": 40})
     assert "commit" in text.lower()
     # It has to say the stop is coming, or there is no reason to change course.
     assert "40" in text and "400" in text
@@ -120,7 +120,7 @@ def test_the_wrap_up_asks_for_the_account_before_the_commit():
     The reply is the only part that survives being cut off mid-command, so it
     has to be asked for first.
     """
-    text = _WRAP_UP.format(used=360, limit=400, left=40).lower()
+    text = prompt("wrap_up.md", {"used": 360, "limit": 400, "left": 40}).lower()
     assert text.index("say what is done") < text.index("then commit")
 
 
@@ -146,8 +146,8 @@ def test_the_summary_finds_the_last_message_that_has_words():
 
 def test_the_prompt_names_the_programs_execute_can_run():
     """Every recorded run spent a step discovering this by being refused."""
-    from agent.code.prompt import build
-    text = build(128_000, members=70, programs=("python", "pytest", "git"))
+    text = system_prompt(template_values(128_000, 70,
+                                         ("python", "pytest", "git")))
     assert "python, pytest, git" in text
     assert "`&&`" in text
     # And it must say what to do instead, not only what is forbidden.
@@ -156,8 +156,8 @@ def test_the_prompt_names_the_programs_execute_can_run():
 
 def test_the_prompt_says_nothing_about_a_shell_it_does_not_restrict():
     """With HARNESS_SHELL the backend runs anything; a rule here would lie."""
-    from agent.code.prompt import build
-    assert "## Running commands" not in build(128_000, members=70)
+    assert "## Running commands" not in system_prompt(
+        template_values(128_000, 70, ()))
 
 
 def test_the_prompt_warns_that_a_python_wrapper_masks_the_exit_code():
@@ -168,7 +168,7 @@ def test_the_prompt_warns_that_a_python_wrapper_masks_the_exit_code():
     harness's own success marker lied, and the session reported a broken
     verification gate as passing.
     """
-    from agent.code.prompt import build
-    text = build(128_000, members=70, programs=("python", "pytest", "git"))
+    text = system_prompt(template_values(128_000, 70,
+                                         ("python", "pytest", "git")))
     assert "exit code" in text
     assert "sys.exit(res.returncode)" in text

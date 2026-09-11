@@ -29,6 +29,9 @@ JSON text and is parsed with an error the model can read and correct.
 **Nothing returns a whole file.** `trace.json` is ~250 KB for a 17-turn run and
 `read_file` on one would spend a session's context on a single run. Every
 section below is bounded, and says what it clipped.
+
+**What each tool is for, as the model reads it, is `tool_descriptions/<name>.md`.**
+What a tool returns is written here, next to the code that computes it.
 """
 
 from __future__ import annotations
@@ -43,13 +46,16 @@ from collections import Counter
 from pathlib import Path
 
 from agent import delegation
-from agent.code import gitstate
+from agent.runtime import gitstate
+from agent.runtime.prompts import fill
 from agent.improve import issues as issues_mod
 from agent.improve import records as records_mod
 from agent.improve import repo
 from agent.improve import scenarios as scenarios_mod
 
 logger = logging.getLogger("harness.improve")
+
+HERE = Path(__file__).parent
 
 MAX_OUTPUT = 8_000
 
@@ -64,6 +70,11 @@ DEFAULT_TIMEOUT = 3_600
 # ([6.4.2](../../docs/06-agent.md#642-the-pass-column-is-noise)), so a bigger
 # number here would buy confidence the numbers cannot carry.
 MAX_REPS = 3
+
+
+def describe(name: str) -> str:
+    """What the model is told a tool is for: `tool_descriptions/<name>.md`."""
+    return fill(HERE / "tool_descriptions" / f"{name}.md", {})
 
 
 def _clip(text: str, limit: int = MAX_OUTPUT) -> str:
@@ -98,15 +109,6 @@ def make_tools(workdir: Path, peers=None) -> dict:
 
     def find_runs(pattern: str = "", kind: str = "", since: str = "",
                   config: str = "", outcome: str = "", limit: int = 20) -> str:
-        """Find recorded runs, optionally the ones whose trace matches a regex.
-
-        Filters: kind `eval` (has a verdict from hidden tests) or `live` (an
-        unattended or served run, no verdict); `since` a UTC prefix like
-        `2026-09-07`; `config` and `outcome` read from run.json. `pattern` is a
-        Python regex searched across the run's trace, router narration and final
-        message -- the way to ask "how many runs did X". Returns one line per
-        run, newest first, with matching lines under each hit.
-        """
         try:
             found = _records()
         except OSError as exc:
@@ -150,15 +152,6 @@ def make_tools(workdir: Path, peers=None) -> dict:
     # -- diagnose ----------------------------------------------------------
 
     def read_run(run_id: str, section: str = "summary") -> str:
-        """Read one recorded run, one section at a time.
-
-        Sections: `summary` (verdict, cost, tool mix, the longest silences
-        between provider calls), `turns` (the spine of the run tree: one line
-        per model call with its context size), `turn:<n>` (that call's context
-        tail, what it answered and what its tools returned), `events` (the flat
-        tool/model timeline), `diff`, `verify` (the hidden tests' output),
-        `account` (what the agent itself claimed -- never evidence on its own).
-        """
         record = records_mod.load(workdir, run_id)
         if record is None:
             return (f"error: no run called {run_id!r}. Use `find_runs` to list "
@@ -174,19 +167,6 @@ def make_tools(workdir: Path, peers=None) -> dict:
                     severity: str = "", summary: str = "", diagnosis: str = "",
                     fix: str = "", lever: str = "", signature: str = "",
                     evidence: str = "", note: str = "") -> str:
-        """Create or amend one issue in the ledger. Returns the issue.
-
-        An issue is a *pattern*, so `evidence` (space- or comma-separated run
-        ids) should name at least two runs; one instance is an anecdote. `lever`
-        names the file or knob a fix would land in — an issue whose fix is "be
-        smarter" is not an issue. `severity` is low|medium|high.
-
-        `signature` is JSON and is what later closes or reopens this, so write
-        it to match the failure and nothing else. Keys: `kind` ("eval"/"live"),
-        `where` (run.json fields, values either literal or like "> 200000"),
-        `grep` (a regex over the trace). Example:
-        {"where": {"failure_class": "stopping"}, "grep": "GraphRecursionError"}
-        """
         fields = {"title": title, "note": note}
         for key, value in (("id", id), ("status", status),
                            ("severity", severity), ("summary", summary),
@@ -257,18 +237,6 @@ def make_tools(workdir: Path, peers=None) -> dict:
     # -- fix ---------------------------------------------------------------
 
     def delegate_fix(issue_id: str, brief: str) -> str:
-        """Hand one issue's fix to the coding agent and record the delegation.
-
-        This runs a whole coding session against this project, so it is slow and
-        spends the shared free-tier budget — one well-specified brief beats
-        three vague ones. Write it for someone who cannot see your conversation:
-        the behaviour to change, the file or knob to change it in, what evidence
-        says so, and what must keep working. It commits on its own branch; the
-        report names the branch and the files that moved.
-
-        You do not edit the harness yourself. The diff is reviewable against the
-        diagnosis only if a different agent wrote it.
-        """
         issue = store.get(issue_id)
         if issue is None:
             return (f"error: no issue called {issue_id!r}. Open one with "
@@ -405,25 +373,6 @@ def make_tools(workdir: Path, peers=None) -> dict:
                        traps: str = "", invariants: str = "",
                        category: str = "bugfix", difficulty: str = "L1",
                        archetype: str = "", build: str = "") -> str:
-        """Describe an eval scenario drawn from a run, and optionally build it.
-
-        A run the agent failed is a description of a test it would fail. The set
-        has five scenarios and cannot currently tell one configuration from
-        another, so a good scenario is worth more than most fixes — including
-        to you, since every claim you make about a fix rests on it.
-
-        `prompt` is the exact text the agent would be given. `fail_to_pass` is
-        what must go from failing to passing; without it the scenario decides
-        nothing and this refuses. `traps` names the answers that satisfy the
-        task's letter and miss it — a scenario with none is not worth building.
-        `category` is bugfix|feature|refactor|tests|ambiguous|trap, `difficulty`
-        L0..L3. `source_run` is read for provenance, so the brief cannot claim a
-        failure the run did not have.
-
-        Pass `build="yes"` to hand the finished draft to a coding session in the
-        scenario repository. That costs a whole session, so draft first, read it
-        back, and build when it is right.
-        """
         record = (records_mod.load(workdir, source_run) if source_run else None)
         if source_run and record is None:
             return (f"error: no run called {source_run!r}, so the draft would "
@@ -475,18 +424,6 @@ def make_tools(workdir: Path, peers=None) -> dict:
 
     def run_evals(config: str = "code", scenario: str = "", reps: int = 1,
                   ref: str = "", topic: str = "") -> str:
-        """Record fresh runs, so a fix can be checked against evidence.
-
-        Launches `python -m evals run`. This is the expensive call in the loop:
-        it runs real agent sessions serially against the free-tier pool and can
-        take an hour. Name a `scenario` (or a `topic`) — a whole-suite batch is
-        a human's decision, not a tool call.
-
-        `ref` is the branch or SHA to measure. A fix the coding agent just
-        committed is on its branch, and a configuration pins `master`, so
-        verifying a fix means naming that branch here. Returns the run ids
-        recorded, which are what `check_issue` then reads.
-        """
         if not scenario and not topic:
             return ("error: name a `scenario` or a `topic`. Running the whole "
                     "suite from a tool call would spend hours of quota on runs "
@@ -527,14 +464,6 @@ def make_tools(workdir: Path, peers=None) -> dict:
     # -- close it, or reopen it -------------------------------------------
 
     def check_issue(issue_id: str = "", since: str = "") -> str:
-        """Replay an issue's signature over the runs and update its status.
-
-        With no `issue_id`, lists the ledger instead. `since` is a UTC prefix
-        bounding what counts as evidence; left empty it defaults to when the
-        fix was delegated, which is the only boundary that answers "did it stop
-        happening". An issue never closes because nobody looked: with no run
-        recorded after that moment, the status is left alone and this says so.
-        """
         if not issue_id:
             return store.summary()
 
@@ -562,23 +491,23 @@ def make_tools(workdir: Path, peers=None) -> dict:
 
     made = {
         "find_runs": StructuredTool.from_function(
-            func=find_runs, name="find_runs", description=find_runs.__doc__),
+            func=find_runs, name="find_runs", description=describe("find_runs")),
         "read_run": StructuredTool.from_function(
-            func=read_run, name="read_run", description=read_run.__doc__),
+            func=read_run, name="read_run", description=describe("read_run")),
         "write_issue": StructuredTool.from_function(
-            func=write_issue, name="write_issue", description=write_issue.__doc__),
+            func=write_issue, name="write_issue", description=describe("write_issue")),
         "run_evals": StructuredTool.from_function(
-            func=run_evals, name="run_evals", description=run_evals.__doc__),
+            func=run_evals, name="run_evals", description=describe("run_evals")),
         "check_issue": StructuredTool.from_function(
-            func=check_issue, name="check_issue", description=check_issue.__doc__),
+            func=check_issue, name="check_issue", description=describe("check_issue")),
         "draft_scenario": StructuredTool.from_function(
             func=draft_scenario, name="draft_scenario",
-            description=draft_scenario.__doc__),
+            description=describe("draft_scenario")),
     }
     if "code" in (peers or ()):
         made["delegate_fix"] = StructuredTool.from_function(
             func=delegate_fix, name="delegate_fix",
-            description=delegate_fix.__doc__)
+            description=describe("delegate_fix"))
     else:
         logger.warning("No `code` peer is reachable; this pass can diagnose "
                        "but not fix.")
@@ -591,7 +520,7 @@ def _delegation(code, output: str, report: dict) -> str:
     Verdict first, then the session's own account of itself. The order is the
     point: a caller reading "no commit, and nothing changed on disk" cannot
     accept "I made three changes" from the prose underneath it
-    ([gitstate.render](../code/gitstate.py)).
+    ([gitstate.render](../runtime/gitstate.py)).
 
     A timeout (`code is None`) is not a crash. The session did real work and was
     stopped; whatever it committed is still committed, and the git report below

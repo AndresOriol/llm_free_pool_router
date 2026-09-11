@@ -212,6 +212,15 @@ def _check_routing():
     router = AutonomousLLMRouter([flash, mid, small], quota=_StubQuota("flash"))
     assert router.get_best_provider() is mid
 
+    # A retry preference must not rediscover a member whose daily budget is
+    # already spent. A recovered, funded member is preferable even if this
+    # request tried it earlier.
+    recovered = _FakeProvider("recovered", priority=2, max_input_tokens=250000)
+    spent_fresh = _FakeProvider("spent_fresh", priority=1, max_input_tokens=250000)
+    retry = AutonomousLLMRouter([recovered, spent_fresh],
+                                quota=_StubQuota("spent_fresh"))
+    assert retry.get_best_provider(attempted={recovered.name}) is recovered
+
     # The filter stacks with size: `mid` is spent and `small` cannot hold the
     # request, so the only member that is both funded and big enough wins.
     stacked = AutonomousLLMRouter([flash, mid, small], quota=_StubQuota("mid"))

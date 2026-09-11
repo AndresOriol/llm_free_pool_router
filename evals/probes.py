@@ -19,9 +19,8 @@ contradicts its task -- and those are exactly the behaviours the failure
 taxonomy keeps naming and the pass column cannot isolate.
 
 **Faithfulness is the whole point, so nothing is reconstructed here.** The
-prompt comes from the agent's own `prompt.build`, the tools from its own
-`build_agent`, and the graph is the compiled one; the probe just stops reading
-after the first tool call. A probe that tested a hand-built copy of the agent
+prompt and the tools come from the agent's own `build_agent`, and the graph
+is the compiled one; the probe just stops reading after the first tool call. A probe that tested a hand-built copy of the agent
 would drift from it silently, which is the failure mode this file exists to
 avoid rather than to have.
 
@@ -139,10 +138,10 @@ PROBE_PEERS = ("code",)
 def _build(probe: Probe, workdir: Path, model, floor: int, members: int):
     """The real compiled agent for this probe's target."""
     if probe.agent == "improve":
-        from agent.improve.session import build_agent
+        from agent.improve.agent import build_agent
         return build_agent(workdir, model, floor=floor, members=members,
                            peers=PROBE_PEERS)
-    from agent.code.session import build_agent
+    from agent.code.agent import build_agent
     return build_agent(workdir, model, floor=floor, members=members)
 
 

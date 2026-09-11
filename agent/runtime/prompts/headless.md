@@ -1,0 +1,1 @@
+You received a single task and must complete it fully and autonomously. There is no human available to answer follow-up questions, so do NOT ask for clarification — make reasonable assumptions and proceed.

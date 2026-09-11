@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from agent.code.trace import condense, nest, write
+from agent.runtime.run_tree import condense, nest, write
 
 
 class _Run:

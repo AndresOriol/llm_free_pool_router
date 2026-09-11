@@ -153,8 +153,55 @@ def test_a_real_bug_still_surfaces():
           isinstance(raised, ValueError))
 
 
+def test_slow_failures_do_not_recycle_priority_before_trying_the_pool(monkeypatch):
+    """Machintl baseline: two 503s outlasted the first account's 30s cooldown."""
+    import time
+    from llm_router import usage
+    from llm_router.quota.budget import RpdBudget
+
+    now = [time.time()]
+    monkeypatch.setattr(time, "time", lambda: now[0])
+    monkeypatch.setattr(usage, "record", lambda *a, **kw: None)
+    monkeypatch.setattr(usage, "record_call", lambda *a, **kw: None)
+
+    class SlowChat(_Chat):
+        def invoke(self, messages, **kwargs):
+            now[0] += 40
+            return super().invoke(messages, **kwargs)
+
+    busy = [_Provider(f"slow{i}", i, SlowChat(raises=_Exc("busy", 503)))
+            for i in range(2)]
+    live = _Provider("live", 3, _Chat(answer="served"))
+    router = AutonomousLLMRouter(busy + [live], quota=RpdBudget(enabled=False))
+    model = RouterChatModel(router=router, max_retries=3)
+    assert model.invoke("hello").content == "served"
+    assert [p._stub.calls for p in busy + [live]] == [1, 1, 1]
+    # Attempts are local to a request, not a permanent demotion of the member.
+    busy[0]._stub.raises = None
+    assert model.invoke("next").content == "ok"
+    assert busy[0]._stub.calls == 2
+
+
+def test_backoff_resets_on_success_not_on_cooldown_expiry(monkeypatch):
+    import time
+    from llm_router import usage
+
+    now = [time.time()]
+    monkeypatch.setattr(time, "time", lambda: now[0])
+    monkeypatch.setattr(usage, "record_call", lambda *a, **kw: None)
+    provider = _Provider("recovering", 1, _Chat())
+    provider.trigger_cooldown()
+    assert provider.cooldown_until - now[0] == 30
+    now[0] += 31
+    assert provider.check_availability()
+    provider.trigger_cooldown()
+    assert provider.cooldown_until - now[0] == 60
+    now[0] += 61
+    assert _model(provider).invoke("recovered").content == "ok"
+    provider.trigger_cooldown()
+    assert provider.cooldown_until - now[0] == 30
+
+
 if __name__ == "__main__":
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            fn()
-    print("failover: all checks passed")
+    import pytest
+    sys.exit(pytest.main([__file__, "-q"]))

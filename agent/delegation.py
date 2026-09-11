@@ -149,7 +149,7 @@ def _web_reachable() -> bool:
     try:
         from llm_router import TavilyPoolRouter
 
-        from agent.explore.session import NoSearchPool, check_pool
+        from agent.runtime.web import NoSearchPool, check_pool
     except ImportError as exc:
         logger.warning(f"Not offering the `explore` agent: {exc}")
         return False

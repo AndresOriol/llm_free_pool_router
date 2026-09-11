@@ -62,9 +62,9 @@ everything that is not closed, and only then go looking for something new.
 
 The agent that diagnoses is not the agent that changes the code.
 
-[readonly.py](../agent/improve/readonly.py) refuses `write_file`, `edit_file`
+[`ReadOnlyMiddleware`](../agent/improve/agent.py) refuses `write_file`, `edit_file`
 and their kin as a `ToolMessage` — the shape
-[`ShellAllowListMiddleware`](../agent/code/shell.py) uses, so the model can read
+[`ShellAllowListMiddleware`](../agent/runtime/shell.py) uses, so the model can read
 the refusal and correct from it in one step rather than losing the run to an
 exception. The only program it may run is `git`, for reading history; it gets no
 `python` and no `pytest`, which would otherwise be a way round every boundary
@@ -284,7 +284,7 @@ Three changes came out of it, all in this repo:
 2. **The prompt now says the delegate's report is not evidence either**, and
    `delegate_fix` returns that instruction with the task, naming the commands
    that settle it.
-3. **`shell_shape_section` no longer advertises a Python escape hatch to an
+3. **The shared `## Running commands` section no longer advertises a Python escape hatch to an
    agent without Python.** That section is shared with the coding agent, and it
    told this one to reach for `python -c` when it needed anything beyond `git`:
    10 of its 28 `execute` calls were refused programs, 8% of the run spent

@@ -35,48 +35,53 @@ what a session is.
 | File | The question it answers |
 | --- | --- |
 | [chat_model.py](../agent/runtime/chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
-| [backend.py](../agent/runtime/backend.py) | *What is the agent allowed to execute?* — a filesystem jail plus an `execute` allowlist of `python`/`pytest`/`git` |
+| [backend.py](../agent/runtime/backend.py) | *What is the agent allowed to execute?* — a filesystem jail (`JailedFilesystemBackend`, the explorer's, which runs nothing) plus an `execute` allowlist of `python`/`pytest`/`git` (`RestrictedShellBackend`, the coding agent's) |
 | [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
+| [web.py](../agent/runtime/web.py) | *How does an agent reach the web?* — Tavily finds URLs, httpx fetches each page, markdownify converts it, so the **page** reaches the model; and the check that refuses a run with no search account |
 | [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
+| [run_tree.py](../agent/runtime/run_tree.py) | *What happened during a run, readably?* — the LangSmith run tree, fetched after the run and written down condensed ([7.6](07-observability.md#76-the-record-one-run-tree)) |
+| [pool.py](../agent/runtime/pool.py) | *Which model does an agent run on?* — the pool as one `RouterChatModel` that routes only to members holding the context floor, and refuses before the run when none does |
+| [prompts.py](../agent/runtime/prompts.py) + [prompts/](../agent/runtime/prompts/) | *What is every agent told about where it runs?* — headless, the pool's identity, the jail's `/`, what `execute` runs; and `fill`, the one way any prompt file is filled |
+| [shell.py](../agent/runtime/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
 
 `agent/code/` is the **coding agent**: `create_deep_agent` over that backend,
 configured the way `deepagents-code` configures one. See
 [6.5](06-agent.md#65-what-makes-it-a-coding-agent). It is mostly configuration —
-the loop, the tools and the compaction come from the SDK.
+the loop, the tools and the compaction come from the SDK — so, like the
+explorer, it is two Python files and a directory of Markdown.
 
 | File | The question it answers |
 | --- | --- |
-| [session.py](../agent/code/session.py) | *What turns a generic deep agent into this coding agent?* — backend, middleware, prompt, subagent, and the context floor check that fails before the run rather than during it |
-| [prompt.py](../agent/code/prompt.py) + [system_prompt.md](../agent/code/system_prompt.md) | *What is the agent told?* — the ported prompt, and the three sections only the running configuration can fill |
-| [context.py](../agent/code/context.py) | *What does it know before its first tool call?* — git branch, status and a depth-limited tree, so orientation isn't bought with model calls |
-| [shell.py](../agent/code/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
-| [trace.py](../agent/code/trace.py) | *What happened during a run, durably?* — the LangSmith run tree, fetched and written down ([7.6](07-observability.md#76-the-record-one-run-tree)) |
-| [`__main__.py`](../agent/code/__main__.py) | CLI: workdir as an argument, task on stdin |
+| [agent.py](../agent/code/agent.py) | *How is it built?* — the whole harness, top to bottom: the step budget and the programs `execute` runs, the templating that fills the prompt, the project section it starts with, `create_deep_agent` over the jailed shell, and one run with its wrap-up |
+| [prompts/](../agent/code/prompts/) | *What is it told?* — `system.md`, the ported prompt; the two sections a run can switch off (`contradicted_requests.md`, `project_notes.md`); and `wrap_up.md`, what a run that spends its budget is told |
+| [`__main__.py`](../agent/code/__main__.py) | CLI: workdir as an argument, task on stdin; prints the final message, then what git says moved |
 
 `agent/explore/` is the **web explorer**: the same loop and the same jail, with
-its tools pointed outward and no shell at all. See
+its tools pointed outward and no shell at all. Two Python files and two
+directories of Markdown, and the Markdown is the behaviour. See
 [15. The web explorer](15-explorer.md).
 
 | File | The question it answers |
 | --- | --- |
-| [research_tools.py](../agent/explore/research_tools.py) | *How does an agent reach the web?* — `tavily_search` (Tavily finds URLs, httpx fetches, markdownify converts, so the **page** reaches the model) and `think_tool`, over the Tavily account pool |
-| [deep_prompts.py](../agent/explore/deep_prompts.py) | *Whose method is this?* — LangChain's deep-research prompts, ported close to verbatim, with every deviation marked `ADAPTED` ([15.8](15-explorer.md#158-the-deep-research-port)) |
-| [session.py](../agent/explore/session.py) | *How does it differ from the coding agent?* — an orchestrator over a `research-agent` sub-agent, the web tools in, every program out, `/research/` created before the first write |
-| [prompt.py](../agent/explore/prompt.py) + [system_prompt.md](../agent/explore/system_prompt.md) | *What does it know that upstream cannot?* — which pool serves a call, where the jail's `/` is, that nobody is watching. The method comes from `deep_prompts.py` |
+| [agent.py](../agent/explore/agent.py) | *How is it built?* — the whole harness, top to bottom: the budgets and the tools taken away, the templating that fills every Markdown file, the model and search pools, the three tools it adds, the middleware that fits the framework's tools and prompt to it, the two sub-agents, and one run |
+| [prompts/](../agent/explore/prompts/) | *What is it told?* — `system.md` (its job, what it cannot do, when it is finished), then LangChain's deep-research method, ported close to verbatim with every deviation marked `ADAPTED` ([15.8](15-explorer.md#158-the-deep-research-port)) |
+| [tool_descriptions/](../agent/explore/tool_descriptions/) | *What is each tool for?* — one Markdown file per tool, and that file is the description the model reads ([15.5](15-explorer.md#155-what-it-is-allowed-to-do)) |
 | [`__main__.py`](../agent/explore/__main__.py) | CLI, and how another agent reaches it: same shape as the coding agent, final message first, then the notes *this* run wrote ([16](16-delegation.md)) |
 
 `agent/improve/` is the **improvement agent**: the same loop and the same jail,
 pointed at what the other two *recorded* rather than at a project. It is the one
-agent here that cannot write a file. See
+agent here that cannot write a file. It is built like the other two — `agent.py`,
+`__main__.py`, and Markdown the model reads — plus what its tools do and read. See
 [19. The improvement agent](19-improvement-agent.md).
 
 | File | The question it answers |
 | --- | --- |
 | [records.py](../agent/improve/records.py) | *What evidence is there?* — every recorded run under `evals/results/runs/` and any live root, whether it carries a hidden-test verdict, and whether a stored signature matches it |
 | [issues.py](../agent/improve/issues.py) | *What is already known?* — the ledger: a named failure, its signature, what was delegated, and the check that closed or reopened it |
-| [tools.py](../agent/improve/tools.py) | *What can it do?* — six tools, one per stage of the loop; every section bounded, because a `trace.json` is megabytes |
-| [readonly.py](../agent/improve/readonly.py) | *Why can't it just fix it?* — the filesystem writes, refused as a readable message, so the diff is always someone else's |
-| [session.py](../agent/improve/session.py) | *How does it differ from the coding agent?* — write tools refused, `git` and nothing else executable, the open ledger in the prompt, `code` as its only peer |
+| [tools.py](../agent/improve/tools.py) | *What can it do?* — seven tools, one per stage of the loop, and what each returns; every section bounded, because a `trace.json` is megabytes |
+| [agent.py](../agent/improve/agent.py) | *How is it built?* — the whole harness, top to bottom: `git` and nothing else executable, the open ledger in the prompt, the filesystem writes refused as a readable message so the diff is always someone else's, the agent, and one pass |
+| [prompts/](../agent/improve/prompts/) | *What is it told?* — `system.md`, the standing pass it runs with no task, and the refusal a write gets |
+| [tool_descriptions/](../agent/improve/tool_descriptions/) | *What is each tool for?* — one Markdown file per tool, and that file is the description the model reads |
 | [`__main__.py`](../agent/improve/__main__.py) | CLI: same shape again, and with no task it runs the standing pass over the ledger |
 
 **How one agent asks another for work: it runs it.** Every agent is a command,
@@ -86,7 +91,7 @@ and the coding agent already has `execute`. See [16. Delegation](16-delegation.m
 | --- | --- |
 | [agent/delegation.py](../agent/delegation.py) | *Which agents may this one run, and how is it told?* — the one module that knows about all of them: the prompt paragraph naming each command, the probe that offers `explore` only if the pool can really search, and the `subprocess.run` `delegate_fix` uses |
 | [agent/runtime/cli.py](../agent/runtime/cli.py) | *How does a command take its task?* — workdir plus `--task` or stdin, shared by all three, because `execute` has no stdin to pipe a brief into |
-| [agent/code/gitstate.py](../agent/code/gitstate.py) | *Did the delegate actually do anything?* — what git says moved, rendered verdict-first, above whatever the session said about itself |
+| [agent/runtime/gitstate.py](../agent/runtime/gitstate.py) | *Did the delegate actually do anything?* — what git says moved, rendered verdict-first, above whatever the session said about itself |
 
 ## 2.4 `evals/` — the measurement harness
 

@@ -13,7 +13,7 @@ of the existing metrics moved. So these exist.
 **Every check here is a divergence observed in a recorded run, not a rule
 invented in advance.** Each one names what the explorer's own prompt or tool
 description already tells it to do
-([agent/explore/system_prompt.md](../agent/explore/system_prompt.md)), so a
+([agent/explore/prompts/system.md](../agent/explore/prompts/system.md)), so a
 failing check is the agent drifting from its instructions rather than this file
 having an opinion. The thresholds are deliberately loose: they are there to
 catch a *regression*, not to score a run.
@@ -38,6 +38,11 @@ READ_TOOLS = {"read_url"}
 REFLECT_TOOLS = {"think_tool"}
 WRITE_TOOLS = {"write_file", "edit_file"}
 REQUEST_NOTE = "research_request.md"
+# Step 6's note: `review.md`, or `review-<topic>.md` when one about another
+# question is already in the directory (agent/explore/prompts/workflow.md). Matched
+# on the filename rather than the directory, because which directory a run
+# writes to is now named per run.
+REVIEW_NOTE = "review"
 
 # A note is a research deliverable; anything else the agent writes is scratch.
 _NOTE = re.compile(r"/research/.+\.md$", re.IGNORECASE)
@@ -163,9 +168,15 @@ def from_trace(events: list) -> dict:
         "reports": len([n for n in set(notes) if REQUEST_NOTE not in n]),
         "saved_the_request": any(REQUEST_NOTE in n for n in notes),
         "searches_before_first_note": searches_before_first_note,
+        "reviewed": any(_is_review(path) for path in notes),
         "question_shaped_queries": sum(1 for q in queries
                                        if _looks_like_a_question(q)),
     }
+
+
+def _is_review(path: Optional[str]) -> bool:
+    """Whether a written path is step 6's review note."""
+    return (path or "").rsplit("/", 1)[-1].lower().startswith(REVIEW_NOTE)
 
 
 def vocabulary(events: list) -> str:
@@ -201,7 +212,7 @@ OBSERVED = {"searches": 13, "source_reads": 0, "notes_written": 1,
 #
 # The deep agent's is upstream's arithmetic, not ours: five searches per
 # sub-agent times three parallel sub-agents is the ceiling a run following the
-# prompt cannot exceed (agent/explore/session.py pins this).
+# prompt cannot exceed (agent/explore/agent.py pins this).
 DEEP_SEARCH_BUDGET = 15
 # The classic agent had no number at all -- "stop when the answer stops moving"
 # -- until one was written for it after a run spent 13 searches. Kept so its
@@ -259,7 +270,7 @@ def check(events: list, *, budget: Optional[int] = None) -> list:
     add("left a deliverable",
         m["reports"] > 0,
         f"{m['reports']} report(s) under /research",
-        "The closing message is not the deliverable and nobody reads it. No "
+        "The closing message only points at the deliverable; it is not one. No "
         "file means the run spent its quota talking to itself.")
 
     add("marked its ungrounded answers",
@@ -282,6 +293,17 @@ def check(events: list, *, budget: Optional[int] = None) -> list:
             "think_tool is a forced pause between retrieving and deciding to "
             "retrieve again. Skipping it is how a run spends its whole budget "
             "confirming what its second search already said.")
+
+        # Step 6, and the one step whose absence is invisible in the output:
+        # an unreviewed report reads exactly like a reviewed one. Nothing in
+        # the harness forces it -- the prompt asks and this counts, which is
+        # the whole arrangement (docs/15-explorer.md#1554-the-review-at-the-end).
+        add("reviewed its own report against the request",
+            m["reviewed"] or m["reports"] == 0,
+            "wrote a review note" if m["reviewed"] else "no review note",
+            "A long report is not evidence that the question was answered. "
+            "Step 6 reads the request back, says item by item whether each was "
+            "answered, and corrects what the sources do not support.")
 
         add("saved the request",
             m["saved_the_request"],

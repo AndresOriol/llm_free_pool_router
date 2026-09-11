@@ -40,6 +40,23 @@ the simpler configuration.
 | `code-peers` | `master` | `code` plus one prompt paragraph: it can ask the web explorer for a report mid-task by running `python -m agent.explore` with `execute` ([16](../docs/16-delegation.md)). The explorer is LangChain's deep-research agent, ported ([15.8](../docs/15-explorer.md#158-the-deep-research-port)) | — | **never run** | no verdict — read `tokens_in` first, and interleave against `code` |
 
 
+### explore-decision-led, Machintl live comparison (2026-09-10)
+
+Branch `codex/improve-explore-research`, based on master `0b7676e`.
+[Configuration](configs/explore-decision-led.yaml) adds decision-led planning,
+saved workstream findings, explicit report dates, direct source links and an
+enforced per-researcher search budget. Routing and token-accounting fixes are
+recorded separately from the research-quality comparison.
+
+**Not promoted.** One completed control and two candidate reports exposed
+unsupported legal and commercial claims in all three. V1 reduced provider input
+21.9% on the same fixed model but broke citation identity; v2 corrected identity
+and date while retaining grounding failures. V2 also used a different model
+after daily quota exhaustion. These live runs are diagnostic evidence, not
+hidden-test acceptance or a replicated quality result. See the
+[batch report](results/reports/2026-09-10-explore-machintl.md) and
+[future eval contracts](../.codex/artifacts/2026-09-10-explore-capability-issues.md).
+
 ### code-step-budget, 20 runs (2026-09-07)
 
 **A draw on the evidence collected, and the evidence does not cover the change

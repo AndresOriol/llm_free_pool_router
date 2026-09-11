@@ -159,6 +159,21 @@ def from_trace(events: list) -> dict:
     """Counts over the event stream."""
     llm_starts = [e for e in events if e.get("event") == "llm_start"]
     provider_starts = [e for e in llm_starts if e.get("model") not in ROUTER_MODELS]
+    # Drop a wrapper's repeated usage only when its provider's usage is present.
+    # Direct/legacy calls may trace only the wrapper; their tokens are still real.
+    usage_ids = {e.get("run_id") for e in events if e.get("event") == "llm_end"
+                 and (e.get("tokens_in") is not None or e.get("tokens_out") is not None)}
+    provider_parents = {e["parent_run_id"] for e in provider_starts
+                        if e.get("run_id") in usage_ids and e.get("parent_run_id")}
+    # Under LangGraph these spans are siblings under the model node; an explicit
+    # child callback instead parents the provider directly under the router.
+    duplicate_router_ids = {e["run_id"] for e in llm_starts
+                            if e.get("model") in ROUTER_MODELS and e.get("run_id")
+                            and (e["run_id"] in provider_parents
+                                 or e.get("parent_run_id") in provider_parents)}
+    usage_events = [e for e in events if e.get("run_id") not in duplicate_router_ids]
+    tokens_in = sum(e.get("tokens_in") or 0 for e in usage_events)
+    tokens_out = sum(e.get("tokens_out") or 0 for e in usage_events)
     tool_starts = [e for e in events if e.get("event") == "tool_start"]
     tool_errors = [e for e in events if e.get("event") == "tool_error"]
 
@@ -173,8 +188,8 @@ def from_trace(events: list) -> dict:
         "steps": len(llm_starts) - len(provider_starts),
         "provider_calls": len(provider_starts),
         "failover_bounces": sum(1 for e in events if e.get("event") == "llm_error"),
-        "tokens_in": sum(e.get("tokens_in") or 0 for e in events),
-        "tokens_out": sum(e.get("tokens_out") or 0 for e in events),
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
         # The cost driver, per call rather than per run. `tokens_in` alone
         # cannot tell a long run from an expensive one, and the audit that
         # produced this needed exactly that split: over 40 runs `tokens_in`
@@ -182,7 +197,7 @@ def from_trace(events: list) -> dict:
         # so what a run spends is the conversation being re-sent every step,
         # not failover replaying it (docs/06-agent.md#611).
         "tokens_per_call": round(
-            sum(e.get("tokens_in") or 0 for e in events) / len(provider_starts))
+            tokens_in / len(provider_starts))
         if provider_starts else 0,
         # Per call, because per run it only says the run was long. A bounce
         # spends a request against a daily budget and no input tokens: the
