@@ -39,20 +39,22 @@ what a session is.
 | [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
 | [web.py](../agent/runtime/web.py) | *How does an agent reach the web?* — Tavily finds URLs, httpx fetches each page, markdownify converts it, so the **page** reaches the model; and the check that refuses a run with no search account |
 | [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
+| [run_tree.py](../agent/runtime/run_tree.py) | *What happened during a run, readably?* — the LangSmith run tree, fetched after the run and written down condensed ([7.6](07-observability.md#76-the-record-one-run-tree)) |
+| [pool.py](../agent/runtime/pool.py) | *Which model does an agent run on?* — the pool as one `RouterChatModel` that routes only to members holding the context floor, and refuses before the run when none does |
+| [prompts.py](../agent/runtime/prompts.py) + [prompts/](../agent/runtime/prompts/) | *What is every agent told about where it runs?* — headless, the pool's identity, the jail's `/`, what `execute` runs; and `fill`, the one way any prompt file is filled |
+| [shell.py](../agent/runtime/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
 
 `agent/code/` is the **coding agent**: `create_deep_agent` over that backend,
 configured the way `deepagents-code` configures one. See
 [6.5](06-agent.md#65-what-makes-it-a-coding-agent). It is mostly configuration —
-the loop, the tools and the compaction come from the SDK.
+the loop, the tools and the compaction come from the SDK — so, like the
+explorer, it is two Python files and a directory of Markdown.
 
 | File | The question it answers |
 | --- | --- |
-| [session.py](../agent/code/session.py) | *What turns a generic deep agent into this coding agent?* — backend, middleware, prompt, subagent, and the context floor check that fails before the run rather than during it |
-| [prompt.py](../agent/code/prompt.py) + [system_prompt.md](../agent/code/system_prompt.md) | *What is the agent told?* — the ported prompt, and the three sections only the running configuration can fill |
-| [context.py](../agent/code/context.py) | *What does it know before its first tool call?* — git branch, status and a depth-limited tree, so orientation isn't bought with model calls |
-| [shell.py](../agent/code/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
-| [trace.py](../agent/code/trace.py) | *What happened during a run, durably?* — the LangSmith run tree, fetched and written down ([7.6](07-observability.md#76-the-record-one-run-tree)) |
-| [`__main__.py`](../agent/code/__main__.py) | CLI: workdir as an argument, task on stdin |
+| [agent.py](../agent/code/agent.py) | *How is it built?* — the whole harness, top to bottom: the step budget and the programs `execute` runs, the templating that fills the prompt, the project section it starts with, `create_deep_agent` over the jailed shell, and one run with its wrap-up |
+| [prompts/](../agent/code/prompts/) | *What is it told?* — `system.md`, the ported prompt; the two sections a run can switch off (`contradicted_requests.md`, `project_notes.md`); and `wrap_up.md`, what a run that spends its budget is told |
+| [`__main__.py`](../agent/code/__main__.py) | CLI: workdir as an argument, task on stdin; prints the final message, then what git says moved |
 
 `agent/explore/` is the **web explorer**: the same loop and the same jail, with
 its tools pointed outward and no shell at all. Two Python files and two
@@ -87,7 +89,7 @@ and the coding agent already has `execute`. See [16. Delegation](16-delegation.m
 | --- | --- |
 | [agent/delegation.py](../agent/delegation.py) | *Which agents may this one run, and how is it told?* — the one module that knows about all of them: the prompt paragraph naming each command, the probe that offers `explore` only if the pool can really search, and the `subprocess.run` `delegate_fix` uses |
 | [agent/runtime/cli.py](../agent/runtime/cli.py) | *How does a command take its task?* — workdir plus `--task` or stdin, shared by all three, because `execute` has no stdin to pipe a brief into |
-| [agent/code/gitstate.py](../agent/code/gitstate.py) | *Did the delegate actually do anything?* — what git says moved, rendered verdict-first, above whatever the session said about itself |
+| [agent/runtime/gitstate.py](../agent/runtime/gitstate.py) | *Did the delegate actually do anything?* — what git says moved, rendered verdict-first, above whatever the session said about itself |
 
 ## 2.4 `evals/` — the measurement harness
 

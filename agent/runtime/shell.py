@@ -4,7 +4,7 @@ Ported from `libs/code/deepagents_code/agent.py::ShellAllowListMiddleware` in
 langchain-ai/deepagents (MIT), which exists there so a non-interactive run can
 police the shell *without* human-in-the-loop interrupts -- an interrupt/resume
 cycle splits one LangSmith run into several, and the record here is that run
-tree (agent/code/trace.py).
+tree (agent/runtime/run_tree.py).
 
 **This does not replace the backend's allowlist, and must not.**
 `RestrictedShellBackend` is the boundary: it is what actually stops a command,

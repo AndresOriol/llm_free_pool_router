@@ -173,8 +173,8 @@ Markdown:
 
 Every Markdown file is a template filled from one dictionary
 (`template_values` in [agent.py](../agent/explore/agent.py)): the research
-directory, the budgets, today's date, and the three sections shared with the
-coding agent. The Python left over is assembly: fill the files, filter a list,
+directory, the budgets, today's date, and the sections every agent shares
+([agent/runtime/prompts/](../agent/runtime/prompts/)). The Python left over is assembly: fill the files, filter a list,
 hand the result to `create_deep_agent`. Nothing in it decides what the agent *does*, and a
 change to how the agent works should be a change to a Markdown file. When a
 behaviour was implemented as code here it has been removed again — see the
@@ -211,7 +211,7 @@ against a per-day request budget:
   backend that can execute, so there is nothing left to hide.
 
 **The project tree went with them.** The coding agent's prompt opens with a
-depth-limited listing of the repository ([agent/code/context.py](../agent/code/context.py))
+depth-limited listing of the repository ([`project_section`](../agent/code/agent.py))
 because two or three tool calls spent discovering the shape of a project are the
 most expensive calls in a run. That argument does not transfer: this agent is
 *given* its question, and a tree in its prompt is a hundred lines inviting

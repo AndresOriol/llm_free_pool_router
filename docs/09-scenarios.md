@@ -193,7 +193,7 @@ probes size-based routing."* That is no longer true of any run in this set, and
 the definition was measuring nothing.
 
 A coding session selects only members holding at least **128,000** input tokens
-(`CONTEXT_FLOOR` in [agent/code/session.py](../agent/code/session.py)). The
+(`CONTEXT_FLOOR` in [agent/runtime/pool.py](../agent/runtime/pool.py)). The
 8,000-token Groq members are therefore never candidates for this work, so no
 scenario file can be large enough to exclude them — they were excluded before
 the file was read. A category defined around a filter that never runs cannot

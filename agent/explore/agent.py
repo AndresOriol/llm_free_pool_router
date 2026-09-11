@@ -37,7 +37,6 @@ and `research_status` is how an agent sees them.
 from __future__ import annotations
 
 import logging
-import os
 import re
 from datetime import date
 from pathlib import Path
@@ -51,11 +50,9 @@ from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tracers.context import collect_runs
 
-from agent.code import trace as run_trace
-from agent.code.prompt import (HEADLESS_AMBIGUITY, HEADLESS_PREAMBLE,
-                               pool_identity_section, workdir_section)
-from agent.code.session import (CONTEXT_FLOOR, RECURSION_LIMIT, _trace_locator,
-                                check_floor)
+from agent.runtime import run_tree
+from agent.runtime.pool import CONTEXT_FLOOR, connect as connect_model
+from agent.runtime.prompts import fill, shared_values
 from agent.runtime.trace import tracer_from_env
 from agent.runtime.web import check_pool, search
 
@@ -68,6 +65,10 @@ HERE = Path(__file__).parent
 # Where the notes go, relative to the workdir, unless the run names another.
 # Naming an existing directory continues that investigation (15.5.2).
 RESEARCH_DIR = "research"
+
+# Supersteps: a budget, not a loop guard, sized as the coding agent's
+# (agent/code/agent.py).
+RECURSION_LIMIT = 400
 
 # Upstream's budgets. The prompts state them; the search limit is also
 # enforced, once per sub-agent invocation.
@@ -103,25 +104,9 @@ def template_values(floor: int = CONTEXT_FLOOR, members: int = 0,
         "max_concurrent_research_units": MAX_CONCURRENT_RESEARCH_UNITS,
         "max_researcher_iterations": MAX_RESEARCHER_ITERATIONS,
         "max_searches_per_subagent": MAX_SEARCHES_PER_SUBAGENT,
-        # Shared with the coding agent: facts about this project, not the job.
-        "interactive_preamble": HEADLESS_PREAMBLE,
-        "ambiguity_guidance": HEADLESS_AMBIGUITY,
-        "model_identity_section": pool_identity_section(floor, members),
-        "working_dir_section": workdir_section(),
+        # Shared with the other agents: where they run, not what they do.
+        **shared_values(floor, members),
     }
-
-
-def fill(path: Path, values: dict) -> str:
-    """One Markdown file with its placeholders filled."""
-    text = path.read_text(encoding="utf-8").strip()
-    for key, value in values.items():
-        text = text.replace("{" + key + "}", str(value))
-    # A typo would ship a literal `{placeholder}`, which a model reads as an
-    # instruction it cannot follow rather than as a bug.
-    unfilled = re.findall(r"\{[a-z_]+\}", text)
-    if unfilled:
-        logger.warning(f"{path.name} has unfilled placeholders: {unfilled}")
-    return text
 
 
 def prompt(names, values: dict) -> str:
@@ -144,19 +129,12 @@ def connect(floor: int = CONTEXT_FLOOR):
     searching. Search is checked first, because an explorer that cannot reach
     the web can never do this job.
     """
-    from llm_router import (AutonomousLLMRouter, TavilyPoolRouter,
-                            load_providers_from_config)
-    from agent.runtime.chat_model import RouterChatModel
+    from llm_router import TavilyPoolRouter
 
-    providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG") or None)
-    if not providers:
-        raise SystemExit("No providers loaded. Set your keys in llm_router/.env.")
     search_pool = TavilyPoolRouter.from_env()
     check_pool(search_pool)
-    router = AutonomousLLMRouter(providers)
-    members = check_floor(router, floor)
-    model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    return model.for_context(floor, strict=True), members, search_pool
+    model, members = connect_model(floor)
+    return model, members, search_pool
 
 
 # --- 4. Tools -------------------------------------------------------------------
@@ -307,22 +285,12 @@ def run(model, task: str, workdir: Path, pool, config=None,
     with collect_runs() as collected:
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
 
-    written = None
-    if trace_path is not None:
-        trace_id, project_id = _trace_locator(collected.traced_runs)
-        project_id = run_trace.resolve_project_id(project_id)
-        tree = run_trace.fetch_tree(trace_id, project_id) if trace_id else None
-        written = run_trace.write(trace_path, tree, meta={
-            "trace_id": trace_id,
-            "project_id": project_id,
-            "workdir": str(workdir),
-            "harness": "explore",
-            "research_dir": research_dir,
-            "context_floor": floor,
-            "eligible_providers": members,
-            "search_accounts": len(getattr(pool, "accounts", []) or []),
-            "tracing_enabled": run_trace.tracing_enabled(),
-        })
-        if written:
-            logger.info(f"Wrote the run record to {written}")
+    written = run_tree.record(collected.traced_runs, trace_path, {
+        "workdir": str(workdir),
+        "harness": "explore",
+        "research_dir": research_dir,
+        "context_floor": floor,
+        "eligible_providers": members,
+        "search_accounts": len(getattr(pool, "accounts", []) or []),
+    })
     return final, written

@@ -43,7 +43,7 @@ from collections import Counter
 from pathlib import Path
 
 from agent import delegation
-from agent.code import gitstate
+from agent.runtime import gitstate
 from agent.improve import issues as issues_mod
 from agent.improve import records as records_mod
 from agent.improve import repo
@@ -591,7 +591,7 @@ def _delegation(code, output: str, report: dict) -> str:
     Verdict first, then the session's own account of itself. The order is the
     point: a caller reading "no commit, and nothing changed on disk" cannot
     accept "I made three changes" from the prose underneath it
-    ([gitstate.render](../code/gitstate.py)).
+    ([gitstate.render](../runtime/gitstate.py)).
 
     A timeout (`code is None`) is not a crash. The session did real work and was
     stopped; whatever it committed is still committed, and the git report below

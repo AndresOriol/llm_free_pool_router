@@ -74,7 +74,7 @@ probes:
       offer a Python escape hatch anyway, and 10 of the first live pass's 28
       `execute` calls were refused programs — 8% of the run spent discovering a
       boundary the prompt had misdescribed. This is the regression test for
-      that fix (agent/code/prompt.py, shell_shape_section).
+      that fix (agent/runtime/prompts.py, running_commands).
     prompt: |
       Count how many recorded runs failed with failure_class `stopping`.
     files:

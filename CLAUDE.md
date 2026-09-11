@@ -60,14 +60,18 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   [14. Quota panel](docs/14-quota-panel.md)).
 - [agent/runtime](agent/runtime/) — the substrate: `RouterChatModel` (the
   failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
-  `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
-  nothing about sessions.
+  `python`/`pytest`/`git` execution, the tools over it, the pool held to a
+  context floor ([pool.py](agent/runtime/pool.py)), what every agent is told
+  about where it runs ([prompts/](agent/runtime/prompts/)), and the record: the
+  JSONL trace and the LangSmith run tree
+  ([run_tree.py](agent/runtime/run_tree.py)). Knows nothing about sessions.
 - [agent/code](agent/code/) — the coding agent: `create_deep_agent` over that
-  jailed backend, with the configuration ported from `deepagents-code`
-  ([prompt.py](agent/code/prompt.py), [context.py](agent/code/context.py),
-  [shell.py](agent/code/shell.py)). Its record is one LangSmith run tree
-  ([trace.py](agent/code/trace.py)) plus the `EVAL_TRACE_FILE` JSONL every
-  metric is summed over.
+  jailed backend, with the configuration ported from `deepagents-code`.
+  **Its behaviour is text:** [agent.py](agent/code/agent.py) builds it and
+  `__main__.py` runs it, and everything the model reads is Markdown in
+  `prompts/` ([6.5.3](docs/06-agent.md#653-what-each-call-carries)). Its record
+  is one LangSmith run tree plus the `EVAL_TRACE_FILE` JSONL every metric is
+  summed over.
 - [agent/explore](agent/explore/) — the web researcher: LangChain's
   deep-research agent, ported close to verbatim, on the pool. An orchestrator
   plans and delegates to a `research-agent` sub-agent and never searches itself;

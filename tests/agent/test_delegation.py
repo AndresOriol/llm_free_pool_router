@@ -25,7 +25,7 @@ import subprocess
 from pathlib import Path
 
 from agent import delegation
-from agent.code import gitstate
+from agent.runtime import gitstate
 from agent.runtime.backend import RestrictedShellBackend, _child_env, _is_agent
 
 
@@ -74,7 +74,7 @@ def test_the_coding_agent_gains_no_tool_at_all():
     every step ([6.4](../../docs/06-agent.md#64-why-it-is-shaped-this-way))."""
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
-    from agent.code.session import build_agent
+    from agent.code.agent import build_agent
 
     def names(agent):
         node = agent.nodes.get("tools")

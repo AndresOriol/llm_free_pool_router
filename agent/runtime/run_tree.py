@@ -591,7 +591,7 @@ async def _list_runs(client, trace_id: str, project_id: str) -> Optional[dict]:
 def _await(coro):
     """Drive one coroutine from sync code.
 
-    `Client.traces` is async-only, and this is called from `run_session`, which
+    `Client.traces` is async-only, and this is called from an agent's `run`, which
     is sync. `asyncio.run` covers that. The thread is for the other case -- a
     caller that already has a loop running -- because raising there would lose
     the record for no reason other than which context asked for it.
@@ -678,3 +678,52 @@ def write(path: Path, tree: Optional[dict], meta: dict) -> Optional[Path]:
     payload = {"meta": meta, **(condense(tree) or {"run": None})}
     path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
     return path
+
+
+def locate(runs) -> tuple[Optional[str], Optional[str]]:
+    """What the fetch needs to name this trace: `(trace_id, project_id)`.
+
+    Reading any run's `trace_id` does not work here, and neither does taking
+    `runs[0]`. `RunCollectorCallbackHandler` persists a run only when it has no
+    parent, so what arrives is not one tree but *several detached roots* -- a
+    session with two model turns and one tool call yields six, one per
+    LangGraph turn plus one for each `RouterChatModel`/provider pair -- and each
+    of them carries its own id as its `trace_id`. Asking LangSmith for a leaf's
+    id returns an empty trace, and the v2 endpoint reports that as 200 with no
+    runs: a trace recorded as `null` with nothing to say why.
+
+    The session's own root is the one that started first; everything else
+    begins inside it. `start_time` says so directly, and the collector's own
+    order does not, because it appends in *completion* order and so puts the
+    innermost LLM call first and the root last.
+
+    `project_id` is the same field LangSmith calls `session_id`. The collector
+    leaves it unset, so this is normally None and `resolve_project_id` looks
+    the project up by name instead.
+    """
+    if not runs:
+        return None, None
+    root = min(runs, key=lambda run: run.start_time)
+    trace_id = getattr(root, "trace_id", None) or root.id
+    project_id = getattr(root, "session_id", None)
+    return str(trace_id), str(project_id) if project_id else None
+
+
+def record(runs, path: Optional[Path], meta: dict) -> Optional[Path]:
+    """Fetch the run tree and write it to `path`; nothing when `path` is None.
+
+    `runs` is what `collect_runs()` gathered around the run. The record names
+    the trace and the project the fetch actually queried, then the caller's
+    `meta`. Never raises: this runs after the work is done.
+    """
+    if path is None:
+        return None
+    trace_id, project_id = locate(runs)
+    project_id = resolve_project_id(project_id)
+    tree = fetch_tree(trace_id, project_id) if trace_id else None
+    written = write(path, tree, meta={"trace_id": trace_id,
+                                      "project_id": project_id, **meta,
+                                      "tracing_enabled": tracing_enabled()})
+    if written:
+        logger.info(f"Wrote the run record to {written}")
+    return written

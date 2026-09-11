@@ -71,7 +71,8 @@ rather than substituting the bundle's clip.
 
 `evals/metrics.py` derives every trace-based metric from `trace.jsonl`. That file
 **used not to be written by this arm at all**: the JSONL callback handler was only
-attached when the narrow-role arm was retired, in `agent/code/session.py`.
+attached when the narrow-role arm was retired, in what is now
+`agent/code/agent.py`.
 
 So on any `code` run recorded before that, `provider_calls`, `tokens_in`,
 `tokens_out`, `steps`, `tool_calls`, `bad_tool_calls`, `models_used`,
@@ -142,9 +143,9 @@ Cluster the notes into named categories and count them. Rules:
   "failed" rather than a diagnosis. Subdividing it is the standing job, and
   `stopping` needs the same treatment.
 - Each category must name **what would fix it**, and the levers are
-  `agent/code/system_prompt.md`, `context.py`, the shell allowlist, and the knobs
-  in `session.py` (`CONTEXT_FLOOR`, `RECURSION_LIMIT`, the middleware and
-  subagent lists). A category whose fix is "be smarter" is not a category.
+  `agent/code/prompts/`, the project section, the shell allowlist, and the
+  knobs in `agent/code/agent.py` (`RECURSION_LIMIT`, the middleware and
+  subagent lists) and `agent/runtime/pool.py` (`CONTEXT_FLOOR`). A category whose fix is "be smarter" is not a category.
 
 ## 4. Compute the verdict mechanically
 

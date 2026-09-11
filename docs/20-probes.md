@@ -31,9 +31,8 @@ decision, and a whole scenario run is a very expensive way to observe one.
 A probe puts the **real** agent in front of one situation and stops at its
 **first decision**.
 
-Real means real: the system prompt comes from the agent's own `prompt.build`,
-the tools and the jail from its own `build_agent`, and the graph is the compiled
-one. The probe simply stops reading after the first tool call
+Real means real: the system prompt, the tools and the jail come from the
+agent's own `build_agent`, and the graph is the compiled one. The probe simply stops reading after the first tool call
 ([evals/probes.py](../evals/probes.py)). Nothing is reconstructed — a probe that
 tested a hand-built copy of the agent would drift from it silently, which is the
 failure this design is arranged to avoid rather than to have.

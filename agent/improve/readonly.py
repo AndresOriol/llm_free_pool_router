@@ -10,7 +10,7 @@ without this the rule lives only in the system prompt -- and a prompt is a
 request. This makes it a boundary: an edit comes back as a `ToolMessage` naming
 the tool, saying why, and pointing at the two tools that *are* the way to change
 something. The shape is `ShellAllowListMiddleware`'s
-([agent/code/shell.py](../code/shell.py)) and for the same reason: a refusal the
+([agent/runtime/shell.py](../runtime/shell.py)) and for the same reason: a refusal the
 model can read and correct from costs one step, an exception costs the run.
 
 The ledger is not an exception to this. `write_issue` writes it through Python,

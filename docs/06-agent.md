@@ -237,10 +237,10 @@ exception, so the model reads the reason and corrects itself instead of retrying
 
 | Ported | Where |
 | --- | --- |
-| System prompt: understand → build → test → verify; match the spec exactly; parallel tool calls; paginated reads; git safety; root-cause debugging; stop after three identical failures | [system_prompt.md](../agent/code/system_prompt.md) |
-| Prompt assembly and its interpolated sections | [prompt.py](../agent/code/prompt.py) |
-| `LocalContextMiddleware` — git branch, status, a depth-limited tree | [context.py](../agent/code/context.py) |
-| `ShellAllowListMiddleware` | [shell.py](../agent/code/shell.py) |
+| System prompt: understand → build → test → verify; match the spec exactly; parallel tool calls; paginated reads; git safety; root-cause debugging; stop after three identical failures | [prompts/system.md](../agent/code/prompts/system.md) |
+| Prompt assembly and its interpolated sections | `template_values` in [agent.py](../agent/code/agent.py), and [agent/runtime/prompts/](../agent/runtime/prompts/) for the sections every agent shares |
+| `LocalContextMiddleware` — git branch, status, a depth-limited tree | `project_section` in [agent.py](../agent/code/agent.py) |
+| `ShellAllowListMiddleware` | [agent/runtime/shell.py](../agent/runtime/shell.py) |
 
 Three parts are **adapted rather than copied**, and each adaptation is a fact
 about this pool rather than a preference:
@@ -272,6 +272,27 @@ Adding it took a measured run from 21 model calls to 14 and removed every `glob`
 call. Unlike dcode it is built once into the prompt rather than injected per
 call: the tree barely moves inside a run, and on a pool where each step spends a
 request against a daily quota, re-sending it buys nothing.
+
+### 6.5.3 What each call carries
+
+What the model sees is assembled from a few places, and knowing which is how to
+change what the agent does. [agent.py](../agent/code/agent.py) builds it and
+reads top to bottom; everything the model reads is Markdown.
+
+| | where it comes from |
+| --- | --- |
+| system prompt | [prompts/system.md](../agent/code/prompts/system.md), its `{placeholders}` filled once, at the start: the sections every agent shares ([agent/runtime/prompts/](../agent/runtime/prompts/) — headless, the pool's identity, the jail's `/`, what `execute` runs), `contradicted_requests.md` and `project_notes.md` unless switched off, the project section, and the agents it may run ([16](16-delegation.md)) |
+| framework sections and tool schemas | deepagents' own, unedited: the file tools, `execute`, `write_todos`, `task` |
+| conversation | the task, then every tool call and its result; the SDK summarizes it when it grows too long |
+| wrap-up | [prompts/wrap_up.md](../agent/code/prompts/wrap_up.md), sent as a message only when the step budget runs out |
+| what outlives it | the repository — the files on disk and the commits |
+
+`AGENT_INVARIANT_GUARD=0` and `AGENT_WRITE_ACCOUNT=0` each leave their section
+out; both are on by default, so each is a configuration an A/B can measure.
+
+Unlike the explorer's, nothing the framework injects is taken away or
+re-described ([15.5.1](15-explorer.md#1551-the-surface-is-chosen-not-inherited)):
+a coding agent does explore a repository, and does run programs.
 
 ---
 

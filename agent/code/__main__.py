@@ -19,8 +19,12 @@ Environment:
   AGENT_PEERS        comma-separated agents this one may run; unset means
                      `explore`, and an empty value means none
                      (docs/16-delegation.md)
+  AGENT_INVARIANT_GUARD=0, AGENT_WRITE_ACCOUNT=0
+                     leave that section out of the prompt (agent.py)
   HARNESS_SHELL=1    give the agent an unrestricted shell -- not contained,
                      so this is the operator's call, never a default
+
+What the agent is and how it is built is [agent.py](agent.py).
 """
 
 import logging
@@ -30,13 +34,9 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage
 
-from llm_router import AutonomousLLMRouter, load_providers_from_config
-from agent.code import gitstate
-from agent.code.session import (CONTEXT_FLOOR, RECURSION_LIMIT, check_floor,
-                                run_session)
-from agent.runtime import cli
+from agent.code.agent import CONTEXT_FLOOR, RECURSION_LIMIT, connect, run
+from agent.runtime import cli, gitstate
 from agent.runtime.awake import keep_awake
-from agent.runtime.chat_model import RouterChatModel
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(levelname)s - %(message)s")
@@ -52,19 +52,6 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
-def build(floor: int):
-    providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG") or None)
-    if not providers:
-        raise SystemExit("No providers loaded. Set your keys in llm_router/.env.")
-    router = AutonomousLLMRouter(providers)
-    members = check_floor(router, floor)
-    # A step must be able to walk the whole pool once before giving up: with a
-    # hard floor the eligible set is smaller than the pool, and an unlucky
-    # ordering of benched accounts must not end the run.
-    model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    return model.for_context(floor, strict=True), members
-
-
 def main() -> None:
     workdir, task = cli.parse(
         sys.argv[1:], prog="python -m agent.code",
@@ -77,7 +64,7 @@ def main() -> None:
 
     floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
     budget = int(os.environ.get("AGENT_STEP_BUDGET") or RECURSION_LIMIT)
-    model, members = build(floor)
+    model, members = connect(floor)
 
     shell = os.environ.get("HARNESS_SHELL") == "1"
     if shell:
@@ -89,7 +76,7 @@ def main() -> None:
     # directory. It exports EVAL_TRACE_FILE instead, pointing at the flat
     # `trace.jsonl` the callback handler writes (agent/runtime/trace.py). The
     # run tree is a second, nested record fetched from LangSmith
-    # (agent/code/trace.py), so it takes the directory and not the name:
+    # (agent/runtime/run_tree.py), so it takes the directory and not the name:
     # writing a JSON tree to a `.jsonl` path would both lie about the format
     # and overwrite the file every metric is summed over.
     trace_file = os.environ.get("AGENT_TRACE_FILE")
@@ -98,14 +85,14 @@ def main() -> None:
 
     # The head this run starts from, so the summary can say what actually moved
     # rather than leaving a reader to trust the closing message
-    # (agent/code/gitstate.py).
+    # (agent/runtime/gitstate.py).
     before = gitstate.head(workdir)
 
     # Hours of wall time with long gaps between calls looks like an idle
     # machine to Windows. Suspending mid-request is what left one run waiting
     # 43 minutes on a socket that had died while it slept.
     with keep_awake():
-        final, written = run_session(
+        final, written = run(
             model, task, workdir, config={"recursion_limit": budget},
             floor=floor, members=members, allow_shell=shell,
             trace_path=Path(trace_file) if trace_file else None)
@@ -155,7 +142,7 @@ def _summary(final, written, state=None) -> None:
 
     # Spending the step budget is an ordinary end, not a crash, but it is not
     # the same end as finishing -- whoever reads this has to know the session
-    # was stopped rather than done (agent/code/session.py).
+    # was stopped rather than done (agent.py, section 6).
     how = ("STOPPED (step budget spent)"
            if (final or {}).get("step_budget_spent") else "DONE")
     print(f"\n=== {how} after {len(messages)} message(s) ===")

@@ -31,8 +31,8 @@ from typing import Optional, Sequence
 from langchain_core.messages import HumanMessage
 from langchain_core.tracers.context import collect_runs
 
-from agent.code import trace as run_trace
-from agent.code.session import CONTEXT_FLOOR, RECURSION_LIMIT, _trace_locator
+from agent.runtime import run_tree
+from agent.runtime.pool import CONTEXT_FLOOR
 from agent.improve import prompt, records, repo, tools as improve_tools
 from agent.improve.issues import IssueStore
 from agent.improve.readonly import ReadOnlyMiddleware
@@ -47,6 +47,10 @@ logger = logging.getLogger("harness.improve")
 # What it genuinely needs a program for is reading history: which commit the
 # coding agent just made, and what moved in it.
 ALLOWED_PROGRAMS = ("git",)
+
+# Supersteps: a budget, not a loop guard, sized as the coding agent's
+# (agent/code/agent.py).
+RECURSION_LIMIT = 400
 
 
 class NothingToImproveOn(RuntimeError):
@@ -99,7 +103,7 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
     """The compiled improvement agent over a jailed, write-refusing backend."""
     from deepagents import create_deep_agent
 
-    from agent.code.shell import ShellAllowListMiddleware
+    from agent.runtime.shell import ShellAllowListMiddleware
     from agent.runtime.backend import RestrictedShellBackend
 
     workdir = Path(workdir)
@@ -149,22 +153,10 @@ def run_session(model, task: str, workdir: Path, config=None,
     with repo.restored(workdir), collect_runs() as collected:
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
 
-    trace_id, project_id = _trace_locator(collected.traced_runs)
-    project_id = run_trace.resolve_project_id(project_id)
-
-    written = None
-    if trace_path is not None:
-        tree = run_trace.fetch_tree(trace_id, project_id) if trace_id else None
-        written = run_trace.write(trace_path, tree, meta={
-            "trace_id": trace_id,
-            "project_id": project_id,
-            "workdir": str(workdir),
-            "harness": "improve",
-            "context_floor": floor,
-            "eligible_providers": members,
-            "tracing_enabled": run_trace.tracing_enabled(),
-        })
-        if written:
-            logger.info(f"Wrote the run record to {written}")
-
+    written = run_tree.record(collected.traced_runs, trace_path, {
+        "workdir": str(workdir),
+        "harness": "improve",
+        "context_floor": floor,
+        "eligible_providers": members,
+    })
     return final, written

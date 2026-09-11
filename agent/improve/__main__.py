@@ -39,15 +39,13 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage
 
-from llm_router import AutonomousLLMRouter, load_providers_from_config
-from agent.code.session import CONTEXT_FLOOR, RECURSION_LIMIT, check_floor
 from agent import delegation
 from agent.improve.issues import IssueStore
-from agent.improve.session import (NothingToImproveOn, check_records,
-                                   run_session)
+from agent.improve.session import (RECURSION_LIMIT, NothingToImproveOn,
+                                   check_records, run_session)
 from agent.runtime import cli
 from agent.runtime.awake import keep_awake
-from agent.runtime.chat_model import RouterChatModel
+from agent.runtime.pool import CONTEXT_FLOOR, connect
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(levelname)s - %(message)s")
@@ -73,16 +71,6 @@ STANDING_PASS = (
 )
 
 
-def build(floor: int):
-    providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG") or None)
-    if not providers:
-        raise SystemExit("No providers loaded. Set your keys in llm_router/.env.")
-    router = AutonomousLLMRouter(providers)
-    members = check_floor(router, floor)
-    model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    return model.for_context(floor, strict=True), members
-
-
 def main() -> None:
     workdir, task = cli.parse(
         sys.argv[1:], prog="python -m agent.improve",
@@ -105,7 +93,7 @@ def main() -> None:
 
     floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
     budget = int(os.environ.get("AGENT_STEP_BUDGET") or RECURSION_LIMIT)
-    model, members = build(floor)
+    model, members = connect(floor)
 
     trace_file = os.environ.get("AGENT_TRACE_FILE")
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):

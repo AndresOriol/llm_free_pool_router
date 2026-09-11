@@ -162,7 +162,7 @@ reads a token count without knowing delegation was available.
 
 A coding session's deliverable is a commit, so what a caller reads back leads
 with what the repository says and only then quotes what the session said about
-itself ([gitstate.py](../agent/code/gitstate.py)):
+itself ([gitstate.py](../agent/runtime/gitstate.py)):
 
 ```
 **Nothing changed.** On `master`, no commit was made and the working tree is

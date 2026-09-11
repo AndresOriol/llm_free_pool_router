@@ -3,8 +3,10 @@
 Nothing here knows what a session is. `RouterChatModel` fronts the pool,
 `RestrictedShellBackend` is the filesystem/exec jail an agent is confined to,
 `make_tools` is that backend's model-facing face, `web.search` is a web
-search that returns pages rather than snippets, and `JsonlTracer` records
-what every call cost. `agent/code` and `agent/explore` are its consumers; the
+search that returns pages rather than snippets, `pool.connect` holds the model
+to a context floor, `prompts` is what every agent is told about where it runs,
+and `JsonlTracer` and `run_tree` record what every call cost and what the run
+did. `agent/code`, `agent/explore` and `agent/improve` are its consumers; the
 router's own smoke test is another.
 """
 

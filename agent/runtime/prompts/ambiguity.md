@@ -1,0 +1,3 @@
+- Do NOT ask clarifying questions — there is no human to answer them. Make reasonable assumptions and proceed.
+- If you encounter ambiguity, choose the most reasonable interpretation and note your assumption briefly.
+- Always use non-interactive command variants — no human is available to respond to a prompt. Never run a command that blocks waiting on stdin.

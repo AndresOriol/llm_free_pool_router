@@ -10,8 +10,8 @@ from pathlib import Path
 
 from langchain_core.messages import ToolMessage
 
-from agent.code import context, prompt
-from agent.code.shell import ShellAllowListMiddleware
+from agent.code import agent as code
+from agent.runtime.shell import ShellAllowListMiddleware
 
 
 class _Request:
@@ -25,15 +25,19 @@ def _refuse(middleware, command):
     return middleware._refusal(_Request("execute", {"command": command}))
 
 
+def _prompt(floor=128_000, members=0, programs=()):
+    return code.system_prompt(code.template_values(floor, members, programs))
+
+
 def test_prompt_leaves_no_placeholder_unreplaced():
     # A missed placeholder ships literal `{braces}` to the model, which reads as
     # an instruction it cannot follow rather than as a bug.
-    text = prompt.build(128_000, members=14)
+    text = _prompt(members=14)
     assert not re.findall(r"\{[a-z_]+\}", text)
 
 
 def test_prompt_states_the_floor_not_a_model_name():
-    text = prompt.build(128_000, members=14)
+    text = _prompt(members=14)
     assert "128,000 input tokens" in text
     assert "pool of models" in text
 
@@ -41,7 +45,7 @@ def test_prompt_states_the_floor_not_a_model_name():
 def test_prompt_roots_paths_at_the_jail():
     # The backend runs virtual_mode=True, so telling the model to build host
     # paths -- which is what dcode's prompt does -- would fail every tool call.
-    text = prompt.build(128_000)
+    text = _prompt()
     assert "rooted at `/`" in text
     assert "C:\\Users\\..." in text
 
@@ -55,7 +59,7 @@ def test_prompt_forbids_editing_the_thing_that_contradicts_the_task(monkeypatch)
     guarantee from the page.
     """
     monkeypatch.delenv("AGENT_INVARIANT_GUARD", raising=False)
-    text = prompt.build(128_000)
+    text = _prompt()
     assert "## Contradicted Requests" in text
     assert "Never edit a test or a document so that it stops contradicting you" in text
 
@@ -68,7 +72,7 @@ def test_the_guard_overrides_the_ambiguity_guidance_explicitly(monkeypatch):
     section has to say which one wins, or it is one more thing to weigh.
     """
     monkeypatch.delenv("AGENT_INVARIANT_GUARD", raising=False)
-    text = prompt.build(128_000)
+    text = _prompt()
     assert 'overrides "make reasonable assumptions and proceed"' in text
     assert "make reasonable assumptions and proceed" in text.split(
         "## Contradicted Requests")[0]
@@ -82,7 +86,7 @@ def test_the_guard_is_a_configuration_that_can_be_turned_off(monkeypatch):
     literal braces to the model.
     """
     monkeypatch.setenv("AGENT_INVARIANT_GUARD", "0")
-    text = prompt.build(128_000)
+    text = _prompt()
     assert "Contradicted Requests" not in text
     assert not re.findall(r"\{[a-z_]+\}", text)
 
@@ -95,7 +99,7 @@ def test_the_guard_distinguishes_explicit_doc_and_spec_updates(monkeypatch):
     and specs to a new data model version.
     """
     monkeypatch.delenv("AGENT_INVARIANT_GUARD", raising=False)
-    text = prompt.build(128_000)
+    text = _prompt()
     assert "Explicit Updates and Specification Migrations:" in text
     assert "explicitly asks to update documentation or migrate code" in text
 
@@ -109,7 +113,7 @@ def test_the_project_notes_are_an_exception_to_the_documentation_rule(monkeypatc
     task wrote one; the agent was obeying.
     """
     monkeypatch.delenv("AGENT_WRITE_ACCOUNT", raising=False)
-    flat = " ".join(prompt.build(128_000).split())
+    flat = " ".join(_prompt().split())
 
     assert "Do not create summary markdown files" in flat
     assert "feedback file is the exception" in flat
@@ -122,7 +126,7 @@ def test_the_account_rule_asks_for_what_happened_not_what_was_hoped(monkeypatch)
     `wrote_account` counts lines and cannot see this, so the prompt has to.
     """
     monkeypatch.delenv("AGENT_WRITE_ACCOUNT", raising=False)
-    flat = " ".join(prompt.build(128_000).split())
+    flat = " ".join(_prompt().split())
 
     assert "Write what happened, not what was hoped for" in flat
     assert "anything you left undone" in flat
@@ -130,7 +134,7 @@ def test_the_account_rule_asks_for_what_happened_not_what_was_hoped(monkeypatch)
 
 def test_the_account_rule_is_a_configuration_that_can_be_turned_off(monkeypatch):
     monkeypatch.setenv("AGENT_WRITE_ACCOUNT", "0")
-    text = prompt.build(128_000)
+    text = _prompt()
 
     assert "feedback file is the exception" not in text
     assert "Do not create summary markdown files" in text
@@ -181,7 +185,7 @@ def test_tree_skips_caches_and_dotfiles(tmp_path: Path):
     (tmp_path / ".venv").mkdir()
     (tmp_path / ".venv" / "lib.py").write_text("junk")
 
-    listing = context.tree(tmp_path)
+    listing = code.tree(tmp_path)
     assert "/pkg/mod.py" in listing
     assert "__pycache__" not in listing
     assert ".venv" not in listing
@@ -190,6 +194,6 @@ def test_tree_skips_caches_and_dotfiles(tmp_path: Path):
 def test_tree_truncates_rather_than_flooding_context(tmp_path: Path):
     for i in range(50):
         (tmp_path / f"f{i}.py").write_text("x = 1")
-    listing = context.tree(tmp_path, max_entries=10)
+    listing = code.tree(tmp_path, max_entries=10)
     assert "listing stopped at 10 entries" in listing
     assert len(listing.splitlines()) == 11

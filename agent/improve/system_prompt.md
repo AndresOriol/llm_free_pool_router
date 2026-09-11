@@ -84,12 +84,13 @@ project:
 
 - **At least two runs.** One instance is an anecdote — mention it and move on.
 - **A lever.** Name the file or knob a fix lands in. The real ones are
-  `/agent/code/system_prompt.md` and `/agent/code/prompt.py` (what the model is
-  told), `/agent/code/context.py` (what it starts knowing about the project),
-  `/agent/code/shell.py` and `/agent/runtime/backend.py` (what it is allowed to
-  run), `/agent/runtime/tools.py` (what its tools promise), the knobs in
-  `/agent/code/session.py` (`CONTEXT_FLOOR`, `RECURSION_LIMIT`, the middleware
-  and subagent lists), `/llm_router/config.yaml` (which members serve it), and
+  `/agent/code/prompts/` and `/agent/runtime/prompts/` (what the model is
+  told), `/agent/code/agent.py` (what it starts knowing about the project, and
+  the knobs: `RECURSION_LIMIT`, `ALLOWED_PROGRAMS`, the middleware and subagent
+  lists), `/agent/runtime/shell.py` and `/agent/runtime/backend.py` (what it is
+  allowed to run), `/agent/runtime/tools.py` (what its tools promise),
+  `/agent/runtime/pool.py` (`CONTEXT_FLOOR`), `/llm_router/config.yaml` (which
+  members serve it), and
   `/evals/` when the fault is in the instrument rather than the agent. An issue
   whose fix is "be smarter" is not an issue.
 - **A signature that matches the failure and not the run.** Test it: after

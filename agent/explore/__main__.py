@@ -33,8 +33,7 @@ import os
 import sys
 from pathlib import Path
 
-from agent.code.session import CONTEXT_FLOOR
-from agent.explore.agent import RESEARCH_DIR, connect, run
+from agent.explore.agent import CONTEXT_FLOOR, RESEARCH_DIR, connect, run
 from agent.runtime import cli
 from agent.runtime.awake import keep_awake
 

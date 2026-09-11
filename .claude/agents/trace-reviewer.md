@@ -42,11 +42,11 @@ Four properties of it shape every review you will write:
   is routinely served by four or five members (`stderr.log` narrates each choice).
   Nothing the model "knows" outside the conversation survives a reroute — which is
   why the prompt states a context *floor* rather than a model identity
-  (`agent/code/prompt.py`).
+  (`agent/runtime/prompts/model_identity.md`).
 - **The blast radius is a jail.** `/` is the workdir; only `python`, `pytest` and
   `git` run, by subcommand, `shell=False`. A run that spent its turns fighting a
   refused command is a tooling failure, not a reasoning one
-  (`agent/code/shell.py`, `agent/runtime/backend.py`).
+  (`agent/runtime/shell.py`, `agent/runtime/backend.py`).
 
 **The open question about it is cost.** The conversational loop lost the last
 comparison 226,854 input tokens to 5,756, and the arm that won was retired
@@ -57,8 +57,8 @@ correctness. A run that passed expensively has not settled the question — and
 there is no longer a cheaper arm to fall back to, which makes the number matter
 more rather than less.
 
-`agent/code/session.py` holds the loop's knobs; `agent/code/system_prompt.md` is
-what the model was told.
+`agent/code/agent.py` holds the loop's knobs; `agent/code/prompts/` is what the
+model was told.
 
 ## 1. Get the evidence
 
@@ -86,7 +86,7 @@ record was unrecoverable, and review the run from `stderr.log`.
 `evals/metrics.py` derives `provider_calls`, `tokens_in`, `tokens_out`, `steps`,
 `tool_calls`, `models_used`, `ran_own_tests` and `self_corrected` from
 `trace.jsonl`. That file is now written by this arm too — the JSONL callback
-handler is attached in `agent/code/session.py` — so on a current run the numbers
+handler is attached in `agent/code/agent.py` — so on a current run the numbers
 are real and you should use them.
 
 **On runs recorded before that was wired, every one of them reads zero**, because
@@ -206,8 +206,8 @@ answer:
   agent *could* have looked. If it edited a file it never read, or fixed a symptom
   without opening the module that caused it, that is a judgement failure and you
   should call it one — not a context failure.
-- **What the prompt told it.** `agent/code/system_prompt.md`, plus the sections
-  `prompt.py` interpolates and the `### Project` block from `context.py`. If the
+- **What the prompt told it.** `agent/code/prompts/system.md`, plus the sections
+  filled into it and the `### Project` block from `agent/code/agent.py`. If the
   file it needed fell outside that listing (capped at `MAX_ENTRIES = 200`,
   `MAX_DEPTH = 3`), the agent started blind to it and had to go find it.
 - **What the tools refused.** Shell syntax is rejected outright by the backend; a
@@ -224,12 +224,13 @@ prior finding, an exit code.
 
 One or two changes, each naming the mechanism:
 
-- the system prompt (`agent/code/system_prompt.md`, `prompt.py`),
-- what the project section states, or how far it lists (`agent/code/context.py`),
-- the execution allowlist or the jail (`agent/code/shell.py`,
+- the system prompt (`agent/code/prompts/`, and `agent/runtime/prompts/` for
+  the sections every agent shares),
+- what the project section states, or how far it lists (`agent/code/agent.py`),
+- the execution allowlist or the jail (`agent/runtime/shell.py`,
   `agent/runtime/backend.py`),
-- a loop knob — `CONTEXT_FLOOR`, `RECURSION_LIMIT`, the middleware list, the
-  subagent list (`agent/code/session.py`),
+- a loop knob — `RECURSION_LIMIT`, the middleware list, the subagent list
+  (`agent/code/agent.py`), or `CONTEXT_FLOOR` (`agent/runtime/pool.py`),
 - summarization's own settings, which are the SDK's defaults today and have never
   been tuned here — say so plainly if that is your answer,
 - the pool the run drew from (`llm_router/config.yaml`, the floor),
