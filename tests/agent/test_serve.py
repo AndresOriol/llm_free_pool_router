@@ -17,14 +17,14 @@ than once.
 The third is **submission that blocks**. A run lasts hours and every platform in
 front of this kills a request in minutes
 ([17.3](../../docs/17-deployment.md#173-why-requestresponse-platforms-cannot-host-it)),
-so `message:send` answering 202 immediately is the property that makes the
+so `run` answering 202 immediately is the property that makes the
 deployment possible at all -- and the easiest one to lose to a refactor that
 "simplifies" the queue away.
 
 No provider is ever called and no key is needed. `Server` takes its runner as an
 argument, so the HTTP section drives the real request handler over a stub; the
 engine section at the bottom builds a *real* `Runner` -- real queue, real
-worker, real lifecycle -- with only `load_providers_from_config` replaced,
+worker, real lifecycle -- with only the pool check and the agent command replaced,
 because the pool is the one part that needs keys.
 """
 
@@ -33,12 +33,11 @@ import subprocess
 import threading
 import urllib.error
 import urllib.request
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent.protocol.types import Message, Task, TaskState
+from agent.serve.task import CANCELED, DONE, FAILED, QUEUED, RUNNING, Task
 from agent.serve import workspace
 from agent.serve.app import Server
 from agent.serve.runner import Busy
@@ -149,22 +148,20 @@ def _git_init(path: Path) -> None:
                    check=True, capture_output=True)
 
 
+
 # --- the HTTP surface -------------------------------------------------------
 
 
 class StubRunner:
-    """A runner whose tasks complete the moment they are submitted.
+    """A runner whose tasks stay queued forever.
 
     Enough of the real one's surface for `app.py` to drive: the point of these
-    tests is the binding, and building a pool would make them require keys.
+    tests is the binding, and a real runner would need keys to boot.
     """
 
     def __init__(self, root_dir):
-        from agent.code.a2a import CARD as CODE_CARD
-
-        self.cards = {"code": replace(CODE_CARD, url="/v1/agents/code",
-                                      preferred_transport="HTTP+JSON")}
-        self.router = type("R", (), {"providers": [1, 2, 3]})()
+        self.agents = ["code"]
+        self.providers = 3
         self.members = 2
         self.running = None
         self.queued = 0
@@ -172,23 +169,17 @@ class StubRunner:
         self.tasks = {}
         self.submitted = []
 
-    def submit(self, agent, message, *, workspace_name, repo=None,
-               context_id=None, metadata=None):
-        if agent not in self.cards:
+    def submit(self, agent, request, *, workspace_name, repo=None,
+               metadata=None):
+        if agent not in self.agents:
             raise KeyError(f"no agent named {agent!r} is served here.")
         if self.busy:
             raise Busy("32 tasks are already queued")
         workdir = workspace.ensure(workspace_name, repo)
-        task = Task(metadata={**(metadata or {}), "agent": agent,
-                              "workspace": workspace_name,
-                              "workdir": str(workdir)})
-        if context_id:
-            task.context_id = context_id
-        message.task_id, message.context_id = task.id, task.context_id
-        task.history.append(message)
-        task.advance(TaskState.SUBMITTED)
+        task = Task(agent=agent, request=request, workspace=workspace_name,
+                    workdir=str(workdir), metadata=dict(metadata or {}))
         self.tasks[task.id] = task
-        self.submitted.append((agent, message.text, workspace_name, repo))
+        self.submitted.append((agent, request, workspace_name, repo))
         return task
 
     def get(self, task_id):
@@ -197,7 +188,7 @@ class StubRunner:
     def cancel(self, task_id):
         task = self.tasks.get(task_id)
         if task and not task.done:
-            task.advance(TaskState.CANCELED)
+            task.advance(CANCELED)
         return task
 
     def recent(self, limit=50):
@@ -242,12 +233,10 @@ def test_health_needs_no_token_and_says_more_than_alive(server):
 
 @pytest.mark.parametrize("method,path", [
     ("GET", "/v1/agents"),
-    ("GET", "/v1/agents/code/.well-known/agent-card.json"),
-    ("GET", "/.well-known/agent-card.json"),
     ("GET", "/v1/tasks"),
     ("GET", "/v1/tasks/anything"),
     ("GET", "/v1/workspaces"),
-    ("POST", "/v1/agents/code/message:send"),
+    ("POST", "/v1/agents/code/run"),
     ("POST", "/v1/tasks/anything:cancel"),
 ])
 def test_every_route_but_health_requires_the_token(server, method, path):
@@ -261,71 +250,61 @@ def test_a_wrong_token_is_refused(server):
     assert status == 401
 
 
-def test_the_card_is_a2a_shaped_and_addressed(server):
-    status, card = call(server, "GET",
-                        "/v1/agents/code/.well-known/agent-card.json")
+def test_an_agent_is_listed_as_the_command_it_is(server):
+    """No card: a caller is told the command line, and can run the same thing
+    locally rather than take this server's word for what it did."""
+    status, body = call(server, "GET", "/v1/agents")
     assert status == 200
-    # camelCase, verbatim from the spec. A field renamed to something more
-    # Pythonic costs the entire argument for adopting A2A.
-    assert card["protocolVersion"] and card["name"] == "code"
-    assert card["preferredTransport"] == "HTTP+JSON"
-    assert card["url"] == "/v1/agents/code"
-    assert card["skills"][0]["id"] == "work_project"
+    [agent] = body["agents"]
+    assert agent["name"] == "code"
+    assert agent["command"].startswith("python -m agent.code ")
+    assert "--task" in agent["command"]
 
 
 def test_submission_answers_202_immediately_with_somewhere_to_poll(server):
     """The property the whole deployment rests on: accepted, not done."""
-    status, task = call(server, "POST", "/v1/agents/code/message:send",
-                        {"text": "Fix the parser", "workspace": "proj"})
+    status, task = call(server, "POST", "/v1/agents/code/run",
+                        {"task": "Fix the parser", "workspace": "proj"})
     assert status == 202
-    assert task["kind"] == "task"
-    assert task["status"]["state"] == TaskState.SUBMITTED
-    assert task["metadata"]["workspace"] == "proj"
+    assert task["state"] == QUEUED
+    assert task["request"] == "Fix the parser"
+    assert task["workspace"] == "proj"
     # And it is readable at the id it was given.
     status, fetched = call(server, "GET", f"/v1/tasks/{task['id']}")
     assert status == 200 and fetched["id"] == task["id"]
 
 
-def test_a_full_a2a_message_is_accepted_as_well_as_the_text_shorthand(server):
-    _, task = call(server, "POST", "/v1/agents/code/message:send", {
-        "message": {"kind": "message", "role": "user",
-                    "parts": [{"kind": "text", "text": "Read NOTES.md"}]},
-        "workspace": "proj"})
-    assert server.runner.submitted[-1][1] == "Read NOTES.md"
-    assert task["history"][0]["parts"][0]["text"] == "Read NOTES.md"
-
-
 def test_the_workspace_binds_the_agent_to_a_directory(server, root):
-    call(server, "POST", "/v1/agents/code/message:send",
-         {"text": "go", "workspace": "bound"})
+    call(server, "POST", "/v1/agents/code/run",
+         {"task": "go", "workspace": "bound"})
     _, _, name, _ = server.runner.submitted[-1]
     assert name == "bound"
     assert (root / "bound").is_dir()
 
 
 @pytest.mark.parametrize("body,expected", [
-    ({"workspace": "p"}, "text"),                      # nothing to ask for
-    ({"text": "   ", "workspace": "p"}, "empty"),
-    ({"text": "go"}, "workspace"),                     # nothing to bind to
-    ({"text": "go", "workspace": "../etc"}, "workspace name"),
-    ({"text": "go", "workspace": "p", "metadata": []}, "metadata"),
+    ({"workspace": "p"}, "task"),                      # nothing to ask for
+    ({"task": "   ", "workspace": "p"}, "task"),
+    ({"task": "go"}, "workspace"),                     # nothing to bind to
+    ({"task": "go", "workspace": "../etc"}, "workspace name"),
+    ({"task": "go", "workspace": "p", "metadata": []}, "metadata"),
 ])
 def test_a_bad_request_is_400_and_says_why(server, body, expected):
-    status, out = call(server, "POST", "/v1/agents/code/message:send", body)
+    status, out = call(server, "POST", "/v1/agents/code/run", body)
     assert status == 400
     assert expected in out["error"]["message"]
 
 
 def test_an_unknown_agent_is_404(server):
-    status, out = call(server, "POST", "/v1/agents/nope/message:send",
-                       {"text": "go", "workspace": "p"})
+    status, out = call(server, "POST", "/v1/agents/nope/run",
+                       {"task": "go", "workspace": "p"})
     assert status == 404 and "nope" in out["error"]["message"]
 
 
 def test_a_full_queue_is_503_not_a_dropped_task(server):
     server.runner.busy = True
-    status, _ = call(server, "POST", "/v1/agents/code/message:send",
-                     {"text": "go", "workspace": "p"})
+    status, _ = call(server, "POST", "/v1/agents/code/run",
+                     {"task": "go", "workspace": "p"})
     assert status == 503
 
 
@@ -335,14 +314,14 @@ def test_an_unknown_task_is_404(server):
 
 
 def test_a_queued_task_can_be_cancelled(server):
-    _, task = call(server, "POST", "/v1/agents/code/message:send",
-                   {"text": "go", "workspace": "p"})
+    _, task = call(server, "POST", "/v1/agents/code/run",
+                   {"task": "go", "workspace": "p"})
     status, out = call(server, "POST", f"/v1/tasks/{task['id']}:cancel")
-    assert status == 200 and out["status"]["state"] == TaskState.CANCELED
+    assert status == 200 and out["state"] == CANCELED
 
 
 def test_malformed_json_is_400_not_500(server):
-    url = f"http://127.0.0.1:{server.server_address[1]}/v1/agents/code/message:send"
+    url = f"http://127.0.0.1:{server.server_address[1]}/v1/agents/code/run"
     request = urllib.request.Request(url, data=b"{not json", method="POST")
     request.add_header("Authorization", f"Bearer {TOKEN}")
     try:
@@ -378,10 +357,10 @@ def test_a_refused_post_still_drains_its_body(server):
 
     conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1],
                                       timeout=10)
-    big = json.dumps({"text": "x" * 5000, "workspace": "p"})
+    big = json.dumps({"task": "x" * 5000, "workspace": "p"})
 
     # Refused for the token, with a body nobody wanted to read...
-    conn.request("POST", "/v1/agents/code/message:send", body=big,
+    conn.request("POST", "/v1/agents/code/run", body=big,
                  headers={"Content-Type": "application/json"})
     first = conn.getresponse()
     # Each response is read to completion, or the *client* is the one holding
@@ -408,81 +387,9 @@ def test_a_refused_post_still_drains_its_body(server):
 def test_an_oversized_body_is_413(server):
     from agent.serve import app as app_mod
 
-    status, _ = call(server, "POST", "/v1/agents/code/message:send",
-                     {"text": "x" * (app_mod.MAX_BODY + 10), "workspace": "p"})
+    status, _ = call(server, "POST", "/v1/agents/code/run",
+                     {"task": "x" * (app_mod.MAX_BODY + 10), "workspace": "p"})
     assert status == 413
-
-
-# --- the coding agent as an addressable agent -------------------------------
-
-
-def test_the_code_handler_reports_the_commits_it_made(tmp_path, monkeypatch):
-    """The deliverable of a coding task is a commit, so the handler has to name
-    one. A caller that cannot name the commit cannot review it."""
-    from agent.code import a2a
-
-    workdir = tmp_path / "repo"
-    workdir.mkdir()
-    _git_init(workdir)
-    (workdir / "a.py").write_text("x = 1\n")
-    subprocess.run(["git", "add", "-A"], cwd=workdir, check=True,
-                   capture_output=True)
-    subprocess.run(["git", "commit", "-m", "base"], cwd=workdir, check=True,
-                   capture_output=True)
-
-    def fake_session(model, task_text, wd, **kw):
-        # What the agent would have done: edit and commit, inside the jail.
-        (Path(wd) / "a.py").write_text("x = 2\n")
-        subprocess.run(["git", "commit", "-am", "change"], cwd=wd, check=True,
-                       capture_output=True)
-        return {"messages": [type("M", (), {"content": "Done."})()]}, None
-
-    monkeypatch.setattr("agent.code.session.run_session", fake_session)
-
-    handler = a2a.make_handler(None, workdir, floor=128_000, members=1,
-                               recursion_limit=10)
-    task = Task()
-    task.history.append(Message.user("Change a.py"))
-    done = handler(task)
-
-    assert done.state == TaskState.COMPLETED
-    data = done.artifacts[0].parts[0].data
-    assert data["git"] is True
-    assert data["commits"] == 1
-    assert data["files_changed"] == ["a.py"]
-    assert data["head"] != data["head_before"]
-
-
-def test_a_workspace_that_is_not_a_repository_is_a_supported_case(tmp_path,
-                                                                  monkeypatch):
-    from agent.code import a2a
-
-    workdir = tmp_path / "plain"
-    workdir.mkdir()
-
-    def fake_session(model, task_text, wd, **kw):
-        (Path(wd) / "out.txt").write_text("written")
-        return {"messages": []}, None
-
-    monkeypatch.setattr("agent.code.session.run_session", fake_session)
-
-    handler = a2a.make_handler(None, workdir, floor=128_000, members=1,
-                               recursion_limit=10)
-    task = Task()
-    task.history.append(Message.user("Write a file"))
-    done = handler(task)
-
-    assert done.state == TaskState.COMPLETED
-    assert done.artifacts[0].parts[0].data["git"] is False
-    assert (workdir / "out.txt").exists()
-
-
-def test_an_empty_request_is_rejected_rather_than_run(tmp_path):
-    from agent.code import a2a
-
-    handler = a2a.make_handler(None, tmp_path, floor=128_000, members=1,
-                               recursion_limit=10)
-    assert handler(Task()).state == TaskState.REJECTED
 
 
 # --- the engine: the queue and the one worker -------------------------------
@@ -490,7 +397,8 @@ def test_an_empty_request_is_rejected_rather_than_run(tmp_path):
 # The section above drives `app.py` over a stub, so the runner's own queue,
 # worker and task lifecycle are untested by it -- and that is the half where a
 # lost task or a dead worker would be invisible. These build a real `Runner`
-# with the pool replaced, because the pool is the only part that needs keys.
+# with only the boot-time pool check and the agent command replaced: the first
+# needs keys, and the second would be a real agent session.
 
 
 class FakeProvider:
@@ -503,7 +411,7 @@ class FakeProvider:
 def runner(root, monkeypatch, tmp_path):
     """A real Runner -- real queue, real worker, real lifecycle -- no pool."""
     import llm_router
-    import agent.runtime.chat_model as chat_model
+    from agent import delegation
     from agent.serve.runner import Runner
 
     monkeypatch.setattr(llm_router, "load_providers_from_config",
@@ -511,71 +419,87 @@ def runner(root, monkeypatch, tmp_path):
                                          FakeProvider(8_000)])
     monkeypatch.setattr(llm_router, "AutonomousLLMRouter",
                         lambda providers: type("R", (), {"providers": providers})())
-    monkeypatch.setattr(chat_model, "RouterChatModel",
-                        lambda **kw: type("M", (), {"for_context":
-                                                    lambda self, *a, **k: self})())
+    monkeypatch.setattr(delegation, "available", lambda peers=None: ["code"])
 
-    yield Runner(floor=128_000, recursion_limit=10,
-                 record_dir=tmp_path / "records")
+    yield Runner(floor=128_000, record_dir=tmp_path / "records")
 
 
-def test_the_pool_is_built_once_and_the_floor_is_checked_at_boot(runner):
+def _command(monkeypatch, fn):
+    """Replace the agent command the worker runs with `fn(name, workdir, task)`."""
+    from agent import delegation
+    monkeypatch.setattr(delegation, "run",
+                        lambda name, workdir, task, **kw: fn(name, workdir, task))
+
+
+def test_the_floor_is_checked_at_boot(runner):
     """Boot-time failure beats a server that answers /health and rejects every
     task it is given."""
-    assert len(runner.router.providers) == 2
+    assert runner.providers == 2
     assert runner.members == 1          # only the 250,000-token member clears
-    assert "code" in runner.cards
+    assert runner.agents == ["code"]
 
 
-def test_a_submitted_task_runs_and_reaches_a_terminal_state(runner, root,
-                                                            monkeypatch):
+def test_a_submitted_task_runs_the_command_and_keeps_what_it_printed(
+        runner, root, monkeypatch):
     seen = {}
 
-    def handler_for(agent, workdir, task):
-        def handle(t):
-            seen["workdir"] = Path(workdir)
-            seen["text"] = t.history[-1].text
-            return t.advance(TaskState.COMPLETED, Message.agent("done"))
-        return handle
+    def command(name, workdir, task):
+        seen.update(name=name, workdir=Path(workdir), task=task)
+        return 0, "Fixed the parser.\n\n=== DONE after 12 message(s) ==="
 
-    monkeypatch.setattr(runner, "_handler", handler_for)
+    _command(monkeypatch, command)
 
-    task = runner.submit("code", Message.user("do the thing"),
-                         workspace_name="proj")
-    # Accepted, not done. Deliberately *not* asserted as `submitted`: the
-    # returned object is the live one the worker mutates, and with an empty
-    # queue the worker can reach `working` before this line runs. What submit
-    # guarantees is that it did not wait for the answer.
+    task = runner.submit("code", "do the thing", workspace_name="proj")
+    # Accepted, not done. Deliberately *not* asserted as `queued`: the returned
+    # object is the live one the worker mutates, and with an empty queue the
+    # worker can reach `running` before this line runs. What submit guarantees
+    # is that it did not wait for the answer.
     assert not task.done
 
     done = _await(runner, task.id)
-    assert done.state == TaskState.COMPLETED
-    assert seen["text"] == "do the thing"
+    assert done.state == DONE and done.exit_code == 0
+    assert done.output.startswith("Fixed the parser."), "the final message leads"
+    assert seen["name"] == "code" and seen["task"] == "do the thing"
     # Bound to the workspace, which was created for it.
     assert seen["workdir"] == (root / "proj").resolve()
 
 
-def test_a_handler_that_raises_fails_its_task_and_not_the_worker(runner,
-                                                                 monkeypatch):
-    """A server that stops running tasks because one raised is the failure this
+def test_a_command_that_fails_fails_its_task_and_not_the_worker(runner,
+                                                               monkeypatch):
+    """A server that stops running tasks because one failed is the failure this
     whole project exists to avoid."""
     calls = []
 
-    def handler_for(agent, workdir, task):
-        def handle(t):
-            calls.append(t.id)
-            if len(calls) == 1:
-                raise RuntimeError("provider exploded")
-            return t.advance(TaskState.COMPLETED, Message.agent("done"))
-        return handle
+    def command(name, workdir, task):
+        calls.append(task)
+        if len(calls) == 1:
+            raise RuntimeError("could not launch")
+        if len(calls) == 2:
+            return 3, "No providers loaded."
+        return 0, "done"
 
-    monkeypatch.setattr(runner, "_handler", handler_for)
+    _command(monkeypatch, command)
 
-    first = runner.submit("code", Message.user("a"), workspace_name="p")
-    assert _await(runner, first.id).state == TaskState.FAILED
+    first = runner.submit("code", "a", workspace_name="p")
+    assert _await(runner, first.id).state == FAILED
 
-    second = runner.submit("code", Message.user("b"), workspace_name="p")
-    assert _await(runner, second.id).state == TaskState.COMPLETED
+    second = _await(runner, runner.submit("code", "b", workspace_name="p").id)
+    assert second.state == FAILED and second.exit_code == 3
+    assert "No providers loaded." in second.output
+
+    third = runner.submit("code", "c", workspace_name="p")
+    assert _await(runner, third.id).state == DONE
+
+
+def test_a_timeout_is_reported_as_a_stop_and_not_a_crash(runner, monkeypatch):
+    """The session did real work and was stopped; what it committed is still
+    committed, and the task has to say so."""
+    _command(monkeypatch, lambda name, workdir, task: (None, "got this far"))
+
+    done = _await(runner, runner.submit("code", "x", workspace_name="p").id)
+    assert done.state == FAILED
+    assert "timeout" in done.error and "committed" in done.error
+    assert done.output == "got this far"
 
 
 def test_tasks_are_run_one_at_a_time(runner, monkeypatch):
@@ -584,23 +508,21 @@ def test_tasks_are_run_one_at_a_time(runner, monkeypatch):
     overlap = []
     inside = threading.Semaphore(1)
 
-    def handler_for(agent, workdir, task):
-        def handle(t):
-            got = inside.acquire(blocking=False)
-            overlap.append(got)
-            threading.Event().wait(0.05)
-            if got:
-                inside.release()
-            return t.advance(TaskState.COMPLETED, Message.agent("done"))
-        return handle
+    def command(name, workdir, task):
+        got = inside.acquire(blocking=False)
+        overlap.append(got)
+        threading.Event().wait(0.05)
+        if got:
+            inside.release()
+        return 0, "done"
 
-    monkeypatch.setattr(runner, "_handler", handler_for)
+    _command(monkeypatch, command)
 
-    ids = [runner.submit("code", Message.user(f"t{i}"),
-                         workspace_name="p").id for i in range(4)]
+    ids = [runner.submit("code", f"t{i}", workspace_name="p").id
+           for i in range(4)]
     for task_id in ids:
-        assert _await(runner, task_id).state == TaskState.COMPLETED
-    assert all(overlap), "two tasks were inside the handler at once"
+        assert _await(runner, task_id).state == DONE
+    assert all(overlap), "two commands were running at once"
 
 
 def test_a_task_cancelled_before_it_starts_is_never_run(runner, monkeypatch):
@@ -608,29 +530,27 @@ def test_a_task_cancelled_before_it_starts_is_never_run(runner, monkeypatch):
     release = threading.Event()
     ran = []
 
-    def handler_for(agent, workdir, task):
-        def handle(t):
-            ran.append(t.id)
-            started.set()
-            release.wait(10)
-            return t.advance(TaskState.COMPLETED, Message.agent("done"))
-        return handle
+    def command(name, workdir, task):
+        ran.append(task)
+        started.set()
+        release.wait(10)
+        return 0, "done"
 
-    monkeypatch.setattr(runner, "_handler", handler_for)
+    _command(monkeypatch, command)
 
-    blocker = runner.submit("code", Message.user("first"), workspace_name="p")
+    blocker = runner.submit("code", "first", workspace_name="p")
     assert started.wait(10)                     # the worker is busy
-    queued = runner.submit("code", Message.user("second"), workspace_name="p")
+    queued = runner.submit("code", "second", workspace_name="p")
 
     cancelled = runner.cancel(queued.id)
-    assert cancelled.state == TaskState.CANCELED
+    assert cancelled.state == CANCELED
 
     # And cancelling the *running* one is refused rather than pretended.
-    assert runner.cancel(blocker.id).state == TaskState.WORKING
+    assert runner.cancel(blocker.id).state == RUNNING
 
     release.set()
     _await(runner, blocker.id)
-    assert queued.id not in ran
+    assert "second" not in ran
 
 
 def test_a_full_queue_refuses_rather_than_dropping_a_task(runner, monkeypatch):
@@ -639,46 +559,45 @@ def test_a_full_queue_refuses_rather_than_dropping_a_task(runner, monkeypatch):
     release = threading.Event()
     started = threading.Event()
 
-    def handler_for(agent, workdir, task):
-        def handle(t):
-            started.set()
-            release.wait(10)
-            return t.advance(TaskState.COMPLETED, Message.agent("done"))
-        return handle
+    def command(name, workdir, task):
+        started.set()
+        release.wait(10)
+        return 0, "done"
 
-    monkeypatch.setattr(runner, "_handler", handler_for)
+    _command(monkeypatch, command)
     monkeypatch.setattr(runner._queue, "maxsize", 2)
 
-    runner.submit("code", Message.user("running"), workspace_name="p")
+    runner.submit("code", "running", workspace_name="p")
     assert started.wait(10)
-    runner.submit("code", Message.user("q1"), workspace_name="p")
-    runner.submit("code", Message.user("q2"), workspace_name="p")
+    runner.submit("code", "q1", workspace_name="p")
+    runner.submit("code", "q2", workspace_name="p")
 
     with pytest.raises(runner_mod.Busy):
-        runner.submit("code", Message.user("q3"), workspace_name="p")
+        runner.submit("code", "q3", workspace_name="p")
 
     release.set()
 
 
 def test_an_unknown_agent_is_refused_at_submission(runner):
     with pytest.raises(KeyError):
-        runner.submit("nope", Message.user("x"), workspace_name="p")
+        runner.submit("nope", "x", workspace_name="p")
 
 
 def test_a_bad_workspace_is_refused_on_the_callers_thread(runner):
     """Discovering it an hour later in a task record nobody is watching would
     be the same mistake as advertising an agent without probing it."""
     with pytest.raises(workspace.BadWorkspace):
-        runner.submit("code", Message.user("x"), workspace_name="../etc")
+        runner.submit("code", "x", workspace_name="../etc")
 
 
 def test_a_terminal_task_is_written_to_the_record_directory(runner, monkeypatch,
                                                             tmp_path):
-    monkeypatch.setattr(runner, "_handler", lambda a, w, t: (
-        lambda task: task.advance(TaskState.COMPLETED, Message.agent("done"))))
-    task = runner.submit("code", Message.user("x"), workspace_name="p")
+    _command(monkeypatch, lambda name, workdir, task: (0, "done"))
+    task = runner.submit("code", "x", workspace_name="p")
     _await(runner, task.id)
-    assert (tmp_path / "records" / f"{task.id}.json").exists()
+    record = json.loads((tmp_path / "records" / f"{task.id}.json")
+                        .read_text(encoding="utf-8"))
+    assert record["state"] == DONE and record["output"] == "done"
 
 
 def _await(runner, task_id, timeout=15):

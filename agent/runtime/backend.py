@@ -24,6 +24,13 @@ constrained so the blast radius is small:
 - The working directory is pinned to `root_dir` and known secret env vars are
   stripped from the child, so the test process doesn't inherit the pool's keys.
 
+One command is treated differently, and only one: `python -m agent.<name>`,
+which is how an agent delegates to another agent
+([16. Delegation](../../docs/16-delegation.md)). It keeps the pool's keys,
+because a delegated session *is* the pool's consumer and cannot build a router
+without them, and it gets hours rather than the 300s a `pytest` run is sized
+for. That is the whole of the special case, and `_is_agent` is where it lives.
+
 Two capabilities are opt-in, because a long-running session needs them and a
 one-shot task does not:
 
@@ -83,14 +90,48 @@ GIT_ALLOWED_SUBCOMMANDS = ("status", "diff", "log", "add", "commit", "branch",
 _GIT_DENIED_FLAGS = ("--force", "-f", "--hard", "--delete", "-d", "-D")
 
 
-def _child_env() -> dict:
+def _delegate_timeout() -> int:
+    """The ceiling on a delegated agent session. Read late, so an operator (or a
+    test) setting the variable after import is still obeyed."""
+    from agent.delegation import DEFAULT_TIMEOUT as DELEGATE, TIMEOUT_ENV
+    return int(os.environ.get(TIMEOUT_ENV) or DELEGATE)
+
+
+def _is_agent(argv) -> bool:
+    """Is this command launching another agent of this harness?
+
+    `python -m agent.<name>` and nothing else. Delegation is a command here --
+    an agent runs another the way it runs `pytest`
+    ([16. Delegation](../../docs/16-delegation.md)) -- and two of the rules
+    below have to bend for it, so there is one place that decides which
+    commands they bend for.
+    """
+    if len(argv) < 3 or argv[1] != "-m":
+        return False
+    return argv[2] == "agent" or argv[2].startswith("agent.")
+
+
+def _child_env(for_agent: bool = False) -> dict:
     """Inherit the parent env (PATH etc. are needed to find python) but drop
     anything that looks like a credential, so the test process can't read the
-    pool's API keys out of its environment."""
+    pool's API keys out of its environment.
+
+    `for_agent` keeps them. A delegated agent *is* the pool's consumer: it has
+    to build a router, and stripping the keys would leave it dying at start-up
+    with "no providers loaded". The rule this bends exists to stop a project's
+    own test run reading the pool's credentials, and a delegated session is not
+    that. It also gains this repository on `PYTHONPATH`, so `agent.explore`
+    imports even when the workspace being worked on is somewhere else entirely.
+    """
     env = {
         k: v for k, v in os.environ.items()
-        if not any(marker in k.upper() for marker in _SECRET_MARKERS)
+        if for_agent or not any(marker in k.upper() for marker in _SECRET_MARKERS)
     }
+    if for_agent:
+        root = str(Path(__file__).resolve().parents[2])
+        existing = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = (f"{root}{os.pathsep}{existing}" if existing
+                             else root)
     # Make the child speak the encoding we read it in. Both halves are needed
     # and neither works alone: `git` already emits UTF-8, so decoding with the
     # platform codepage mangles it, but a Python child encodes its stdout with
@@ -247,7 +288,13 @@ class RestrictedShellBackend(FilesystemBackend, SandboxBackendProtocol):
             if refusal:
                 return ExecuteResponse(output=f"Error: {refusal}", exit_code=1)
 
-        effective_timeout = timeout if timeout is not None else self._timeout
+        # A delegated agent session runs for tens of minutes, sometimes hours.
+        # The ordinary ceiling is sized for `pytest`, and applying it here would
+        # kill every delegation minutes in with nothing to show for the quota it
+        # had already spent (agent/delegation.py).
+        delegating = _is_agent(argv)
+        effective_timeout = timeout if timeout is not None else (
+            _delegate_timeout() if delegating else self._timeout)
         try:
             result = subprocess.run(
                 command if self._allow_shell else argv,
@@ -271,7 +318,7 @@ class RestrictedShellBackend(FilesystemBackend, SandboxBackendProtocol):
                 errors="replace",
                 timeout=effective_timeout,
                 cwd=str(self.cwd),
-                env=_child_env(),
+                env=_child_env(delegating),
             )
         except subprocess.TimeoutExpired:
             return ExecuteResponse(

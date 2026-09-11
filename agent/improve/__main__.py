@@ -1,14 +1,15 @@
-"""CLI: python -m agent.improve [project] < what-to-look-into.md
+"""CLI: python -m agent.improve [project] --task "..."   (or: < what-to-do.md)
 
 Same shape as `python -m agent.code` and `python -m agent.explore` -- project as
-an argument, task on stdin, exit at EOF -- so the three are interchangeable in a
-script or an eval configuration. The difference is what the argument means: for
-the other two it is a project to work on, and here it is a project whose
-*recorded runs* are to be read. In practice that is this repository.
+an argument, the task on `--task` or on stdin, exit at EOF -- so the three are
+interchangeable in a script or an eval configuration. The difference is what the
+argument means: for the other two it is a project to work on, and here it is a
+project whose *recorded runs* are to be read. In practice that is this
+repository.
 
-With nothing on stdin it runs the standing pass: work the ledger. That is the
-job on most days, and an unattended schedule should not have to carry a prompt
-file around to say so.
+With no task at all it runs the standing pass: work the ledger. That is the job
+on most days, and an unattended schedule should not have to carry a prompt file
+around to say so.
 
     python -m agent.improve .                     # work the ledger
     echo "..." | python -m agent.improve .        # look into something specific
@@ -23,6 +24,8 @@ Environment:
                      `evals/results/runs` is always read
   IMPROVE_EVAL_TIMEOUT  ceiling in seconds on one `run_evals` call (default 3600)
   IMPROVE_FIX=0      diagnose only -- no peers, so nothing can be delegated
+  AGENT_DELEGATE_TIMEOUT  ceiling in seconds on one delegated session
+                     (default 4 hours)
   EVAL_SCENARIOS     the scenario repository, for building a drafted scenario;
                      unset looks for `agent_evals` beside this one
   HARNESS_SHELL=1    give the *delegated* coding agent an unrestricted shell.
@@ -38,10 +41,11 @@ from langchain_core.messages import AIMessage
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
 from agent.code.session import CONTEXT_FLOOR, RECURSION_LIMIT, check_floor
+from agent import delegation
 from agent.improve.issues import IssueStore
 from agent.improve.session import (NothingToImproveOn, check_records,
                                    run_session)
-from agent.protocol import peers
+from agent.runtime import cli
 from agent.runtime.awake import keep_awake
 from agent.runtime.chat_model import RouterChatModel
 
@@ -76,21 +80,20 @@ def build(floor: int):
     router = AutonomousLLMRouter(providers)
     members = check_floor(router, floor)
     model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    # The router comes back too: a delegated coding session must run on the
-    # *same* provider objects and so share this pass's cooldown
-    # (docs/16-agent-protocol.md#163-why-the-transport-is-local).
-    return model.for_context(floor, strict=True), members, router
+    return model.for_context(floor, strict=True), members
 
 
 def main() -> None:
-    workdir = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
+    workdir, task = cli.parse(
+        sys.argv[1:], prog="python -m agent.improve",
+        workdir_help=("the project whose recorded runs are to be read; unset "
+                      "means this directory"),
+        task_help="what to look into; unset runs the standing pass")
     if not workdir.is_dir():
         raise SystemExit(f"{workdir} is not a directory.")
-
-    task = sys.stdin.read().strip() if not sys.stdin.isatty() else ""
     if not task:
         task = STANDING_PASS
-        print("No task on stdin; running the standing pass over the ledger.",
+        print("No task given; running the standing pass over the ledger.",
               file=sys.stderr)
 
     # Before the pool is touched: a pass with nothing recorded to read can never
@@ -102,7 +105,7 @@ def main() -> None:
 
     floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
     budget = int(os.environ.get("AGENT_STEP_BUDGET") or RECURSION_LIMIT)
-    model, members, router = build(floor)
+    model, members = build(floor)
 
     trace_file = os.environ.get("AGENT_TRACE_FILE")
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
@@ -110,16 +113,12 @@ def main() -> None:
 
     # Two peers: `code` for a fix in this repository, and `scenarios` -- the
     # same coding agent bound to the eval repo -- for building a scenario the
-    # pass has drafted. `scenarios` registers only if that repo is really there.
-    # IMPROVE_FIX=0 takes it away, which leaves a diagnose-only pass -- the arm
-    # to compare against when asking whether the delegation is worth what it
-    # spends (docs/19-improvement-agent.md).
+    # pass has drafted. `scenarios` is offered only if that repo is really
+    # there. IMPROVE_FIX=0 takes both away, which leaves a diagnose-only pass --
+    # the arm to compare against when asking whether the delegation is worth
+    # what it spends (docs/19-improvement-agent.md).
     wanted = () if os.environ.get("IMPROVE_FIX") == "0" else ("code", "scenarios")
-    transport = peers.build_transport(
-        router, model, workdir, floor=floor, members=members,
-        recursion_limit=RECURSION_LIMIT, peers=wanted,
-        allow_shell=os.environ.get("HARNESS_SHELL") == "1",
-        record_dir=Path(trace_file).parent / "a2a" if trace_file else None)
+    peers = delegation.available(wanted)
 
     print(f"Reading {seen} recorded run(s) under {workdir}.", file=sys.stderr)
 
@@ -129,7 +128,7 @@ def main() -> None:
     with keep_awake():
         final, written = run_session(
             model, task, workdir, config={"recursion_limit": budget},
-            floor=floor, members=members, transport=transport,
+            floor=floor, members=members, peers=peers,
             trace_path=Path(trace_file) if trace_file else None)
 
     _summary(final, written, workdir)
@@ -145,12 +144,18 @@ def _text(message) -> str:
 
 
 def _summary(final, written, workdir: Path) -> None:
+    """The pass's account of itself on stdout, final message first.
+
+    **The final message is the output of this command**, unclipped, because a
+    caller may have run it from a shell and this is the answer it gets back
+    (docs/16-delegation.md).
+    """
     messages = (final or {}).get("messages") or []
-    print(f"\n=== DONE after {len(messages)} message(s) ===")
     said = [m for m in messages if isinstance(m, AIMessage)]
     text = next((t for t in map(_text, reversed(said)) if t), "")
     if text:
-        print(f"\n{text[:2000]}")
+        print(f"\n{text}")
+    print(f"\n=== DONE after {len(messages)} message(s) ===")
 
     # The ledger is the deliverable, so the summary prints it rather than
     # leaving the operator to go looking. An unchanged ledger is the loudest
