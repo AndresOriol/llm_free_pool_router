@@ -270,7 +270,7 @@ def check(events: list, *, budget: Optional[int] = None) -> list:
     add("left a deliverable",
         m["reports"] > 0,
         f"{m['reports']} report(s) under /research",
-        "The closing message is not the deliverable and nobody reads it. No "
+        "The closing message only points at the deliverable; it is not one. No "
         "file means the run spent its quota talking to itself.")
 
     add("marked its ungrounded answers",

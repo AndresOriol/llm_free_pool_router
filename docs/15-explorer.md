@@ -30,13 +30,13 @@ what it found.
 
 That constraint is also why the prompt spends most of its length on the written
 record ([system_prompt.md](../agent/explore/system_prompt.md)). The explorer's
-closing message is not the deliverable and nobody reads it. The files are the
-deliverable, because the thing that reads them next is an agent that was not
+closing message is not the deliverable: it is printed for whoever ran the
+command, and says which files to open. The files are the deliverable, because the thing that reads them next is an agent that was not
 there.
 
 > **Amended.** *"They meet on disk"* used to read *"and nowhere else… no message
 > bus, no protocol to keep in step"*, and the coding agent can now ask the explorer for a report directly
-> ([16. The agent protocol](16-agent-protocol.md)). What the protocol carries is
+> ([16. Delegation](16-delegation.md)) — by running this command. What that adds is
 > the *request* and the *status*, never the deliverable: a research note is still
 > a file on disk that outlives the exchange, so everything above still holds. A
 > human sequencing the two runs by hand still works and is still the default way
@@ -214,8 +214,8 @@ Four descriptions are rewritten for the same reason the tools are. Upstream's
 `read_file` explains itself in terms of *codebase exploration*; `write_file`
 opens by telling the agent to prefer editing something that already exists; and
 `write_todos` closes by insisting the deliverable is the final message — which
-here is false, since the closing message is clipped before its caller ever reads
-it ([a2a.py](../agent/explore/a2a.py)) and the files are the deliverable
+here is false, since the closing message only points its caller at the files
+([`__main__.py`](../agent/explore/__main__.py)) and the files are the deliverable
 ([15.1](#151-what-it-is-for)). A tool description contradicting the system prompt
 is worse than a thin one.
 
@@ -282,12 +282,12 @@ above four of them were wrong in a way that costs more than tokens:
 | `FILESYSTEM_SYSTEM_PROMPT` | lists `ls`, `glob`, `grep` among the tools available | three of the six are not offered |
 | `EXECUTION_SYSTEM_PROMPT` | "You have access to an `execute` tool" | not offered, and the backend refuses every command |
 | `TASK_SYSTEM_PROMPT` | 3,700 characters on when to spawn a sub-agent | the ported research workflow answers this three sections earlier |
-| `WRITE_TODOS_SYSTEM_PROMPT` | "write your final answer in the message AFTER your last `write_todos` call … The user wants the result" | the answer is a file; the closing message is clipped before its caller reads it ([a2a.py](../agent/explore/a2a.py)) |
+| `WRITE_TODOS_SYSTEM_PROMPT` | "write your final answer in the message AFTER your last `write_todos` call … The user wants the result" | the answer is a file; the closing message only points its caller at it ([`__main__.py`](../agent/explore/__main__.py)) |
 | `BASE_AGENT_PROMPT` | "The user can see your responses and tool outputs in real time", plus progress updates and clarifying questions | nobody is watching, and the headless preamble says so two thousand characters earlier |
 
 The last two are the expensive ones. A run that recites its report into a reply
 pays for the report twice — once into the file that is the deliverable and once
-into a message nobody reads — and that is a measured behaviour of the runs in
+into a message whose reader is about to open the file anyway — and that is a measured behaviour of the runs in
 [15.8.4](#1584-decision-led-research-candidate), not a hypothetical. The same
 correction is made on the researcher sub-agent, whose instructions now say the
 reply is a pointer to its note and cap it at 200 words.
@@ -486,9 +486,9 @@ can diff against the source rather than guess:
 1. **`/research/` rather than the workdir root.** Upstream writes
    `/research_request.md` and `/final_report.md` at the root. Here the workdir is
    a project a coding agent then works in, and a report at the root lands in the
-   diff it produces. The A2A handler collects `/research/*.md` as artifacts, so
-   this is also what makes a delegated report come back as one
-   ([16.4](16-agent-protocol.md#164-what-maps-onto-what)).
+   diff it produces. The command's summary names the `/research/*.md` notes a
+   run wrote, so this is also what makes a delegated report come back as one
+   ([16](16-delegation.md)).
 2. **A pool, not a client.** Upstream builds one `TavilyClient`. Search here goes
    through `TavilyPoolRouter`, so an account at its monthly credit wall fails
    over instead of ending the run — the argument the model pool already rests on.
@@ -598,4 +598,4 @@ measured once. `git log` has it.
 
 ---
 
-**Previous:** [← 14. Quota panel](14-quota-panel.md) · **Next:** [16. The agent protocol →](16-agent-protocol.md)
+**Previous:** [← 14. Quota panel](14-quota-panel.md) · **Next:** [16. Delegation →](16-delegation.md)

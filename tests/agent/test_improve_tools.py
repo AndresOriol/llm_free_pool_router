@@ -16,15 +16,14 @@ The loop's integrity lives in three places and all three are asserted here.
 import json
 from pathlib import Path
 
+import pytest
+
 from agent.improve import issues, tools
 from agent.improve.readonly import ReadOnlyMiddleware
-from agent.protocol import (AgentCard, AgentRegistry, AgentSkill, Artifact,
-                            LocalTransport, Message, TaskState)
 
-CODE_CARD = AgentCard(name="code", version="0.1.0",
-                      description="Works a project.",
-                      skills=[AgentSkill(id="work_project", name="Work",
-                                         description="Change and commit.")])
+# Which peers this pass has. `delegate_fix` exists only with `code` among them,
+# because diagnose-only is a supported mode (agent/improve/tools.py).
+PEERS = ("code",)
 
 
 def _run(root: Path, name: str, verdict: dict) -> None:
@@ -33,27 +32,34 @@ def _run(root: Path, name: str, verdict: dict) -> None:
     (directory / "run.json").write_text(json.dumps(verdict), encoding="utf-8")
 
 
-def _transport(recorder=None):
-    registry = AgentRegistry()
+@pytest.fixture(autouse=True)
+def sent(monkeypatch):
+    """Every delegation in this file is intercepted, and the list is the assertion.
 
-    def handler(task):
-        if recorder is not None:
-            recorder.append(task.history[-1].text)
-        return task.advance(TaskState.COMPLETED, Message.agent("Committed."))
+    `delegate_fix` runs `python -m agent.code` and waits
+    ([agent/delegation.py](../../agent/delegation.py)). Nothing here has a pool,
+    so the launch is replaced by a recorder -- and what the pass sent, or
+    whether it sent anything at all, is what most of these tests are about.
+    """
+    briefs = []
 
-    registry.register(CODE_CARD, handler)
-    return LocalTransport(registry)
+    def fake_run(name, workdir, task, **kwargs):
+        briefs.append(task)
+        return 0, "Committed."
+
+    monkeypatch.setattr(tools.delegation, "run", fake_run)
+    return briefs
 
 
 def test_delegate_fix_is_absent_without_a_code_peer(tmp_path):
     """Diagnose-only is a supported mode, so the tool is absent rather than
     present and certain to refuse."""
-    assert "delegate_fix" not in tools.make_tools(tmp_path, None)
-    assert "delegate_fix" in tools.make_tools(tmp_path, _transport())
+    assert "delegate_fix" not in tools.make_tools(tmp_path, ())
+    assert "delegate_fix" in tools.make_tools(tmp_path, PEERS)
 
 
 def test_write_issue_reports_bad_json_and_writes_nothing(tmp_path):
-    made = tools.make_tools(tmp_path, None)
+    made = tools.make_tools(tmp_path, ())
 
     answer = made["write_issue"].func(title="T", signature="{not json")
 
@@ -63,7 +69,7 @@ def test_write_issue_reports_bad_json_and_writes_nothing(tmp_path):
 
 def test_write_issue_records_the_signature_and_the_evidence(tmp_path):
     _run(tmp_path, "20260901T000000Z_a", {"failure_class": "stopping"})
-    made = tools.make_tools(tmp_path, None)
+    made = tools.make_tools(tmp_path, ())
 
     made["write_issue"].func(
         title="Stopping hides a hung call", lever="session.py",
@@ -77,18 +83,16 @@ def test_write_issue_records_the_signature_and_the_evidence(tmp_path):
     assert issue.last_seen.startswith("2026-09-01")
 
 
-def test_delegate_fix_refuses_an_issue_that_does_not_exist(tmp_path):
-    sent = []
-    made = tools.make_tools(tmp_path, _transport(sent))
+def test_delegate_fix_refuses_an_issue_that_does_not_exist(tmp_path, sent):
+    made = tools.make_tools(tmp_path, PEERS)
 
     answer = made["delegate_fix"].func(issue_id="nope", brief="Fix it.")
 
     assert answer.startswith("error:") and sent == [], "nothing was delegated"
 
 
-def test_delegate_fix_records_the_task_and_moves_the_status(tmp_path):
-    sent = []
-    made = tools.make_tools(tmp_path, _transport(sent))
+def test_delegate_fix_records_the_task_and_moves_the_status(tmp_path, sent):
+    made = tools.make_tools(tmp_path, PEERS)
     made["write_issue"].func(title="T", signature='{"kind": "eval"}')
 
     answer = made["delegate_fix"].func(issue_id="t", brief="Raise the budget.")
@@ -103,7 +107,7 @@ def test_delegate_fix_records_the_task_and_moves_the_status(tmp_path):
 
 def test_check_issue_defaults_to_when_the_fix_was_delegated(tmp_path):
     """The only boundary that answers "did it stop happening"."""
-    made = tools.make_tools(tmp_path, _transport())
+    made = tools.make_tools(tmp_path, PEERS)
     made["write_issue"].func(title="T",
                              signature='{"where": {"outcome": "fail"}}')
     made["delegate_fix"].func(issue_id="t", brief="b")
@@ -115,14 +119,14 @@ def test_check_issue_defaults_to_when_the_fix_was_delegated(tmp_path):
 
 
 def test_check_issue_refuses_to_replay_an_issue_with_no_signature(tmp_path):
-    made = tools.make_tools(tmp_path, None)
+    made = tools.make_tools(tmp_path, ())
     made["write_issue"].func(title="T")
 
     assert "no signature" in made["check_issue"].func(issue_id="t")
 
 
 def test_check_issue_with_no_argument_lists_the_ledger(tmp_path):
-    made = tools.make_tools(tmp_path, None)
+    made = tools.make_tools(tmp_path, ())
     assert "ledger" in made["check_issue"].func().lower()
     made["write_issue"].func(title="Edits before reading")
     assert "edits-before-reading" in made["check_issue"].func()
@@ -130,20 +134,20 @@ def test_check_issue_with_no_argument_lists_the_ledger(tmp_path):
 
 def test_run_evals_refuses_an_unscoped_batch(tmp_path):
     """One tool call must not be able to start hours of free-tier requests."""
-    answer = tools.make_tools(tmp_path, None)["run_evals"].func(config="code")
+    answer = tools.make_tools(tmp_path, ())["run_evals"].func(config="code")
     assert answer.startswith("error:") and "scenario" in answer
 
 
 def test_find_runs_reports_a_bad_regex_rather_than_raising(tmp_path):
     _run(tmp_path, "20260901T000000Z_a", {"outcome": "fail"})
-    answer = tools.make_tools(tmp_path, None)["find_runs"].func(pattern="(unclosed")
+    answer = tools.make_tools(tmp_path, ())["find_runs"].func(pattern="(unclosed")
     assert answer.startswith("error:") and "regex" in answer
 
 
 def test_find_runs_filters_and_says_how_many_it_looked_at(tmp_path):
     _run(tmp_path, "20260901T000000Z_a", {"outcome": "fail", "config": "code"})
     _run(tmp_path, "20260902T000000Z_b", {"outcome": "pass", "config": "code"})
-    made = tools.make_tools(tmp_path, None)
+    made = tools.make_tools(tmp_path, ())
 
     assert "2 run(s)" in made["find_runs"].func()
     assert "20260902T000000Z_b" not in made["find_runs"].func(outcome="fail")
@@ -151,7 +155,7 @@ def test_find_runs_filters_and_says_how_many_it_looked_at(tmp_path):
 
 
 def test_read_run_names_the_run_it_could_not_find(tmp_path):
-    answer = tools.make_tools(tmp_path, None)["read_run"].func(run_id="nope")
+    answer = tools.make_tools(tmp_path, ())["read_run"].func(run_id="nope")
     assert "find_runs" in answer
 
 
@@ -162,7 +166,7 @@ def test_a_live_record_is_labelled_as_having_no_verdict(tmp_path):
     import os
     os.environ["IMPROVE_RECORDS"] = str(tmp_path / "live")
     try:
-        answer = tools.make_tools(tmp_path, None)["read_run"].func(
+        answer = tools.make_tools(tmp_path, ())["read_run"].func(
             run_id="20260901T000000Z_task")
     finally:
         del os.environ["IMPROVE_RECORDS"]
@@ -217,7 +221,7 @@ class TestStaleEvidence:
         return tmp_path
 
     def test_write_issue_warns_when_the_lever_outlives_the_evidence(self, tmp_path):
-        made = tools.make_tools(self._repo(tmp_path), None)
+        made = tools.make_tools(self._repo(tmp_path), ())
 
         answer = made["write_issue"].func(
             title="T", lever="/session.py",
@@ -226,9 +230,8 @@ class TestStaleEvidence:
         assert "may already be fixed" in answer
         assert "git log -p" in answer, "it names the command that would settle it"
 
-    def test_delegate_fix_refuses_a_stale_issue(self, tmp_path):
-        sent = []
-        made = tools.make_tools(self._repo(tmp_path), _transport(sent))
+    def test_delegate_fix_refuses_a_stale_issue(self, tmp_path, sent):
+        made = tools.make_tools(self._repo(tmp_path), PEERS)
         made["write_issue"].func(
             title="T", lever="/session.py",
             signature=json.dumps({"where": {"outcome": "fail"}}))
@@ -239,13 +242,13 @@ class TestStaleEvidence:
         assert sent == [], "no coding session was spent"
         assert issues.IssueStore(tmp_path).get("t").status == issues.OPEN
 
-    def test_evidence_recorded_after_the_change_lets_it_through(self, tmp_path):
+    def test_evidence_recorded_after_the_change_lets_it_through(self, tmp_path,
+                                                                sent):
         """The way out is the correct behaviour: record a run against the code
         as it actually is, and if the failure survives, the issue is real."""
         root = self._repo(tmp_path)
         _run(root, "20990101T000000Z_fresh", {"outcome": "fail"})
-        sent = []
-        made = tools.make_tools(root, _transport(sent))
+        made = tools.make_tools(root, PEERS)
         made["write_issue"].func(
             title="T", lever="/session.py",
             signature=json.dumps({"where": {"outcome": "fail"}}))
@@ -255,9 +258,9 @@ class TestStaleEvidence:
         assert "Nothing was delegated" not in answer
         assert sent, "the failure was seen against the current code"
 
-    def test_an_unnamed_lever_cannot_be_checked_and_does_not_block(self, tmp_path):
-        sent = []
-        made = tools.make_tools(self._repo(tmp_path), _transport(sent))
+    def test_an_unnamed_lever_cannot_be_checked_and_does_not_block(self, tmp_path,
+                                                                  sent):
+        made = tools.make_tools(self._repo(tmp_path), PEERS)
         made["write_issue"].func(title="T", signature='{"kind": "eval"}')
 
         made["delegate_fix"].func(issue_id="t", brief="b")
@@ -265,7 +268,7 @@ class TestStaleEvidence:
         assert sent, "no lever means nothing to compare; it is not a refusal"
 
     def test_the_closing_message_is_not_taken_at_face_value(self, tmp_path):
-        made = tools.make_tools(tmp_path, _transport())
+        made = tools.make_tools(tmp_path, PEERS)
         made["write_issue"].func(title="T", signature='{"kind": "eval"}')
 
         answer = made["delegate_fix"].func(issue_id="t", brief="b")
@@ -303,7 +306,7 @@ class TestStalenessUsesTheCommitNotTheClock:
 
     def _issue(self, root, name, config_sha):
         _run(root, name, {"outcome": "fail", "config_sha": config_sha})
-        made = tools.make_tools(root, _transport())
+        made = tools.make_tools(root, PEERS)
         made["write_issue"].func(
             title="T", lever="/session.py",
             signature=json.dumps({"where": {"outcome": "fail"}}))
@@ -351,27 +354,19 @@ class TestADelegationThatChangedNothing:
     way, which is the state the whole design exists to keep honest.
     """
 
-    def _transport_reporting(self, data):
-        from agent.protocol.types import DataPart
-        registry = AgentRegistry()
-
-        def handler(task):
-            task.artifacts.append(Artifact(name="workspace",
-                                           parts=[DataPart(data)]))
-            return task.advance(TaskState.COMPLETED,
-                                Message.agent("Implemented all three changes."))
-
-        registry.register(CODE_CARD, handler)
-        return LocalTransport(registry)
-
-    def _made(self, tmp_path, data):
-        made = tools.make_tools(tmp_path, self._transport_reporting(data))
+    def _made(self, tmp_path, monkeypatch, data):
+        """A pass whose delegate claims three changes and whose git says `data`."""
+        monkeypatch.setattr(tools.gitstate, "state",
+                            lambda workdir, before: data)
+        made = tools.make_tools(tmp_path, PEERS)
         made["write_issue"].func(title="T", signature='{"kind": "eval"}')
         return made
 
-    def test_the_status_does_not_advance_when_nothing_moved(self, tmp_path):
-        made = self._made(tmp_path, {"git": True, "branch": "master",
-                                     "commits": 0, "files_changed": []})
+    def test_the_status_does_not_advance_when_nothing_moved(self, tmp_path,
+                                                            monkeypatch):
+        made = self._made(tmp_path, monkeypatch,
+                          {"git": True, "branch": "master",
+                           "commits": 0, "files_changed": []})
 
         answer = made["delegate_fix"].func(issue_id="t", brief="Fix it.")
 
@@ -381,10 +376,11 @@ class TestADelegationThatChangedNothing:
         assert issue.status == issues.OPEN, "not `fixing` — no work was done"
         assert issue.tasks[0]["changed_anything"] is False
 
-    def test_the_status_advances_when_the_repository_moved(self, tmp_path):
-        made = self._made(tmp_path, {"git": True, "branch": "fix/t",
-                                     "commits": 1,
-                                     "files_changed": ["agent/code/prompt.py"]})
+    def test_the_status_advances_when_the_repository_moved(self, tmp_path,
+                                                           monkeypatch):
+        made = self._made(tmp_path, monkeypatch,
+                          {"git": True, "branch": "fix/t", "commits": 1,
+                           "files_changed": ["agent/code/prompt.py"]})
 
         made["delegate_fix"].func(issue_id="t", brief="Fix it.")
 
@@ -392,8 +388,8 @@ class TestADelegationThatChangedNothing:
         assert issue.status == issues.FIXING
         assert issue.tasks[0]["changed_anything"] is True
 
-    def test_an_agent_that_reports_no_git_state_is_not_called_a_failure(self, tmp_path):
-        made = tools.make_tools(tmp_path, _transport())
+    def test_a_workspace_with_no_git_state_is_not_called_a_failure(self, tmp_path):
+        made = tools.make_tools(tmp_path, PEERS)
         made["write_issue"].func(title="T", signature='{"kind": "eval"}')
 
         made["delegate_fix"].func(issue_id="t", brief="Fix it.")
@@ -413,7 +409,7 @@ def test_delegate_fix_commits_ledger_before_switching(tmp_path):
     run("add", "-A")
     run("commit", "-qm", "first")
 
-    made = tools.make_tools(tmp_path, _transport())
+    made = tools.make_tools(tmp_path, PEERS)
     made["write_issue"].func(title="T", signature='{"kind": "eval"}')
 
     assert (tmp_path / "evals" / "results" / "issues" / "t.json").is_file()
@@ -439,7 +435,7 @@ def test_delegate_fix_fails_when_ledger_commit_fails(tmp_path, monkeypatch):
     run("add", "-A")
     run("commit", "-qm", "first")
 
-    made = tools.make_tools(tmp_path, _transport())
+    made = tools.make_tools(tmp_path, PEERS)
     made["write_issue"].func(title="T", signature='{"kind": "eval"}')
 
     monkeypatch.setattr(repo, "commit_ledger", lambda w, i: (False, "mocked commit failure"))

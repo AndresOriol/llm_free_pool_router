@@ -14,6 +14,8 @@ them is a hole in the suite, and this is the only thing that would catch it
 without spending free-tier quota.
 """
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -188,9 +190,11 @@ class TestToolScopedArguments:
 def test_the_improve_agent_is_probed_with_its_delegation_tool_present():
     """`not_tool: delegate_fix` asserts nothing if the tool was never installed.
 
-    The improvement agent only gets `delegate_fix` when a peer is reachable, so
-    a probe built with no transport was asserting that an absent tool went
+    The improvement agent only gets `delegate_fix` when `code` is among its
+    peers, so a probe built without it was asserting that an absent tool went
     uncalled — true of every run and evidence about none.
     """
-    transport = probes._stub_transport()
-    assert "code" in transport.registry.names
+    from agent.improve import tools
+
+    assert "code" in probes.PROBE_PEERS
+    assert "delegate_fix" in tools.make_tools(Path("."), probes.PROBE_PEERS)

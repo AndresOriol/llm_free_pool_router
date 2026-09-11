@@ -52,12 +52,11 @@ It writes `/research/*.md` with a source URL beside every claim. See
 [docs/15-explorer.md](docs/15-explorer.md).
 
 You can also let the coding agent ask for that itself, mid-task, instead of
-running the two by hand: it gets one `delegate` tool, the explorer answers with
-the notes it wrote, and the vocabulary on the wire is
-[A2A](https://a2a-protocol.org)'s rather than something invented here. A
-delegation costs a whole explorer session, so it is worth knowing it is on —
-`AGENT_PEERS=` turns it off. See
-[docs/16-agent-protocol.md](docs/16-agent-protocol.md).
+running the two by hand. There is no protocol: it runs the same command you
+would, `python -m agent.explore . --task "..."`, and reads back the final
+message and the notes it wrote. A delegation costs a whole explorer session, so
+it is worth knowing it is on — `AGENT_PEERS=` turns it off. See
+[docs/16-delegation.md](docs/16-delegation.md).
 
 ## The agent that improves the agents
 
@@ -77,7 +76,7 @@ never because nobody looked. The ledger is `evals/results/issues/`. See
 ## Run it in a container
 
 The same three agents, addressable over HTTP, for when the caller is not a
-person at a terminal:
+person at a terminal. The server runs the same command line you would:
 
 ```bash
 cp .env.example .env      # keys, and SERVE_TOKEN=$(openssl rand -hex 32)
@@ -85,10 +84,10 @@ docker compose up --build
 ```
 
 ```bash
-curl -sS -X POST localhost:8080/v1/agents/code/message:send \
+curl -sS -X POST localhost:8080/v1/agents/code/run \
   -H "Authorization: Bearer $SERVE_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"text": "Read NOTES.md and do what the newest feedback asks for",
+  -d '{"task": "Read NOTES.md and do what the newest feedback asks for",
        "workspace": "my-project"}'
 ```
 
@@ -107,7 +106,7 @@ Everything beyond the quick start lives in the wiki — start at
   [18. Serving the agents](docs/18-serving.md)
 - **New provider account, or want to add a provider?** →
   [5. Providers and limits](docs/05-providers.md)
-- **Have one agent ask another for work?** → [16. The agent protocol](docs/16-agent-protocol.md)
+- **Have one agent ask another for work?** → [16. Delegation](docs/16-delegation.md)
 - **Run the coding agent on the pool?** → [6. The coding agent](docs/06-agent.md)
 - **How does the router actually work, and why?** →
   [4. Failover](docs/04-failover.md)

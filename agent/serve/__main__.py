@@ -19,7 +19,6 @@ Environment:
   SERVE_TOKEN        the bearer token every route but /health requires. No
                      default, and no server without one unless
                      SERVE_ALLOW_ANONYMOUS=1 says the operator meant it
-  PUBLIC_URL         the address callers reach this on, for the agent cards
   WORKSPACES_DIR     the workspace root to bind agents under; default /workspaces
   SERVE_RECORD_DIR   where task records and run traces are written; unset
                      writes none
@@ -29,8 +28,9 @@ Environment:
                      whole pool is fresh
                      (docs/17-deployment.md#176-what-has-to-change-first)
   AGENT_CONTEXT_FLOOR  override the input-token floor (default 128,000)
-  AGENT_PEERS        peers the coding agent may delegate to; unset means
-                     `explore`, empty means none
+  AGENT_PEERS        agents the coding agent may run; unset means `explore`,
+                     empty means none (docs/16-delegation.md)
+  AGENT_DELEGATE_TIMEOUT  ceiling in seconds on one agent run (default 4 hours)
   IMPROVE_RECORDS    extra directories of recorded runs the `improve` agent may
                      read; point it at SERVE_RECORD_DIR to include live runs
                      (docs/19-improvement-agent.md)
@@ -44,7 +44,7 @@ import os
 import sys
 from pathlib import Path
 
-from agent.code.session import CONTEXT_FLOOR, RECURSION_LIMIT
+from agent.code.session import CONTEXT_FLOOR
 from agent.serve import app
 
 logging.basicConfig(level=logging.INFO,
@@ -102,7 +102,6 @@ def main() -> None:
                         "anyone holding the token.")
 
     server = app.build(host, port, floor=floor,
-                       recursion_limit=RECURSION_LIMIT,
                        allow_shell=allow_shell,
                        record_dir=Path(record_dir) if record_dir else None,
                        token=token)

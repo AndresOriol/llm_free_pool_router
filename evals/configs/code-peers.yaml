@@ -1,11 +1,12 @@
 # The coding agent with a peer it can delegate research to.
 #
-# `code` plus one `delegate` tool. Everything else -- prompt, jail, floor,
-# middleware, subagent -- is identical, and with AGENT_PEERS empty this branch's
-# coding agent has exactly the tools `code` has, which is what makes the pair a
-# clean A/B (docs/16-agent-protocol.md#167).
+# `code` plus one prompt paragraph naming `python -m agent.explore`, which it
+# runs with `execute`. Delegation is a command, not a tool, so the tool set is
+# exactly `code`'s and everything else -- jail, floor, middleware, subagent --
+# is identical. That is what makes the pair a clean A/B
+# (docs/16-delegation.md#166).
 #
-# The agent behind `delegate` is LangChain's deep-research agent, ported: an
+# The agent behind that command is LangChain's deep-research agent, ported: an
 # orchestrator over a research sub-agent, a `tavily_search` that returns whole
 # pages rather than a summary of them, and a `think_tool` after every search
 # (docs/15-explorer.md#158-the-deep-research-port).
@@ -19,7 +20,7 @@
 # What a run is asking:
 #
 #   1. Does the coding agent delegate at all, and on the right questions?
-#      `delegated_tasks` in the run record says how often; the trajectory says
+#      The `python -m agent.explore` calls in the trace say how often; the trajectory says
 #      whether the questions needed outside knowledge or could have been
 #      answered by reading the repo.
 #   2. What does it cost? A delegation is now an orchestrator conversation plus
@@ -37,7 +38,7 @@
 # check the credit balance before a batch.
 #
 # Nothing enforces a per-delegation budget yet, deliberately: the number would
-# be invented rather than observed (docs/16-agent-protocol.md#166).
+# be invented rather than observed (docs/16-delegation.md#165).
 #
 # Interleaved against `code`, never alone -- running a configuration on its own
 # is what left `harness-v8-session` with no verdict (evals/CONFIGS.md).

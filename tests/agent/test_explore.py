@@ -87,93 +87,81 @@ def test_the_explorer_still_reads_and_writes_files():
                               .file_data or {}).get("content", "")
 
 
-# --- the explorer as an addressable agent -----------------------------------
-# Its A2A handler (agent/explore/a2a.py). The protocol itself is checked in
-# tests/agent/test_protocol.py; what is checked here is the one piece of logic
-# that is the explorer's own -- deciding which files a delegated task produced.
 
 
-class _FakeSession:
-    """Stands in for a compiled explorer: writes notes, says something."""
+# --- what the command reports ------------------------------------------------
+# The explorer is reached by running it (docs/16-delegation.md), so its stdout
+# is what a caller -- a person, or the coding agent that ran the command --
+# reads back. The one piece of logic that is the explorer's own lives here:
+# deciding which notes *this* run wrote.
 
-    def __init__(self, root: Path, notes: dict, reply: str = "done"):
-        self.root, self.notes, self.reply = root, notes, reply
-
-    def invoke(self, state, config=None):
-        for name, text in self.notes.items():
-            path = self.root / session.RESEARCH_DIR / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
-        return {"messages": [AIMessage(self.reply)]}
+from agent.explore import __main__ as explore_cli  # noqa: E402
 
 
-def _handler(monkeypatch, root: Path, notes: dict, reply: str = "done"):
-    from agent.explore import a2a
-
-    monkeypatch.setattr(session, "build_agent",
-                        lambda *a, **kw: _FakeSession(root, notes, reply))
-    return a2a.make_handler(model=None, workdir=root, pool=None,
-                            floor=128_000, members=1, recursion_limit=10)
-
-
-def _task(request: str = "what are the limits?"):
-    from agent.protocol import Message, Task
-
-    task = Task()
-    task.history.append(Message.user(request, task_id=task.id))
-    return task
+def _report(capsys, workdir, notes, before=None, reply="done"):
+    """`_summary` over a research directory holding `notes`. Returns stdout."""
+    directory = workdir / session.RESEARCH_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, text in notes.items():
+        (directory / name).write_text(text, encoding="utf-8")
+    explore_cli._summary({"messages": [AIMessage(reply)]}, None, workdir, before)
+    return capsys.readouterr().out
 
 
-def test_a_delegated_exploration_returns_its_notes_as_artifacts(monkeypatch,
-                                                                tmp_path):
-    handler = _handler(monkeypatch, tmp_path, {"limits.md": "# limits\n"})
-    task = handler(_task())
+def test_the_final_message_is_the_output_of_the_command(capsys, tmp_path):
+    """A caller that ran this reads stdout and nothing else, so the answer has
+    to be in it -- first, and whole."""
+    out = _report(capsys, tmp_path, {"limits.md": "# limits\n"},
+                  reply="Cerebras allows 14,400 requests a day.")
 
-    assert task.state == "completed"
-    assert [a.name for a in task.artifacts] == ["limits.md"]
-    assert task.artifacts[0].parts[0].uri == "research/limits.md"
-    note = tmp_path / session.RESEARCH_DIR / "limits.md"
-    assert task.artifacts[0].metadata["bytes"] == note.stat().st_size
+    assert "Cerebras allows 14,400 requests a day." in out
+    assert out.index("Cerebras") < out.index("=== DONE")
 
 
-def test_a_second_task_does_not_claim_the_first_ones_notes(monkeypatch,
-                                                           tmp_path):
+def test_a_long_final_message_is_not_clipped(capsys, tmp_path):
+    """It was clipped to 2,000 characters when nobody read it. Now it is the
+    answer a caller gets back, and half an answer is worse than none."""
+    out = _report(capsys, tmp_path, {"n.md": "x"}, reply="y" * 5_000)
+    assert "y" * 5_000 in out
+
+
+def test_the_notes_this_run_wrote_are_named(capsys, tmp_path):
+    out = _report(capsys, tmp_path, {"limits.md": "# limits\n"})
+
+    assert "notes written by this run: 1" in out
+    assert "research/limits.md" in out
+
+
+def test_a_second_run_does_not_claim_the_first_ones_notes(capsys, tmp_path):
     """The failure this guards: a stale note read as the answer to a new
-    question. Without the before-shot the second task reports both files."""
-    handler = _handler(monkeypatch, tmp_path, {"first.md": "# one\n"})
-    handler(_task("first question"))
+    question. Without the before-shot the second run reports both files."""
+    _report(capsys, tmp_path, {"first.md": "# one\n"})
+    before = explore_cli._notes(tmp_path)
 
-    handler = _handler(monkeypatch, tmp_path, {"second.md": "# two\n"})
-    second = handler(_task("second question"))
+    out = _report(capsys, tmp_path, {"second.md": "# two\n"}, before)
 
-    assert [a.name for a in second.artifacts] == ["second.md"]
+    assert "notes written by this run: 1" in out
+    assert "research/second.md" in out
+    assert "not this run's findings" in out and "research/first.md" in out
 
 
-def test_a_rewritten_note_counts_as_this_tasks_work(monkeypatch, tmp_path):
+def test_a_rewritten_note_counts_as_this_runs_work(capsys, tmp_path):
     """Same path, new content -- the caller must be pointed at it again."""
-    handler = _handler(monkeypatch, tmp_path, {"note.md": "# one\n"})
-    handler(_task())
+    _report(capsys, tmp_path, {"note.md": "# one\n"})
+    before = explore_cli._notes(tmp_path)
 
-    handler = _handler(monkeypatch, tmp_path, {"note.md": "# rewritten, longer\n"})
-    assert [a.name for a in handler(_task()).artifacts] == ["note.md"]
+    out = _report(capsys, tmp_path, {"note.md": "# rewritten, longer\n"}, before)
 
-
-def test_an_empty_request_is_rejected_without_running_anything(monkeypatch,
-                                                               tmp_path):
-    from agent.protocol import Task
-
-    handler = _handler(monkeypatch, tmp_path, {"never.md": "x"})
-    task = handler(Task())
-
-    assert task.state == "rejected"
-    assert not (tmp_path / session.RESEARCH_DIR / "never.md").exists()
+    assert "notes written by this run: 1" in out
+    assert "research/note.md" in out
 
 
-def test_the_closing_message_is_clipped(monkeypatch, tmp_path):
-    """The explorer's sign-off is not the deliverable, and the caller pays for
-    every token of it (docs/15-explorer.md#151-what-it-is-for)."""
-    handler = _handler(monkeypatch, tmp_path, {"n.md": "x"}, reply="y" * 5_000)
-    assert len(handler(_task()).status.message.text) <= 2_001
+def test_a_run_that_wrote_nothing_says_so_loudly(capsys, tmp_path):
+    """Silence here reads as success and is not: the run spent quota and left
+    nothing behind (docs/15-explorer.md#151-what-it-is-for)."""
+    out = _report(capsys, tmp_path, {}, reply="I researched it thoroughly.")
+
+    assert "notes written by this run: none" in out
 
 
 # --- the prompt and the checks have to agree --------------------------------
@@ -316,7 +304,7 @@ def test_the_rewritten_descriptions_reach_the_model(tmp_path):
     assert "codebase exploration" not in described["read_file"]
     assert "There is no `ls`, no `glob` and no `grep`" in described["read_file"]
     # And upstream's `write_todos` closes by insisting the answer belongs in the
-    # final message. Here the final message is clipped before its caller sees it.
+    # final message. Here the final message only points at the files.
     assert "the answer is the file under `/research/`" in described["write_todos"]
     assert "This replaces the whole file." in described["write_file"]
 
@@ -488,28 +476,6 @@ def test_a_continued_investigation_sees_what_the_last_run_left(tmp_path):
     (earlier / "retail.md").write_text("body", encoding="utf-8")
 
     assert "/research/cv-spain/retail.md" in _status(earlier, "research/cv-spain")
-
-
-def test_a_delegated_exploration_can_be_given_its_own_directory(monkeypatch,
-                                                                tmp_path):
-    """A2A callers get the same seam: one directory per delegated question."""
-    from agent.explore import a2a
-
-    class _Fake:
-        def invoke(self, state, config=None):
-            path = tmp_path / "research" / "delegated" / "note.md"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("# delegated\n", encoding="utf-8")
-            return {"messages": [AIMessage("done")]}
-
-    monkeypatch.setattr(session, "build_agent", lambda *a, **kw: _Fake())
-    handler = a2a.make_handler(model=None, workdir=tmp_path, pool=None,
-                               floor=128_000, members=1, recursion_limit=10,
-                               research_dir="research/delegated")
-    task = handler(_task())
-
-    assert [a.parts[0].uri for a in task.artifacts] == [
-        "research/delegated/note.md"]
 
 
 # --- the sub-agents are held to the same surface ----------------------------

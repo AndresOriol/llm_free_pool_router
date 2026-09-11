@@ -80,7 +80,7 @@ class Issue:
     last_seen: str = ""
     created: str = ""
     updated: str = ""
-    tasks: list = field(default_factory=list)        # delegations, A2A task ids
+    tasks: list = field(default_factory=list)        # delegations to `code`
     checks: list = field(default_factory=list)       # verification passes
     history: list = field(default_factory=list)      # append-only
 

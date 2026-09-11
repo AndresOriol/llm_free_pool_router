@@ -31,11 +31,11 @@ else on this page is design and changes rarely; this block is state.*
   a run that searched 13 times and opened nothing
   ([15.8](15-explorer.md#158-the-deep-research-port)). Needs a Tavily key; the
   pool holds one.
-- **The coding agent can now ask the explorer for research mid-task**, over
-  A2A's data model on a local transport ([16](16-agent-protocol.md)). It is on
-  by default and a delegation costs a whole explorer session, so a run's
-  `tokens_in` may include one; the record carries `delegated_tasks` and
-  `AGENT_PEERS=` turns it off. **Unmeasured** — `code-peers` has never been run
+- **The coding agent can now ask the explorer for research mid-task**, by
+  running `python -m agent.explore` with `execute` — no protocol, no tool
+  ([16](16-delegation.md)). It is on by default and a delegation costs a whole
+  explorer session, so a run's `tokens_in` may include one; the record carries
+  `peers` and `AGENT_PEERS=` turns it off. **Unmeasured** — `code-peers` has never been run
   against `code`.
 - **A third agent now reads the other two's runs and has the coding agent fix
   what recurs** ([19](19-improvement-agent.md)). It cannot edit a file — the fix
@@ -48,7 +48,7 @@ else on this page is design and changes rarely; this block is state.*
   trusting a pass. `IMPROVE_FIX=0` leaves a diagnose-only arm.
 - **The explorer has been watched once, and it drifted.** A live run searched 13 times, opened **zero** sources, and wrote one file at the end — all against its own prompt, and none of it visible to any existing metric. The prompt now carries numeric rules and
   [evals/research_trajectory.py](../evals/research_trajectory.py) checks them ([15.7](15-explorer.md#157-measured-against-a-reference-research-agent),
-  [16.10](16-agent-protocol.md#1610-what-the-first-live-run-showed)).
+  [16.9](16-delegation.md#169-what-the-first-live-delegation-showed)).
 - **The one L0 scenario is exhausted as a measuring instrument.** Seven
   configurations were run against it; none could be distinguished from another,
   and one scored 3/3 and 1/3 on consecutive batches. Re-running them will
@@ -146,18 +146,17 @@ else on this page is design and changes rarely; this block is state.*
 [15.8](15-explorer.md#158-the-deep-research-port) The deep-research port ·
 [15.9](15-explorer.md#159-what-the-grounded-gemini-search-was) What the grounded-Gemini search was
 
-**[16. The agent protocol](16-agent-protocol.md)** — how one agent asks another for work, in the standard's vocabulary
-&nbsp;&nbsp;&nbsp;&nbsp;[16.1](16-agent-protocol.md#161-the-problem-the-human-was-the-message-bus) The human was the message bus ·
-[16.1.1](16-agent-protocol.md#1611-this-reopens-a-settled-decision-and-how-much-of-it) What it reopens ·
-[16.2](16-agent-protocol.md#162-why-a2a-and-why-not-the-alternatives) Why A2A ·
-[16.3](16-agent-protocol.md#163-why-the-transport-is-local) Why the transport is local ·
-[16.4](16-agent-protocol.md#164-what-maps-onto-what) What maps onto what ·
-[16.5](16-agent-protocol.md#165-one-delegation-end-to-end) One delegation ·
-[16.6](16-agent-protocol.md#166-what-a-delegation-costs) What it costs ·
-[16.7](16-agent-protocol.md#167-what-this-costs-and-what-is-unmeasured) What is unmeasured ·
-[16.8](16-agent-protocol.md#168-what-is-deliberately-not-built) Not built ·
-[16.9](16-agent-protocol.md#169-adding-a-third-agent) Adding a third agent ·
-[16.10](16-agent-protocol.md#1610-what-the-first-live-run-showed) What the first live run showed
+**[16. Delegation](16-delegation.md)** — how one agent asks another for work: it runs the command
+&nbsp;&nbsp;&nbsp;&nbsp;[16.1](16-delegation.md#161-the-problem-the-human-was-the-message-bus) The human was the message bus ·
+[16.1.1](16-delegation.md#1611-this-reopens-a-settled-decision-and-how-much-of-it) What it reopens ·
+[16.2](16-delegation.md#162-why-a-command-and-not-a-protocol) Why a command ·
+[16.3](16-delegation.md#163-what-the-jail-has-to-bend-and-how-far) What the jail bends ·
+[16.4](16-delegation.md#164-why-a-subprocess-costs-something-real) What a subprocess costs ·
+[16.5](16-delegation.md#165-what-a-delegation-costs) What a delegation costs ·
+[16.6](16-delegation.md#166-what-this-costs-and-what-is-unmeasured) What is unmeasured ·
+[16.7](16-delegation.md#167-what-is-deliberately-not-built) Not built ·
+[16.8](16-delegation.md#168-adding-a-fourth-agent) Adding a fourth agent ·
+[16.9](16-delegation.md#169-what-the-first-live-delegation-showed) What the first live delegation showed
 
 **[19. The improvement agent](19-improvement-agent.md)** — the agent whose project is the other agents: it reads their traces, names what recurs, delegates the fix, and checks whether it stopped
 &nbsp;&nbsp;&nbsp;&nbsp;[19.1](19-improvement-agent.md#191-the-problem-the-loop-was-a-person) The loop was a person ·

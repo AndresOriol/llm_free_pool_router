@@ -1,8 +1,13 @@
-"""CLI: python -m agent.code [workdir] < brief.md
+"""CLI: python -m agent.code [workdir] --task "..."   (or: < brief.md)
 
-Workdir as an argument, task on stdin, exit at EOF. `python -m agent.explore`
-takes the same shape, so an eval configuration or a script swaps one agent for
-the other by changing `agent_cmd` and nothing else (evals/agent_config.py).
+Workdir as an argument, the task on `--task` or on stdin, exit at EOF.
+`python -m agent.explore` takes the same shape, so an eval configuration or a
+script swaps one agent for the other by changing `agent_cmd` and nothing else
+(evals/agent_config.py).
+
+**This command is also how another agent delegates to this one.** There is no
+protocol: a caller runs it with `execute` and reads the summary below
+(docs/16-delegation.md).
 
 Environment:
   ROUTER_CONFIG      pool config to load; unset uses llm_router/config.yaml
@@ -11,9 +16,9 @@ Environment:
   AGENT_CONTEXT_FLOOR override the input-token floor (default 128,000)
   AGENT_STEP_BUDGET  override the superstep budget (default 400); the last
                      few are reserved so a stopped run can still commit
-  AGENT_PEERS        comma-separated agents this one may delegate to; unset
-                     means `explore`, and an empty value means none
-                     (docs/16-agent-protocol.md)
+  AGENT_PEERS        comma-separated agents this one may run; unset means
+                     `explore`, and an empty value means none
+                     (docs/16-delegation.md)
   HARNESS_SHELL=1    give the agent an unrestricted shell -- not contained,
                      so this is the operator's call, never a default
 """
@@ -26,9 +31,10 @@ from pathlib import Path
 from langchain_core.messages import AIMessage
 
 from llm_router import AutonomousLLMRouter, load_providers_from_config
+from agent.code import gitstate
 from agent.code.session import (CONTEXT_FLOOR, RECURSION_LIMIT, check_floor,
                                 run_session)
-from agent.protocol import peers
+from agent.runtime import cli
 from agent.runtime.awake import keep_awake
 from agent.runtime.chat_model import RouterChatModel
 
@@ -56,26 +62,22 @@ def build(floor: int):
     # hard floor the eligible set is smaller than the pool, and an unlucky
     # ordering of benched accounts must not end the run.
     model = RouterChatModel(router=router, max_retries=len(providers) + 3)
-    # The router itself comes back too, because a delegated agent must run on
-    # the *same* provider objects and so share their cooldown
-    # (docs/16-agent-protocol.md#163-why-the-transport-is-local).
-    return model.for_context(floor, strict=True), members, router
+    return model.for_context(floor, strict=True), members
 
 
 def main() -> None:
-    workdir = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
+    workdir, task = cli.parse(
+        sys.argv[1:], prog="python -m agent.code",
+        workdir_help="the project to work on; unset means the current directory",
+        task_help="what to do; unset reads it from stdin",
+        prompt="Enter the task, then Ctrl-D:")
     workdir.mkdir(parents=True, exist_ok=True)
-
-    task = sys.stdin.read().strip() if not sys.stdin.isatty() else ""
-    if not task:
-        print("Enter the task, then Ctrl-D:", file=sys.stderr)
-        task = sys.stdin.read().strip()
     if not task:
         raise SystemExit("No task given.")
 
     floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
     budget = int(os.environ.get("AGENT_STEP_BUDGET") or RECURSION_LIMIT)
-    model, members, router = build(floor)
+    model, members = build(floor)
 
     shell = os.environ.get("HARNESS_SHELL") == "1"
     if shell:
@@ -94,13 +96,10 @@ def main() -> None:
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
         trace_file = Path(os.environ["EVAL_TRACE_FILE"]).with_name("trace.json")
 
-    # The task records go beside the run record and never inside the workdir:
-    # the agent commits its workdir, and a protocol log committed into the
-    # project under review is noise in every diff it produces afterwards.
-    transport = peers.build_transport(
-        router, model, workdir, floor=floor, members=members,
-        recursion_limit=RECURSION_LIMIT,
-        record_dir=Path(trace_file).parent / "a2a" if trace_file else None)
+    # The head this run starts from, so the summary can say what actually moved
+    # rather than leaving a reader to trust the closing message
+    # (agent/code/gitstate.py).
+    before = gitstate.head(workdir)
 
     # Hours of wall time with long gaps between calls looks like an idle
     # machine to Windows. Suspending mid-request is what left one run waiting
@@ -108,11 +107,10 @@ def main() -> None:
     with keep_awake():
         final, written = run_session(
             model, task, workdir, config={"recursion_limit": budget},
-            floor=floor, members=members,
-            allow_shell=shell, transport=transport,
+            floor=floor, members=members, allow_shell=shell,
             trace_path=Path(trace_file) if trace_file else None)
 
-    _summary(final, written)
+    _summary(final, written, gitstate.state(workdir, before))
     # Exit 0 for any clean end. Whether the work was any good is the hidden
     # tests' verdict, not this process's exit code -- exiting non-zero on an
     # orderly stop made the eval runner record it as `crash`, which means the
@@ -128,23 +126,48 @@ def _text(message) -> str:
     return str(content).strip()
 
 
-def _summary(final, written) -> None:
+def final_message(final) -> str:
+    """What the session said last, in full.
+
+    The last *message* is not always the last thing the model said: a run
+    stopped mid-turn ends on a tool call whose content is empty, and printing
+    that reported nothing at all about a session that had done real work. Walk
+    back to the last thing the *model* said -- a tool's own output is not this
+    session's account of itself.
+    """
+    said = [m for m in (final or {}).get("messages") or []
+            if isinstance(m, AIMessage)]
+    return next((t for t in map(_text, reversed(said)) if t), "")
+
+
+def _summary(final, written, state=None) -> None:
+    """The run's account of itself on stdout, final message first.
+
+    **The final message is the output of this command**, unclipped, because
+    another agent may have run it and this is the answer it gets back
+    (docs/16-delegation.md). Everything below it is the mechanical detail a
+    human wants and a caller can ignore.
+    """
     messages = (final or {}).get("messages") or []
+    text = final_message(final)
+    if text:
+        print(f"\n{text}")
+
     # Spending the step budget is an ordinary end, not a crash, but it is not
     # the same end as finishing -- whoever reads this has to know the session
     # was stopped rather than done (agent/code/session.py).
     how = ("STOPPED (step budget spent)"
            if (final or {}).get("step_budget_spent") else "DONE")
     print(f"\n=== {how} after {len(messages)} message(s) ===")
-    # The last *message* is not always the last thing the model said: a run
-    # stopped mid-turn ends on a tool call whose content is empty, and
-    # printing that reported nothing at all about a session that had done
-    # real work. Walk back to the last thing the *model* said -- a tool's
-    # own output is not this session's account of itself.
-    said = [m for m in messages if isinstance(m, AIMessage)]
-    text = next((t for t in map(_text, reversed(said)) if t), "")
-    if text:
-        print(f"\n{text[:2000]}")
+
+    # What the repository says, after what the session says about itself. A
+    # caller reading this back from a delegation gets the verdict either way;
+    # the prose above is not evidence and this is
+    # (docs/19-improvement-agent.md#199-what-the-first-live-pass-showed).
+    verdict = gitstate.render(state or {})
+    if verdict:
+        print(f"\n{verdict}")
+
     todos = (final or {}).get("todos") or []
     if todos:
         print(f"\ntodos: {len(todos)}")

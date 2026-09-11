@@ -42,6 +42,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from agent import delegation
+from agent.code import gitstate
 from agent.improve import issues as issues_mod
 from agent.improve import records as records_mod
 from agent.improve import repo
@@ -75,13 +77,13 @@ def _tail(text: str, lines: int) -> str:
     return "\n".join((text or "").splitlines()[-lines:])
 
 
-def make_tools(workdir: Path, transport=None) -> dict:
+def make_tools(workdir: Path, peers=None) -> dict:
     """Build the tool set bound to one project. Returns name -> tool.
 
-    `transport` is the peers transport carrying `code`. Without one there is no
+    `peers` names the agents this pass may run. Without `code` there is no
     `delegate_fix`, and the agent can diagnose but not fix -- which is a usable
     read-only mode and not an error, so the tool is absent rather than present
-    and certain to refuse ([agent/protocol/peers.py](../protocol/peers.py)).
+    and certain to refuse ([agent/delegation.py](../delegation.py)).
     """
     from langchain_core.tools import StructuredTool
 
@@ -294,9 +296,6 @@ def make_tools(workdir: Path, transport=None) -> dict:
                     "issue is real and this will let it through; if it is not, "
                     "the fix already shipped and the issue should close.")
 
-        from agent.protocol.local import render
-        from agent.protocol.types import Message
-
         # One branch per issue, taken from wherever the pass started. The first
         # live pass delegated on `master` and nothing prevented it; the only
         # reason master was not written to is that the session made no change
@@ -325,12 +324,16 @@ def make_tools(workdir: Path, transport=None) -> dict:
                    + (f"\n\nYou are on branch `{branch}`, which exists for this "
                       f"issue. Commit here and do not switch branches."
                       if branch else ""))
-        task = transport.message_send("code", Message.user(request))
+        before = gitstate.head(workdir)
+        code, output = delegation.run("code", workdir, request)
+        report = gitstate.state(workdir, before)
 
-        # What the repository says, taken off the task rather than out of the
-        # delegate's prose. `agent/code/a2a.py` computes it; until this was
-        # read, nothing looked at it (agent/protocol/local.py::_data_summary).
-        moved = _repository_moved(task)
+        # What the repository says, read from git rather than out of the
+        # delegate's prose. The first delegation this loop ever made came back
+        # describing three changes to `session.py` that the diff did not
+        # contain (docs/19-improvement-agent.md#199-what-the-first-live-pass-showed).
+        moved = gitstate.moved(report)
+        rendered = _delegation(code, output, report)
 
         # The suite, after any delegation that moved the repository, and never
         # as a tool the agent could forget to reach for. A change that breaks
@@ -340,16 +343,16 @@ def make_tools(workdir: Path, transport=None) -> dict:
             suite_passed, suite_tail = repo.run_tests(
                 workdir, int(os.environ.get(TIMEOUT_ENV) or DEFAULT_TIMEOUT))
 
-        issue.tasks.append({"ts": issues_mod.now(), "task_id": task.id,
-                            "agent": "code", "state": task.state,
+        issue.tasks.append({"ts": issues_mod.now(), "agent": "code",
+                            "exit_code": code,
                             "changed_anything": moved, "branch": branch,
                             "tests_passed": suite_passed,
                             "brief": brief.strip()[:1000]})
         if moved and not suite_passed:
-            issue.note("regressed", f"task {task.id[:8]} broke the suite")
+            issue.note("regressed", "the delegated fix broke the suite")
             store.save(issue)
             return (
-                f"{render(task, 'code')}\n\n**The change broke this project's "
+                f"{rendered}\n\n**The change broke this project's "
                 f"own test suite, so it is not a fix.** It is committed on "
                 f"`{branch}` and nothing has been merged, so nothing else is "
                 f"affected — but `{issue.id}` stays {issue.status} and must not "
@@ -362,7 +365,7 @@ def make_tools(workdir: Path, transport=None) -> dict:
             issue.note("status", f"{issue.status} -> {issues_mod.FIXING}")
             issue.status = issues_mod.FIXING
         issue.note("delegated",
-                   f"task {task.id[:8]} to code; repository "
+                   f"ran code; repository "
                    f"{'moved' if moved else 'did not move'}")
         store.save(issue)
 
@@ -372,8 +375,8 @@ def make_tools(workdir: Path, transport=None) -> dict:
             # as `fixing` would leave the ledger claiming work is under way
             # when the repository says none was done.
             return (
-                f"{render(task, 'code')}\n\n**The delegation changed nothing, "
-                f"so `{issue.id}` is still {issue.status}.** The task reports "
+                f"{rendered}\n\n**The delegation changed nothing, "
+                f"so `{issue.id}` is still {issue.status}.** Git reports "
                 f"no commit and no files changed, whatever its closing message "
                 f"says — the first delegation this loop ever made came back "
                 f"describing three changes to `session.py` that the diff did "
@@ -383,7 +386,7 @@ def make_tools(workdir: Path, transport=None) -> dict:
                 f"on. Do not delegate the same brief again.")
 
         return (
-            f"{render(task, 'code')}\n\nRecorded against `{issue.id}`, now "
+            f"{rendered}\n\nRecorded against `{issue.id}`, now "
             f"**{issue.status}**. The suite still passes.\n\n"
             f"The repository moved, which is more than the closing message "
             f"above is worth on its own — read the diff before you believe "
@@ -445,20 +448,23 @@ def make_tools(workdir: Path, transport=None) -> dict:
                 "and call again with `build=\"yes\"` when it is right — or "
                 "leave it as a brief for a human, which is a complete result.")
 
-        if transport is None or "scenarios" not in transport.registry.names:
+        if "scenarios" not in (peers or ()):
             return _clip(
                 written + "\n\n---\n\n**It cannot be built from here.** No "
                 "`scenarios` agent is reachable, which means the scenario "
                 "repository was not found. The draft is on disk and a coding "
                 "session pointed at that repository can build it from the file.")
 
-        from agent.protocol.local import render
-        from agent.protocol.types import Message
-
-        task = transport.message_send("scenarios", Message.user(
-            scenarios_mod.builder_brief(made, "the eval scenario repository")))
+        # The same coding agent, run against the scenario repository instead of
+        # this one, so the before-shot is taken there too.
+        repo = delegation.scenario_repo()
+        before = gitstate.head(repo)
+        code, output = delegation.run(
+            "scenarios", workdir,
+            scenarios_mod.builder_brief(made, "the eval scenario repository"))
+        built = _delegation(code, output, gitstate.state(repo, before))
         return _clip(
-            f"{written}\n\n---\n\n{render(task, 'scenarios')}\n\n"
+            f"{written}\n\n---\n\n{built}\n\n"
             f"**A scenario is not built until its gate passes.** Run "
             f"`python -m evals validate --scenario <tag>`: it checks that the "
             f"untouched seed fails `fail_to_pass`, that the gold patch makes it "
@@ -569,7 +575,7 @@ def make_tools(workdir: Path, transport=None) -> dict:
             func=draft_scenario, name="draft_scenario",
             description=draft_scenario.__doc__),
     }
-    if transport is not None and "code" in transport.registry.names:
+    if "code" in (peers or ()):
         made["delegate_fix"] = StructuredTool.from_function(
             func=delegate_fix, name="delegate_fix",
             description=delegate_fix.__doc__)
@@ -579,29 +585,31 @@ def make_tools(workdir: Path, transport=None) -> dict:
     return made
 
 
-def _repository_moved(task) -> bool:
-    """Did a coding task actually change the repository?
+def _delegation(code, output: str, report: dict) -> str:
+    """What a delegated session did, as the text the pass reads back.
 
-    Read off the `DataPart` the coding agent's handler puts on every task, which
-    carries the head it started from, the head it ended on, the commits between
-    them and anything left uncommitted. Prose is not consulted.
+    Verdict first, then the session's own account of itself. The order is the
+    point: a caller reading "no commit, and nothing changed on disk" cannot
+    accept "I made three changes" from the prose underneath it
+    ([gitstate.render](../code/gitstate.py)).
 
-    True when the task carries no such report at all: this is a guard against a
-    delegate that demonstrably did nothing, not a requirement that every agent
-    prove itself, and a handler that reports no git state must not be read as
-    having failed.
+    A timeout (`code is None`) is not a crash. The session did real work and was
+    stopped; whatever it committed is still committed, and the git report below
+    is what says so.
     """
-    for artifact in getattr(task, "artifacts", None) or []:
-        for part in getattr(artifact, "parts", None) or []:
-            data = getattr(part, "data", None)
-            if not isinstance(data, dict) or data.get("git") is not True:
-                continue
-            return bool(data.get("commits") or data.get("files_changed")
-                        or data.get("uncommitted"))
-    return True
+    if code is None:
+        head = ("The session hit the delegation timeout and was stopped. "
+                "Whatever it had committed is still committed:")
+    elif code != 0:
+        head = f"`python -m agent.code` exited {code}:"
+    else:
+        head = "The coding session finished."
 
+    verdict = gitstate.render(report)
+    said = delegation.tail(output, 40)
+    parts = [head, verdict, f"--- what it said (tail) ---\n{said}"]
+    return "\n\n".join(p for p in parts if p)
 
-# -- the sections of one run ----------------------------------------------
 
 def _section(record, section: str) -> str:
     if section.startswith("turn:"):

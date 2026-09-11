@@ -16,10 +16,10 @@ differs is what it is pointed at and what it is allowed to do about it.
   eval runner materialises a pinned worktree per configuration and that is the
   point of it ([evals/agent_config.py](../../evals/agent_config.py)).
 
-The delegation to `code` goes over the same local transport the coding agent
-uses to reach the explorer, so the fix runs on the *same* provider objects and
-shares this pass's cooldown, and its calls land in this pass's trace
-([16.3](../../docs/16-agent-protocol.md#163-why-the-transport-is-local)).
+`delegate_fix` runs `python -m agent.code` and waits, the same way `run_evals`
+runs the eval runner. There is no protocol between them: the coding agent is a
+command, and what comes back is what it printed
+([16. Delegation](../../docs/16-delegation.md)).
 """
 
 from __future__ import annotations
@@ -77,10 +77,10 @@ def ledger_section(workdir: Path) -> str:
     """The open issues, as a prompt section.
 
     In the prompt rather than left to a first tool call, and for the same reason
-    the peer directory is: it is the one thing this agent must know before it
-    decides what to do, it changes once per pass, and charging it on every step
-    of a session that would have fetched it anyway is the worse trade
-    ([registry.directory_section](../protocol/registry.py)).
+    the list of agents it can run is: it is the one thing this agent must know
+    before it decides what to do, it changes once per pass, and charging it on
+    every step of a session that would have fetched it anyway is the worse
+    trade ([delegation.prompt_section](../delegation.py)).
     """
     issues = IssueStore(workdir).list()
     if not issues:
@@ -94,7 +94,7 @@ def ledger_section(workdir: Path) -> str:
 
 
 def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
-                members: int = 0, transport=None,
+                members: int = 0, peers: Optional[Sequence[str]] = None,
                 extra_middleware: Optional[Sequence] = None):
     """The compiled improvement agent over a jailed, write-refusing backend."""
     from deepagents import create_deep_agent
@@ -107,7 +107,7 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
                                      allowed_programs=(), allow_git=True,
                                      allow_shell=False)
 
-    tools = list(improve_tools.make_tools(workdir, transport).values())
+    tools = list(improve_tools.make_tools(workdir, peers).values())
     system_prompt = prompt.build(
         floor, members=members, programs=ALLOWED_PROGRAMS,
         extra_sections=[ledger_section(workdir)])
@@ -127,7 +127,8 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
 
 def run_session(model, task: str, workdir: Path, config=None,
                 floor: int = CONTEXT_FLOOR, members: int = 0,
-                transport=None, trace_path: Optional[Path] = None) -> tuple:
+                peers: Optional[Sequence[str]] = None,
+                trace_path: Optional[Path] = None) -> tuple:
     """Run one improvement pass. Returns (final_state, trace_written)."""
     config = dict(config or {})
     config.setdefault("recursion_limit", RECURSION_LIMIT)
@@ -138,7 +139,7 @@ def run_session(model, task: str, workdir: Path, config=None,
         config["callbacks"] = list(config.get("callbacks") or []) + [jsonl]
 
     agent = build_agent(workdir, model, floor=floor, members=members,
-                        transport=transport)
+                        peers=peers)
 
     # A delegated fix moves the checkout onto `improve/<issue-id>`, and nobody
     # is watching to move it back. Whatever branch the pass started on is the

@@ -37,7 +37,7 @@ Five stages. Each is a tool, and each stage's output is what the next one reads.
 | Detect | `find_runs` | which runs show a pattern, and how many |
 | Diagnose | `read_run` | one run, one bounded section at a time |
 | Name | `write_issue` | a ledger entry carrying a **signature** |
-| Fix | `delegate_fix` | an A2A task to `agent/code`, recorded on the issue |
+| Fix | `delegate_fix` | runs `python -m agent.code`, recorded on the issue |
 | Check | `run_evals`, `check_issue` | fresh runs, then close or reopen |
 | Grow the instrument | `draft_scenario` | a failed run becomes an eval case |
 
@@ -212,18 +212,18 @@ begun.
 
 ## 19.9 What it costs, and what is unmeasured
 
-**Unmeasured.** Like the protocol before it
-([16.7](16-agent-protocol.md#167-what-this-costs-and-what-is-unmeasured)), this
+**Unmeasured.** Like delegation itself
+([16.6](16-delegation.md#166-what-this-costs-and-what-is-unmeasured)), this
 is a configuration nobody has run against a baseline. What can be said now:
 
 - One pass reads traces, which are large. Every section of `read_run` is
   bounded and searching streams, so a pass does not scale with the size of the
   trace directory — but it does scale with how many runs the model chooses to
   open.
-- One `delegate_fix` is a whole coding session, on the same pool, sharing this
-  pass's cooldown and landing in this pass's trace
-  ([16.3](16-agent-protocol.md#163-why-the-transport-is-local)). A pass's
-  `tokens_in` therefore includes the fix.
+- One `delegate_fix` is a whole coding session, on the same pool, run as a
+  command: it does not share this pass's cooldown, but it does land in this
+  pass's trace ([16.4](16-delegation.md#164-why-a-subprocess-costs-something-real)).
+  A pass's `tokens_in` therefore includes the fix.
 - One `run_evals` is a batch. It is by far the most expensive thing in the loop
   and the only one that spends hours.
 

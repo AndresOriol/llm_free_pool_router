@@ -45,6 +45,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tracers.context import collect_runs
 from langgraph.errors import GraphRecursionError
 
+from agent import delegation
 from agent.code import context, prompt
 from agent.code import trace as run_trace
 from agent.code.shell import ShellAllowListMiddleware
@@ -98,15 +99,15 @@ ALLOWED_PROGRAMS = ("python", "python3", "py", "pytest", "git")
 
 def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
                 members: int = 0, allow_shell: bool = False,
-                transport=None,
+                peers: Optional[Sequence[str]] = None,
                 extra_middleware: Optional[Sequence] = None):
     """The compiled coding agent over a jailed backend.
 
-    `transport` is an optional `LocalTransport` (agent/protocol/local.py). Given
-    one, the agent gains a single `delegate` tool and a directory of the agents
-    it can address; given None it is exactly the agent it was before, which is
-    what makes the two comparable as configurations
-    ([16. The agent protocol](../../docs/16-agent-protocol.md)).
+    `peers` names the other agents this one may run. It costs a paragraph in
+    the prompt and no tool at all: they are commands, and the agent already has
+    `execute` ([16. Delegation](../../docs/16-delegation.md)). With no peers it
+    is exactly the agent it was before, which is what makes the two comparable
+    as configurations.
     """
     from deepagents import create_deep_agent
     from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
@@ -118,13 +119,8 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
                                      allow_shell=allow_shell)
 
     tools = []
-    sections = [context.section(workdir)]
-    if transport is not None:
-        from agent.protocol.registry import directory_section
-        from agent.protocol.tools import make_delegate_tool
-
-        tools.append(make_delegate_tool(transport))
-        sections.append(directory_section(transport.registry))
+    sections = [context.section(workdir),
+                delegation.prompt_section(peers or [], workdir)]
 
     # The prompt names the same programs the middleware and the backend
     # enforce, from the one constant all three read, so the model is told the
@@ -246,7 +242,8 @@ def _drain(agent, state: dict, config: dict, limit: int) -> tuple[dict, bool]:
 
 def run_session(model, task: str, workdir: Path, config=None,
                 floor: int = CONTEXT_FLOOR, members: int = 0,
-                allow_shell: bool = False, transport=None,
+                allow_shell: bool = False,
+                peers: Optional[Sequence[str]] = None,
                 trace_path: Optional[Path] = None) -> tuple:
     """Run one session. Returns (final_state, trace_written)."""
     config = dict(config or {})
@@ -269,7 +266,7 @@ def run_session(model, task: str, workdir: Path, config=None,
         config["callbacks"] = list(config.get("callbacks") or []) + [jsonl]
 
     agent = build_agent(workdir, model, floor=floor, members=members,
-                        allow_shell=allow_shell, transport=transport)
+                        allow_shell=allow_shell, peers=peers)
 
     # `collect_runs` learns the trace and project ids from the same callbacks
     # LangSmith's tracer uses, so the fetch afterwards knows what to ask for
@@ -312,11 +309,10 @@ def run_session(model, task: str, workdir: Path, config=None,
             "context_floor": floor,
             "eligible_providers": members,
             # Delegation is the one thing a run does that spends quota outside
-            # its own conversation, so the record says whether it happened
-            # before anyone reads the totals
-            # ([16](../../docs/16-agent-protocol.md)).
-            "peers": transport.registry.names if transport else [],
-            "delegated_tasks": len(transport.store) if transport else 0,
+            # its own conversation, so the record says which agents this one
+            # was allowed to run before anyone reads the totals
+            # ([16](../../docs/16-delegation.md)).
+            "peers": list(peers or []),
             "tracing_enabled": run_trace.tracing_enabled(),
         })
         if written:

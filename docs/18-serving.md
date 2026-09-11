@@ -11,16 +11,17 @@ submitting a task does not wait for it.*
 server. This is the server, plus the packaging that makes the prerequisites
 someone's actual configuration rather than a note.
 
-Nothing here changes an agent. The pool, the failover, the jail, the prompts,
-the trace and the A2A vocabulary are the ones the CLI uses; a served run and a
-`python -m agent.code` run are the same run. What is added is an address, a
-queue, and a workspace to bind to:
+Nothing here changes an agent, and nothing here *is* an agent. The worker runs
+`python -m agent.<name> <workdir> --task "..."` — the same command a person
+types, in the same container — so a served run and a local run are the same run
+([16. Delegation](16-delegation.md)). What is added is an address, a queue, and
+a workspace to bind to:
 
 | | CLI | Served |
 | --- | --- | --- |
 | Which agent | which module you ran | the path you POST to |
 | What it works on | `sys.argv[1]`, a path you trust | a workspace *name*, resolved under one mounted root ([18.4](#184-binding-an-agent-to-a-repository-or-a-filesystem)) |
-| The task | stdin, to EOF | an A2A `Message` in the request body |
+| The task | `--task`, or stdin to EOF | `task` in the request body, passed on as `--task` |
 | Waiting | the process runs until it is done | 202 and a task id; you poll ([18.3](#183-why-submission-does-not-block)) |
 | Concurrency | one process, one run | one worker, a queue ([18.5](#185-why-there-is-exactly-one-worker)) |
 
@@ -28,59 +29,50 @@ The CLI is not deprecated and remains the shortest way to run one task.
 
 ## 18.2 The surface
 
-A2A defines three transports and this is the HTTP+JSON one, so
-`preferredTransport: "HTTP+JSON"` on a card is a true statement rather than an
-invention. The method names are the spec's; only the binding is chosen
-([16.2](16-agent-protocol.md#162-why-a2a-and-why-not-the-alternatives)).
+A request is a command line sent over a socket: which agent, which workspace,
+and the task string. There used to be A2A cards and `Message` objects here; they
+went with the rest of the protocol ([16.2](16-delegation.md#162-why-a-command-and-not-a-protocol)).
 
 ```
-GET  /health                                        liveness, no token
-GET  /.well-known/agent-card.json                   the primary agent's card
-GET  /v1/agents                                     every card served here
-GET  /v1/agents/<name>/.well-known/agent-card.json  one card
-POST /v1/agents/<name>/message:send                 submit; 202 + a task
-GET  /v1/tasks                                      recent tasks
-GET  /v1/tasks/<id>                                 one task
-POST /v1/tasks/<id>:cancel                          cancel if not started
-GET  /v1/workspaces                                 what can be bound
+GET  /health                    liveness, no token
+GET  /v1/agents                 which agents this server can run, as commands
+POST /v1/agents/<name>/run      submit; 202 + a task
+GET  /v1/tasks                  recent tasks
+GET  /v1/tasks/<id>             one task
+POST /v1/tasks/<id>:cancel      cancel if not started
+GET  /v1/workspaces             what can be bound
 ```
 
 Submitting work, end to end:
 
 ```bash
-curl -sS -X POST localhost:8080/v1/agents/code/message:send \
+curl -sS -X POST localhost:8080/v1/agents/code/run \
   -H "Authorization: Bearer $SERVE_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"text": "Read NOTES.md and do what the newest feedback asks for",
+  -d '{"task": "Read NOTES.md and do what the newest feedback asks for",
        "workspace": "closet_ai"}'
 ```
 
 ```json
-{"kind": "task", "id": "5f2c…", "contextId": "9a1b…",
- "status": {"state": "submitted", "timestamp": "2026-09-02T…"},
- "metadata": {"agent": "code", "workspace": "closet_ai",
-              "workdir": "/workspaces/closet_ai"}}
+{"id": "5f2c…", "agent": "code", "state": "queued",
+ "workspace": "closet_ai", "workdir": "/workspaces/closet_ai",
+ "request": "Read NOTES.md and do what the newest feedback asks for",
+ "output": "", "exitCode": null, "created": "2026-09-02T…"}
 ```
 
-Then poll `GET /v1/tasks/5f2c…` until `status.state` is one of the four
-terminal states. A completed coding task carries a `DataPart` naming what it
-did to the repository — branch, head, the commits it made and the files they
-touched — because **the deliverable of a coding task is a commit, and a caller
-that cannot name the commit cannot review it**. A completed exploration carries
-one `FilePart` per research note, exactly as the local transport already
-reported them ([16.5](16-agent-protocol.md)). A completed improvement pass
-carries one artifact per issue it moved, with the new status on it, and says in
-as many words when it moved none ([19](19-improvement-agent.md)).
+Then poll `GET /v1/tasks/5f2c…` until `state` is `done`, `failed` or
+`canceled`. `output` is everything the command printed, and it leads with the
+agent's **final message**, unabridged. After it comes what the command reports
+about itself: for a coding task, what git says moved — branch, the commits it
+made and the files they touched, or **"Nothing changed"** in as many words —
+because **the deliverable of a coding task is a commit, and a caller that cannot
+name the commit cannot review it**. An exploration lists the notes *this* run
+wrote; an improvement pass prints the ledger.
 
-`improve` is served unconditionally, unlike `explore`. What it needs is recorded
-runs in the *bound workspace*, and a workspace arrives with the task rather than
-existing at start-up — so the probe happens in its handler, and a workspace with
-nothing recorded in it comes back as a `rejected` task naming the command that
-would fix that, rather than as an agent missing from the directory.
-
-`text` is a shorthand for a full A2A `Message`, which is also accepted. The
-common call is one line of prose from a shell script, and making that spell out
-a parts array would be ceremony with no reader.
+`improve` is served whenever it is asked for. What it needs is recorded runs in
+the *bound workspace*, which arrives with the task — so a workspace with nothing
+recorded in it comes back as a `failed` task whose output is the command's own
+refusal, naming what would fix it.
 
 ## 18.3 Why submission does not block
 
@@ -92,23 +84,17 @@ synchronous `POST` that returns when the agent is finished is therefore not a
 simpler design that could be tightened later; it is a design that cannot be
 deployed at all.
 
-So `message:send` answers **202** with a `submitted` task and a `Location`
-header, and the caller polls. This is A2A's own shape — the spec has a task
-lifecycle precisely because agent work outlives a request — which is why the
-schema needed nothing added to express it.
-
-It is also why the blocking `message_send` on the local transport
-([protocol/local.py](../agent/protocol/local.py)) is *not* reused here. Same
-objects, same states, same order; different waiting. In-process a delegation
-happens inside the caller's tool call and there is no gap to poll across; over
-HTTP there is nothing else the gap could be.
+So `run` answers **202** with a `queued` task and a `Location` header, and the
+caller polls. A local delegation blocks instead
+([16.4](16-delegation.md#164-why-a-subprocess-costs-something-real)): an agent
+running another is idle until it returns, and there is no gap to poll across.
+Over HTTP there is nothing else the gap could be.
 
 **Cancel is honest about what it cannot do.** A queued task cancels properly. A
-*running* one does not: stopping it means interrupting a thread inside a
-provider call with a half-written commit and a half-appended ledger line, and a
-cancel that leaves a workspace in a state nobody can describe is worse than one
-that refuses. The task comes back still `working`, and the caller reads the
-state.
+*running* one does not: stopping it means killing an agent process with a
+half-written commit and a half-appended ledger line, and a cancel that leaves a
+workspace in a state nobody can describe is worse than one that refuses. The
+task comes back still `running`, and the caller reads the state.
 
 ## 18.4 Binding an agent to a repository or a filesystem
 
@@ -300,9 +286,6 @@ a laptop anywhere:
 ```bash
 curl -sS -H "Authorization: Bearer $SERVE_TOKEN" http://100.x.y.z:8080/health
 ```
-
-Set `PUBLIC_URL` to the same address so the agent cards advertise an endpoint
-that callers can actually reach ([18.2](#182-the-surface)).
 
 Three properties a forwarded port does not have:
 

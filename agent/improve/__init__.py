@@ -13,8 +13,8 @@ closing the issue when it did and reopening it when it comes back
 
 Two properties are load-bearing and both are inherited rather than invented:
 
-1. **It does not edit the harness.** The fix is delegated to `agent/code` over
-   the same A2A transport the coding agent uses to reach the explorer. The
+1. **It does not edit the harness.** The fix is delegated to `agent/code` by
+   running it, the same way the coding agent reaches the explorer. The
    agent that diagnoses is not the agent that changes the code, so the diff
    that lands is reviewable against a written diagnosis rather than being the
    only account of itself.

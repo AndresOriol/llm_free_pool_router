@@ -101,18 +101,20 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   a diagnosis written before it. An issue never closes because nobody looked
   ([19. The improvement agent](docs/19-improvement-agent.md)). **Unmeasured** —
   `IMPROVE_FIX=0` is the diagnose-only arm.
-- [agent/protocol](agent/protocol/) — how one agent asks another for work. The
-  vocabulary is [A2A](https://a2a-protocol.org)'s — `AgentCard`, `Task`,
-  `Message`, `Artifact` — and must not drift from it; the transport is a local
-  Python call, so a delegate shares its caller's cooldown and trace. The coding
-  agent gets one `delegate` tool and a directory of cards in its prompt; the
-  deliverable is still a file on disk that the protocol only points at
-  ([16. The agent protocol](docs/16-agent-protocol.md)). **Unmeasured** — it is
-  a configuration, and `AGENT_PEERS=` turns it off for the A/B.
+- [agent/delegation.py](agent/delegation.py) — how one agent asks another for
+  work: **it runs it.** Every agent is a command (`python -m agent.<name>
+  <workdir> --task "..."`) whose output leads with its final message, and the
+  coding agent already has `execute`, so delegation is a prompt paragraph naming
+  the commands — no protocol, no registry, no tool. A child gets the pool's keys
+  and hours rather than `pytest`'s 300s, and its own name removed from
+  `AGENT_PEERS` so it cannot call back. The deliverable is still a file or a
+  commit on disk ([16. Delegation](docs/16-delegation.md)). **Unmeasured** — it
+  is a configuration, and `AGENT_PEERS=` turns it off for the A/B.
 - [agent/serve](agent/serve/) — the agents as HTTP endpoints, for running this
-  in a container. A2A's methods over `http.server`: a caller POSTs a `Message`
-  to `/v1/agents/<name>/message:send`, gets **202** and a task id, and polls —
-  a run lasts hours and every platform in front kills a request in minutes.
+  in a container. The worker runs the same command a person types; a caller
+  POSTs `{"task", "workspace"}` to `/v1/agents/<name>/run`, gets **202** and a
+  task id, and polls — a run lasts hours and every platform in front kills a
+  request in minutes.
   What an agent is bound to is a workspace *name* resolved under one mounted
   root, never a path from the request, and the server clones a repository into
   a new one on request. Exactly one worker, because per-process cooldown and a
@@ -157,8 +159,7 @@ documents, so they go stale; a finding that outlives its artifact belongs in
 Quick pointers: [18. Serving](docs/18-serving.md) for the container and the
 endpoints, [4. Failover](docs/04-failover.md) for how the router works,
 [14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
-[16. The agent protocol](docs/16-agent-protocol.md) for agent-to-agent
-delegation, [19. The improvement agent](docs/19-improvement-agent.md) for the
+[16. Delegation](docs/16-delegation.md) for how one agent runs another, [19. The improvement agent](docs/19-improvement-agent.md) for the
 loop that turns recorded runs into fixes,
 [5. Providers](docs/05-providers.md) for accounts and limits,
 [12. Development harness](docs/12-development-harness.md) for which model tier

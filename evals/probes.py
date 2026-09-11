@@ -123,28 +123,17 @@ def _materialize(probe: Probe, root: Path) -> Path:
     return workdir
 
 
-def _stub_transport():
-    """A `code` peer that exists and does nothing.
-
-    The improvement agent only gets `delegate_fix` when a peer is reachable
-    ([agent/improve/tools.py](../agent/improve/tools.py)), so building it with
-    no transport removes the very tool the interesting probes are about --
-    `does-not-delegate-before-diagnosing` was asserting that an absent tool went
-    uncalled, which is true of every run and evidence about none.
-
-    The handler is a stub because a probe stops at the first decision and never
-    reaches a delegate's reply. What matters is that the schema is in front of
-    the model, so declining to use it is a choice.
-    """
-    from agent.code.a2a import CARD
-    from agent.protocol.local import LocalTransport
-    from agent.protocol.registry import AgentRegistry
-    from agent.protocol.types import Message, TaskState
-
-    registry = AgentRegistry()
-    registry.register(CARD, lambda task: task.advance(
-        TaskState.COMPLETED, Message.agent("(probe stub: nothing was done)")))
-    return LocalTransport(registry)
+# The peers a probed improvement pass is built with. Naming `code` is what puts
+# `delegate_fix` in front of the model: the tool exists only when that peer does
+# ([agent/improve/tools.py](../agent/improve/tools.py)), and a probe built
+# without it -- `does-not-delegate-before-diagnosing` -- was asserting that an
+# absent tool went uncalled, which is true of every run and evidence about none.
+#
+# Nothing is stubbed behind the name. A probe stops at the first decision and
+# never launches anything; what matters is that the schema is in front of the
+# model, so declining to use it is a choice
+# ([20. Probes](../docs/20-probes.md)).
+PROBE_PEERS = ("code",)
 
 
 def _build(probe: Probe, workdir: Path, model, floor: int, members: int):
@@ -152,7 +141,7 @@ def _build(probe: Probe, workdir: Path, model, floor: int, members: int):
     if probe.agent == "improve":
         from agent.improve.session import build_agent
         return build_agent(workdir, model, floor=floor, members=members,
-                           transport=_stub_transport())
+                           peers=PROBE_PEERS)
     from agent.code.session import build_agent
     return build_agent(workdir, model, floor=floor, members=members)
 

@@ -51,7 +51,7 @@ The adaptations, in full:
    the researcher return its findings in full and the orchestrator summarize
    the report it just wrote. Both were observed here: a run pays for its
    conclusions twice, once into the file that is the deliverable and once into
-   a message that is clipped before anyone reads it.
+   a message whose reader is about to open the file anyway.
 """
 
 from __future__ import annotations

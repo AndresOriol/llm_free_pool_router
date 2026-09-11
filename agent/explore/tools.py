@@ -60,7 +60,7 @@ DESCRIPTIONS = {
 # todo section ends "write your final answer in the message AFTER your last
 # `write_todos` call"; and the SDK preamble opens "The user can see your
 # responses and tool outputs in real time". The last two are the expensive ones
-# -- this agent's answer is a file, and nobody reads its closing message.
+# -- this agent's answer is a file, and its closing message only points at it.
 #
 # Imported rather than pasted, so an upstream rewording is caught by a test
 # instead of leaving half an edit nobody notices (tests/agent/test_explore.py).
