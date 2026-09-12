@@ -38,11 +38,14 @@ READ_TOOLS = {"read_url"}
 REFLECT_TOOLS = {"think_tool"}
 WRITE_TOOLS = {"write_file", "edit_file"}
 REQUEST_NOTE = "research_request.md"
-# Step 6's note: `review.md`, or `review-<topic>.md` when one about another
-# question is already in the directory (agent/explore/prompts/workflow.md). Matched
-# on the filename rather than the directory, because which directory a run
-# writes to is now named per run.
+# The research directory is a wiki (agent/explore/prompts/workflow.md), and each
+# run appends one entry to its log holding the request and the review. Older
+# runs saved the review as `review.md` or `review-<topic>.md`; those still
+# count. Matched on the filename, because the directory is named per run.
+LOG_NOTE = "log.md"
 REVIEW_NOTE = "review"
+# The wiki's own bookkeeping: none of it is a finding.
+BOOKKEEPING = (REQUEST_NOTE, LOG_NOTE, "index.md", "open-questions.md")
 
 # A note is a research deliverable; anything else the agent writes is scratch.
 _NOTE = re.compile(r"/research/.+\.md$", re.IGNORECASE)
@@ -165,18 +168,30 @@ def from_trace(events: list) -> dict:
         "ungrounded_searches": ungrounded,
         "notes_written": len(notes),
         "distinct_notes": len(set(notes)),
-        "reports": len([n for n in set(notes) if REQUEST_NOTE not in n]),
-        "saved_the_request": any(REQUEST_NOTE in n for n in notes),
+        "reports": len([n for n in set(notes) if not _is_bookkeeping(n)]),
         "searches_before_first_note": searches_before_first_note,
-        "reviewed": any(_is_review(path) for path in notes),
+        "logged": any(_is_log(path) or _is_review(path) for path in notes),
         "question_shaped_queries": sum(1 for q in queries
                                        if _looks_like_a_question(q)),
     }
 
 
+def _name(path: Optional[str]) -> str:
+    return (path or "").rsplit("/", 1)[-1].lower()
+
+
 def _is_review(path: Optional[str]) -> bool:
-    """Whether a written path is step 6's review note."""
-    return (path or "").rsplit("/", 1)[-1].lower().startswith(REVIEW_NOTE)
+    """Whether a written path is an older run's review note."""
+    return _name(path).startswith(REVIEW_NOTE)
+
+
+def _is_log(path: Optional[str]) -> bool:
+    """Whether a written path is the wiki's log, where the review now lives."""
+    return _name(path) == LOG_NOTE
+
+
+def _is_bookkeeping(path: Optional[str]) -> bool:
+    return _name(path) in BOOKKEEPING
 
 
 def vocabulary(events: list) -> str:
@@ -264,9 +279,9 @@ def check(events: list, *, budget: Optional[int] = None) -> list:
         "A run that dies holding everything in its head leaves nothing. The "
         "prompt asks for a file early and updates after.")
 
-    # `reports`, not `distinct_notes`: research_request.md records the question
-    # and answers nothing, so a run that saved it and stopped has left the next
-    # reader exactly as uninformed as one that wrote nothing.
+    # `reports`, not `distinct_notes`: the index, the log and the open questions
+    # record the research and answer nothing, so a run that wrote only those has
+    # left the next reader exactly as uninformed as one that wrote nothing.
     add("left a deliverable",
         m["reports"] > 0,
         f"{m['reports']} report(s) under /research",
@@ -294,24 +309,16 @@ def check(events: list, *, budget: Optional[int] = None) -> list:
             "retrieve again. Skipping it is how a run spends its whole budget "
             "confirming what its second search already said.")
 
-        # Step 6, and the one step whose absence is invisible in the output:
-        # an unreviewed report reads exactly like a reviewed one. Nothing in
-        # the harness forces it -- the prompt asks and this counts, which is
-        # the whole arrangement (docs/15-explorer.md#1554-the-review-at-the-end).
-        add("reviewed its own report against the request",
-            m["reviewed"] or m["reports"] == 0,
-            "wrote a review note" if m["reviewed"] else "no review note",
-            "A long report is not evidence that the question was answered. "
-            "Step 6 reads the request back, says item by item whether each was "
-            "answered, and corrects what the sources do not support.")
-
-        add("saved the request",
-            m["saved_the_request"],
-            "wrote /research/research_request.md"
-            if m["saved_the_request"] else "no research_request.md",
-            "Step 2 of the workflow. It makes the directory self-describing: "
-            "the next agent to open it can see what was asked, not only what "
-            "was answered.")
+        # Steps 6 and 7, and the ones whose absence is invisible in the output:
+        # an unreviewed page reads exactly like a reviewed one. Nothing in the
+        # harness forces them -- the prompt asks and this counts, which is the
+        # whole arrangement (docs/15-explorer.md#1554-the-review-at-the-end).
+        add("logged the run and its review",
+            m["logged"] or m["reports"] == 0,
+            "wrote to log.md" if m["logged"] else "no log entry",
+            "The log entry keeps what was asked and, item by item, whether it "
+            "was answered. Without it the next run cannot tell what this one "
+            "settled, and a long page is not evidence that it settled anything.")
 
     add("asked questions rather than keywords",
         m["searches"] == 0
