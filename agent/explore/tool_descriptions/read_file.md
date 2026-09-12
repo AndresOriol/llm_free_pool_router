@@ -5,8 +5,9 @@ and that is deliberate: exploring a project is the coding agent's job and every
 listing here would cost a model call out of a daily budget. Every path you can
 read reaches you already:
 
-- **Your own notes.** `research_status` lists everything under `/{research_dir}/`,
-  with each note's title and size. Call it when you need a path you do not have.
+- **The research wiki.** `research_status` lists everything under
+  `/{research_dir}/`, and `index.md` says what each page holds. Call it when you
+  need a path you do not have.
 - **Project files the request named.** A brief that wants you to read the code
   is expected to give the paths. If you need a file nobody named, say so in your
   findings rather than guessing at a path.
