@@ -249,15 +249,12 @@ def test_a_search_think_loop_passes():
     assert _named(rt.check(events))["reflected between searches"].ok
 
 
-def test_not_saving_the_request_fails():
-    events = _deep_search("what is x?") + _think() + _note()
-    assert not _named(rt.check(events))["saved the request"].ok
-
-
-def test_the_request_file_is_not_counted_as_a_report():
-    """It records the question, not an answer. A run that saved the request and
-    wrote nothing else has still left no findings."""
+def test_the_wiki_bookkeeping_is_not_counted_as_a_report():
+    """The request, the index, the log and the open questions record the
+    research, not an answer. A run that wrote only those has left no findings."""
     events = _request() + _deep_search("what is x?") + _think()
+    for name in ("index.md", "log.md", "open-questions.md"):
+        events += _note(f"/research/{name}")
     assert rt.from_trace(events)["reports"] == 0
     assert not _named(rt.check(events))["left a deliverable"].ok
 
@@ -277,38 +274,36 @@ def test_a_well_behaved_deep_run_fails_nothing():
     events = _request()
     for i in range(3):
         events += _deep_search(f"What is thing {i} used for?") + _think()
-    events += _note("/research/final_report.md") + _note("/research/review.md")
+    events += _note("/research/overview.md") + _note("/research/log.md")
     assert rt.failures(events) == [], [str(c) for c in rt.failures(events)]
 
 
-def test_a_report_nobody_read_back_is_a_failure():
-    """Step 6. An unreviewed report reads exactly like a reviewed one, which is
-    why its absence has to be counted rather than noticed."""
+def test_a_run_nobody_logged_is_a_failure():
+    """Steps 6 and 7. An unreviewed page reads exactly like a reviewed one, which
+    is why the log entry that holds the review has to be counted."""
     events = _request()
     for i in range(3):
         events += _deep_search(f"What is thing {i} used for?") + _think()
-    events += _note("/research/final_report.md")
+    events += _note("/research/overview.md")
 
-    checks = _named(rt.check(events))
-    assert not checks["reviewed its own report against the request"].ok
-    assert not rt.from_trace(events)["reviewed"]
+    assert not _named(rt.check(events))["logged the run and its review"].ok
+    assert not rt.from_trace(events)["logged"]
 
 
-def test_a_run_that_wrote_nothing_is_not_asked_to_review_it():
+def test_a_run_that_wrote_nothing_is_not_asked_to_log_it():
     """No deliverable is already a failure of its own; a second FAIL for not
-    reviewing the report it never wrote measures the same thing twice."""
+    logging the pages it never wrote measures the same thing twice."""
     events = _request() + _deep_search("what is x?") + _think()
-    assert _named(rt.check(events))[
-        "reviewed its own report against the request"].ok
+    assert _named(rt.check(events))["logged the run and its review"].ok
 
 
-def test_a_review_named_around_a_collision_still_counts():
-    """The prompt allows `review-<topic>.md` when a review about another
-    question is already in the directory."""
+def test_an_older_runs_review_note_still_counts():
+    """Before the wiki, the review was its own file, `review.md` or
+    `review-<topic>.md`. Those traces still score against what they were told."""
     events = _request() + _deep_search("What is x used for?") + _think()
     events += (_note("/research/final_report-cv.md")
                + _note("/research/review-cv.md"))
-    assert rt.from_trace(events)["reviewed"]
+    assert rt.from_trace(events)["logged"]
 
 
 def test_each_agent_is_scored_against_the_budget_its_own_prompt_set():

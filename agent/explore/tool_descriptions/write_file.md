@@ -11,7 +11,7 @@ Usage:
   that dies having written two notes leaves two notes.
 - **This replaces the whole file.** Writing to a path that already exists
   destroys what was there. `research_status` says what exists; choose an unused
-  path for a new topic, and use `edit_file` to extend a note you already wrote.
+  path for a new subject, and use `edit_file` to extend a page that exists.
 - Keep every claim next to the URL it came from. A figure whose source cannot be
   found in the file is the failure this agent exists to avoid.
 - Say what you could not establish. An explicit "not found" is a result; silence

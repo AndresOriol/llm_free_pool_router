@@ -78,10 +78,12 @@ AGENTS = {
         "commits on a branch — read the diff, not the closing message"),
     "explore": (
         "agent.explore",
-        "Researches the open web and writes a cited report to "
-        "`/research/final_report.md`. It reads whole pages, not search "
-        "snippets; it cannot run or change this project.",
-        "markdown notes under `/research` — read them with your file tools"),
+        "Researches the open web and keeps what it finds in a cited research "
+        "wiki under `/research`: `index.md` is the map, `overview.md` the "
+        "synthesis, `open-questions.md` what is not settled yet. Ask it a "
+        "question, or to expand what is open. It reads whole pages, not "
+        "search snippets; it cannot run or change this project.",
+        "markdown pages under `/research` — start at `index.md`"),
     "improve": (
         "agent.improve",
         "Reads the runs this project's agents have recorded, names what keeps "

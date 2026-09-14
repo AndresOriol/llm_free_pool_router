@@ -36,3 +36,8 @@ evals/results/reviews/*
 ui/node_modules/
 ui/dist/
 .ui_data/
+
+# Research output: the wiki an explore run maintains, not source. An agent
+# writes it, the next run rewrites it, and it is only ever read on disk -- the
+# repository carries what an agent is *told*, never what one produced.
+/research/

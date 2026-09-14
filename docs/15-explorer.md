@@ -269,10 +269,33 @@ seam where "list the paths" becomes "say what state the research is in" without
 touching a prompt.
 
 The reasons it exists at all are unchanged: the orchestrator has to know whether
-a `final_report.md` about someone else's question is sitting there before it
-writes over it ([15.8.2](#1582-what-this-pool-forced-us-to-change)), parallel
-researchers must not choose the same filename, and after summarization a note
-written an hour ago is nowhere in the conversation but is still on disk. An empty
+there is earlier research to continue before it writes
+([15.8.2](#1582-what-this-pool-forced-us-to-change)), parallel researchers must
+not choose the same filename, and after summarization a note written an hour
+ago is nowhere in the conversation but is still on disk.
+
+**What is in it is a wiki, not a report.** A one-shot report answers one
+question and leaves the next run nothing to extend but a file to overwrite. So
+the directory follows the
+[LLM-Wiki-Template](https://github.com/IvanKRZ/LLM-Wiki-Template) shape, cut to
+what an unattended agent with no `grep` can keep
+([prompts/workflow.md](../agent/explore/prompts/workflow.md)):
+
+| file | what it holds |
+| --- | --- |
+| `index.md` | every page, one line each — the map a run reads first |
+| `overview.md` | the synthesis across pages, linking rather than repeating them |
+| `open-questions.md` | the frontier: why each question matters, what would settle it |
+| `log.md` | one appended entry per run: the request, the pages touched, the review |
+| `<subject>.md` | one subject per page: findings with links, contradictions, open questions, related pages |
+
+The rule that carries over whole is the template's sourcing rule: every claim
+carries its link, is marked as inference, or sits under open questions. What
+does not carry over is its human gate — the template never files an answer or
+fixes a lint finding without asking, and nobody is here to ask. A request to
+"expand" or "continue" is answered from `open-questions.md`, which is what makes
+a second run a continuation rather than a second report. A directory holding
+notes from before this shape is indexed first and kept as pages, not rewritten. An empty
 directory says so rather than returning nothing: "nothing is written yet" is the
 state in which a crash costs the whole run
 ([15.8.3](#1583-what-it-costs-and-what-was-given-up)).
@@ -322,15 +345,18 @@ character count, not from a result.
 
 ### 15.5.4 The review at the end
 
-*Step 6 of the workflow, and the only step whose absence is invisible in the
-output: an unreviewed report reads exactly like a reviewed one.*
+*Steps 6 and 7 of the workflow, and the only ones whose absence is invisible in
+the output: an unreviewed page reads exactly like a reviewed one.*
 
-The run does not end when the report is written. It ends when the agent has read
-the request back off disk, read the report it saved, and answered **one question
-per thing the request asked for** — answered, partly, or not answered, naming
-the section that answers it — corrected what it found with `edit_file`, and
-saved that account as `/research/review.md`
-([prompts/workflow.md](../agent/explore/prompts/workflow.md)).
+The run does not end when the pages are written. It ends when the agent has
+read the request again, read what it wrote, and answered **one question per
+thing the request asked for** — answered, partly, or not answered, naming the
+page and section that answers it — checked that the index and the links still
+hold, corrected what it found with `edit_file`, and appended that account to
+`log.md` ([prompts/workflow.md](../agent/explore/prompts/workflow.md)). The log
+entry is also where the request is kept: an earlier version saved the request
+and the review as files of their own, which a wiki visited by many runs would
+collect one pair of per run.
 
 Three things about the shape of it:
 
@@ -358,13 +384,13 @@ because a Python function noticed is a run whose operator has to read Python to
 know what the agent does.
 
 So the system prompt says it instead, in the place a model reads before it
-decides it is finished: the review is the last thing you do, the report being
-written is step 5 and not the end, and *if you are about to write a final
-message and there is no review note, you are not finished*
+decides it is finished: the review and the log entry are the last things you
+do, the pages being written is not the end, and *if you are about to write a
+final message and `log.md` has no entry for this run, you are not finished*
 ([prompts/system.md](../agent/explore/prompts/system.md)).
 
-**And it is counted.** `research_trajectory` gains one check: that a review note
-was written
+**And it is counted.** `research_trajectory` has one check for it: that the log
+was written to — or, in a trace from before the wiki, a review note
 ([research_trajectory.py](../evals/research_trajectory.py)). That is the whole
 arrangement: **the prompt asks, and the eval counts.** If runs keep shipping
 without a review the check says so, and the answer is better words — or, if

@@ -497,10 +497,10 @@ def test_a_named_research_directory_reaches_prompts_and_tools(tmp_path):
     _invoke(tmp_path, research_dir="research/cv-spain")
 
     text = _Recorder.system[0]
-    assert "/research/cv-spain/final_report.md" in text
+    assert "`/research/cv-spain/` is a wiki" in text
     # Nothing may still point at the default, or the agent writes to two places;
     # and nothing may be substituted twice.
-    assert "/research/final_report.md" not in text
+    assert "`/research/` is a wiki" not in text
     assert "cv-spain/cv-spain" not in text
     assert "/research/cv-spain/" in _Recorder.described["write_file"]
     assert (tmp_path / "research" / "cv-spain").is_dir()
@@ -516,20 +516,29 @@ def test_a_continued_investigation_sees_what_the_last_run_left(tmp_path):
     assert "/research/cv-spain/retail.md" in _status(tmp_path, "research/cv-spain")
 
 
-# --- step 6: the review, which only the prompt asks for ---------------------
+# --- steps 6 and 7: the review and the log, which only the prompt asks for ---
 
 
-def test_the_prompt_makes_the_review_the_last_thing_it_does():
+def test_the_prompt_makes_the_review_and_the_log_the_last_things_it_does():
     """There is no code behind this. The system prompt says a run is not
-    finished until the request has been read back and the review written, and
+    finished until the request has been read back and the log entry written, and
     the workflow says what the review has to establish -- so these sentences
     are the whole mechanism (docs/15-explorer.md#1554-the-review-at-the-end)."""
     text = _flat(_orchestrator())
 
-    assert "The last thing you do is the review" in text
-    assert "If you are about to write a final message and there is no review "\
-           "note, you are not finished" in text
-    assert "Reviewing your own output" in text
+    assert "The last things you do are the review and the log entry" in text
+    assert "If you are about to write a final message and `log.md` has no "\
+           "entry for this run, you are not finished" in text
+    assert "Reviewing your own work" in text
     assert "was this one answered" in text.lower()
-    assert "/research/review.md" in text
-    assert "correct what you find, with edit_file" in text.lower()
+    assert "correct what you find with edit_file" in text.lower()
+
+
+def test_the_prompt_describes_a_wiki_the_next_run_can_continue():
+    """A research directory is expanded by later runs, so the prompt names the
+    files a run starts from and the ones it must leave current."""
+    text = _flat(_orchestrator())
+
+    for name in ("index.md", "overview.md", "open-questions.md", "log.md"):
+        assert f"`{name}`" in text
+    assert "answered from `open-questions.md`" in text
