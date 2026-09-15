@@ -285,3 +285,82 @@ def test_skills_cost_no_tool():
     names = set(getattr(node, "bound", node).tools_by_name)
     assert names == {"ls", "read_file", "write_file", "edit_file", "glob",
                      "grep", "execute", "write_todos", "task"}
+
+
+# --- The project's own memory file ---------------------------------------------
+
+
+def _system_prompt_of_a_run(workdir) -> str:
+    """The system message the model is actually sent, for a run over `workdir`.
+
+    The memory file is loaded by middleware `before_agent`, not by
+    `build_agent`, so nothing short of starting the graph proves it arrived.
+    """
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    seen = []
+
+    class _Capture(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, messages, *args, **kwargs):
+            seen.append(messages)
+            return super()._generate(messages, *args, **kwargs)
+
+    model = _Capture(messages=iter([AIMessage(content="done")]))
+    code.build_agent(workdir, model).invoke({"messages": [HumanMessage("hi")]},
+                                            {"recursion_limit": 10})
+    return str(seen[0][0].content)
+
+
+def test_the_memory_file_is_read_from_the_workspace(tmp_path: Path):
+    """What the agent is told about the project is the *project's* file. The
+    workspace is usually not this repository, so this is some other project
+    speaking, and the path is the one the agent could open itself."""
+    (tmp_path / "AGENTS.md").write_text("Never touch vendor/.\n", encoding="utf-8")
+
+    assert code.memory_file(tmp_path) == ["/AGENTS.md"]
+    assert "Never touch vendor/." in _system_prompt_of_a_run(tmp_path)
+
+
+def test_only_one_memory_file_is_read_when_a_project_has_both(tmp_path: Path):
+    """A repository holding both holds two drafts of one document. Loading
+    both pays for the overlap twice and leaves the model to work out which
+    draft is current -- so the first match wins and the other is not read."""
+    (tmp_path / "AGENTS.md").write_text("the current one\n", encoding="utf-8")
+    (tmp_path / "CLAUDE.md").write_text("the stale one\n", encoding="utf-8")
+
+    assert code.memory_file(tmp_path) == ["/AGENTS.md"]
+    prompt_text = _system_prompt_of_a_run(tmp_path)
+    assert "the current one" in prompt_text
+    assert "the stale one" not in prompt_text
+
+
+def test_a_project_that_only_wrote_a_claude_md_still_has_a_memory_file(tmp_path: Path):
+    """`AGENTS.md` is the spec, but most projects that wrote instructions for
+    an agent wrote them for Claude Code. Preferring one is not requiring it."""
+    (tmp_path / "CLAUDE.md").write_text("Run `pytest -q`.\n", encoding="utf-8")
+
+    assert code.memory_file(tmp_path) == ["/CLAUDE.md"]
+    assert "Run `pytest -q`." in _system_prompt_of_a_run(tmp_path)
+
+
+def test_a_workspace_with_neither_is_told_nothing_about_memory(tmp_path: Path):
+    """The section is a fact about the workspace, not a fixed part of the
+    prompt: with no file there is no middleware and nothing is charged."""
+    assert code.memory_file(tmp_path) == []
+    assert "<agent_memory>" not in _system_prompt_of_a_run(tmp_path)
+
+
+def test_the_memory_section_is_ours_not_the_frameworks(tmp_path: Path):
+    """deepagents' default is ~4,500 characters about a user to ask, to learn
+    preferences from and to be interrupted by. Nobody is watching this run, and
+    it is charged on every call ([6.6](../../docs/06-agent.md#66-skills) makes
+    the same argument for the skills section)."""
+    (tmp_path / "AGENTS.md").write_text("Never touch vendor/.\n", encoding="utf-8")
+
+    prompt_text = _system_prompt_of_a_run(tmp_path)
+    assert "memory_guidelines" not in prompt_text, "the framework's default"
+    assert "What this project asks of you" in prompt_text

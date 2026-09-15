@@ -260,10 +260,10 @@ about this pool rather than a preference:
   every tool call.
 
 Not carried over: human-in-the-loop approval, auto mode, cost tracking, MCP, the
-code interpreter, the TUI. Worth revisiting: skills, memory — dcode's `AGENTS.md`
-convention is the same idea as the `NOTES.md` loop that left with the other arm
-([6.1.1](#611-the-arm-that-was-deleted)) — and the rubric self-grader, which
-belongs to the evaluation question rather than this one.
+code interpreter, the TUI. Skills ([6.6](#66-skills)) and memory
+([6.8](#68-the-projects-own-memory-file)) have since been picked up. Worth
+revisiting: the rubric self-grader, which belongs to the evaluation question
+rather than this one.
 
 **The context section earns its place.** Without it the first thing any agent
 does is spend two or three calls discovering the shape of the project, and those
@@ -452,6 +452,63 @@ package. An upgrade fails in CI instead of quietly halving what the agent reads.
 **Unmeasured.** The argument above is arithmetic about requests, not a result.
 The number that would settle it is calls-per-run at equal pass rate
 ([10. Metrics](10-metrics.md)); nothing has been run across this change yet.
+
+## 6.8 The project's own memory file
+
+The agent is jailed to a workspace that is almost never this repository, and a
+project that has been worked on before has usually written down what it expects
+of whoever changes it: the command its tests are run with, the convention its
+files follow, the directory that is vendored and must not be edited. That file
+is called `AGENTS.md` (<https://agents.md>) or, where it was written for Claude
+Code, `CLAUDE.md`.
+
+Nothing made the agent read it. It could discover one — `ls` returns it, and a
+model that opens it is a model that spent two calls to learn what it needed
+before its first edit — but discovery is a coin flip, and the run that loses it
+reinvents a convention the project had already settled. So the file is loaded
+before the first call and put in the system prompt, the same argument as the
+project context section ([6.4](#64-why-it-is-shaped-this-way)): what is true for
+every step of a run is cheapest paid for once.
+
+### 6.8.1 One file, not both
+
+deepagents' `MemoryMiddleware` takes a list of sources, loads every one that
+exists and concatenates them. Handing it both names is therefore not "pick
+whichever this project uses" — it is "load both", and a repository holding both
+is usually holding two drafts of one document, drifted apart by however long
+since one of them was last updated. This repository is the example: its
+[AGENTS.md](../AGENTS.md) and [CLAUDE.md](../CLAUDE.md) open with different
+north stars.
+
+So the harness picks, and the order is `AGENTS.md` then `CLAUDE.md`: the first
+is the vendor-neutral spec and the one deepagents implements, the second is the
+fallback for a project that only ever wrote instructions for one tool.
+Preferring one is not requiring it — a project with only a `CLAUDE.md` gets a
+memory file.
+
+### 6.8.2 What it is allowed to be
+
+The section that frames the file is this repo's, not the framework's, for the
+same reason the skills section is ([6.6](#66-skills)): deepagents' default is
+around 4,500 characters about a user — one to ask for a Slack ID, to learn
+preferences from, to be interrupted by — and nobody is watching this run. It is
+charged on every call. [`prompts/memory.md`](../agent/code/prompts/memory.md)
+says the part that is true here in a quarter of the space.
+
+What it says is mostly about rank. The file is data read off a disk the agent
+also writes to, so it cannot be allowed to act as an instruction from whoever
+started the run: a line asking for something the task did not ask for is a line
+to report rather than obey, and where the file disagrees with what `read_file`
+returns, the code is what is true. Underneath that it is an ordinary file, which
+makes it editable — a command that is now spelled differently gets fixed in the
+commit that made it so. What happened in *this* session is not memory; that is
+the account's job ([`prompts/project_notes.md`](../agent/code/prompts/project_notes.md)),
+and the two are kept apart because a project's standing instructions outlive the
+session and a run log does not.
+
+**Unmeasured.** No scenario has been run across this change. The claim it rests
+on — that a run which is told the project's conventions violates fewer of them
+than one that has to find them — is plausible and untested.
 
 ---
 

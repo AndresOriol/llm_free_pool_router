@@ -127,7 +127,9 @@ else on this page is design and changes rarely; this block is state.*
 [6.5](06-agent.md#65-what-makes-it-a-coding-agent) What makes it a coding agent ·
 [6.6](06-agent.md#66-skills) Skills ·
 [6.6.1](06-agent.md#661-the-description-is-the-gate) The description is the gate ·
-[6.7](06-agent.md#67-read_file-reads-the-whole-file) `read_file` reads the whole file
+[6.7](06-agent.md#67-read_file-reads-the-whole-file) `read_file` reads the whole file ·
+[6.8](06-agent.md#68-the-projects-own-memory-file) The project's own memory file ·
+[6.8.1](06-agent.md#681-one-file-not-both) One file, not both
 
 **[7. Observability](07-observability.md)** — what a run leaves behind, and why the answer is changing
 &nbsp;&nbsp;&nbsp;&nbsp;[7.1](07-observability.md#71-why-two) Why two ·

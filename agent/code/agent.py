@@ -31,6 +31,8 @@ Every call carries:
 - one line per skill: its name and a sentence saying when it applies. The body
   is a file the model reads with `read_file` if the moment comes, so a long
   procedure costs a line per step instead of its full length;
+- the workspace's own memory file -- its `AGENTS.md` or `CLAUDE.md`, whole --
+  when it has one (`memory_file`, and `prompts/memory.md` for how it is framed);
 - the conversation so far. The framework summarizes it when it grows too long.
 
 `task` starts a `general-purpose` sub-agent with the framework's own short
@@ -132,6 +134,20 @@ ALLOWED_PROGRAMS = ("python", "python3", "py", "pytest", "git")
 # ([6.6](../../docs/06-agent.md#66-skills)).
 SKILLS_DIR = HERE / "skills"
 SKILLS_ROOT = "/skills/"
+
+# Memory: the project's standing instructions to whoever changes it, read from
+# the workspace root and injected into the system prompt by deepagents'
+# `MemoryMiddleware`. Not a skill -- there is no moment it applies to, it is
+# true for every step of every run -- and not this repo's own CLAUDE.md: the
+# workspace is usually some other project, and this is that project speaking.
+#
+# `AGENTS.md` first because it is the vendor-neutral spec (<https://agents.md>)
+# and the one deepagents implements; `CLAUDE.md` is the fallback for a project
+# that only ever wrote one for Claude Code. First match wins, and the other is
+# not read: a repository holding both holds two drafts of one document, and
+# loading both would pay for the overlap twice and leave the model to guess
+# which draft is current.
+MEMORY_FILES = ("AGENTS.md", "CLAUDE.md")
 
 # Two prompt sections, each on by default so it is a configuration an A/B
 # can measure. `=0` leaves the file out: that is the other arm.
@@ -275,6 +291,24 @@ def tree(workdir: Path, max_entries: int = MAX_ENTRIES,
     return "\n".join(lines)
 
 
+def memory_file(workdir: Path) -> list[str]:
+    """The workspace's memory file as `MemoryMiddleware` sources, or `[]`.
+
+    Jail-relative, because that is the only path the agent could open it at
+    itself: the backend's root is the workdir, so `/AGENTS.md` is what both the
+    middleware's `download_files` and the model's `read_file` resolve.
+
+    Probed on the host rather than through the backend because the answer picks
+    *one* of the candidates, and `MemoryMiddleware` has no preference -- it
+    loads every source that exists and concatenates them.
+    """
+    workdir = Path(workdir)
+    for name in MEMORY_FILES:
+        if (workdir / name).is_file():
+            return ["/" + name]
+    return []
+
+
 def project_section(workdir: Path) -> str:
     """The `### Project` section, or '' when there is nothing to say."""
     workdir = Path(workdir)
@@ -312,6 +346,7 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
     """
     from deepagents import create_deep_agent
     from deepagents.backends.composite import CompositeBackend
+    from deepagents.middleware.memory import MemoryMiddleware
     from deepagents.middleware.skills import SkillsMiddleware
     from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 
@@ -356,6 +391,20 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
             # like every other (`prompts/skills.md`). Read rather than
             # `fill`ed: its three placeholders are the middleware's to fill.
             system_prompt=(HERE / "prompts" / "skills.md").read_text(
+                encoding="utf-8")))
+
+    # The project's own instructions, if it wrote any. Installed as middleware
+    # rather than passed as `memory=` for the reason the skills prompt is: the
+    # framework's default section is ~4,500 characters of guidance about a user
+    # to ask, to learn preferences from and to be interrupted by, and nobody is
+    # watching this run. `prompts/memory.md` says the part that is true here,
+    # in a quarter of the space. Read rather than `fill`ed -- the middleware
+    # owns its one `{agent_memory}` placeholder.
+    sources = memory_file(workdir)
+    if sources:
+        middleware.append(MemoryMiddleware(
+            backend=backend, sources=sources,
+            system_prompt=(HERE / "prompts" / "memory.md").read_text(
                 encoding="utf-8")))
 
     built = create_deep_agent(

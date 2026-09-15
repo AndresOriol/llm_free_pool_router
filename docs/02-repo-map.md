@@ -52,7 +52,7 @@ explorer, it is two Python files and a directory of Markdown.
 | File | The question it answers |
 | --- | --- |
 | [agent.py](../agent/code/agent.py) | *How is it built?* — the whole harness, top to bottom: the step budget and the programs `execute` runs, the templating that fills the prompt, the project section it starts with, `create_deep_agent` over the jailed shell, and one run with its wrap-up |
-| [prompts/](../agent/code/prompts/) | *What is it told?* — `system.md`, the ported prompt; the two sections a run can switch off (`contradicted_requests.md`, `project_notes.md`); and `wrap_up.md`, what a run that spends its budget is told |
+| [prompts/](../agent/code/prompts/) | *What is it told?* — `system.md`, the ported prompt; the two sections a run can switch off (`contradicted_requests.md`, `project_notes.md`); `wrap_up.md`, what a run that spends its budget is told; and the two sections the framework would otherwise write for us (`skills.md`, `memory.md`) |
 | [`__main__.py`](../agent/code/__main__.py) | CLI: workdir as an argument, task on stdin; prints the final message, then what git says moved |
 
 `agent/explore/` is the **web explorer**: the same loop and the same jail, with
