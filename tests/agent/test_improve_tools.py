@@ -193,6 +193,70 @@ class TestReadOnly:
         assert ReadOnlyMiddleware().wrap_tool_call(
             self._Request("read_file"), lambda r: "contents") == "contents"
 
+    def test_the_task_subagent_cannot_write_either(self, tmp_path):
+        """The boundary has to be installed twice, and this is the second time.
+
+        deepagents adds a `general-purpose` subagent for `task` unless one is
+        passed, and builds it a *fresh* middleware stack: `FilesystemMiddleware`
+        over the same backend, and nothing of `build_agent`'s `middleware=`.
+        So `task` was a `write_file` into this repository that the parent
+        refuses -- the one thing this agent claims it cannot do.
+
+        Asserted end to end rather than by inspecting the spec, because what
+        went wrong was a stack assembled inside the library: only the file
+        staying absent proves the refusal reached that far.
+        """
+        from langchain_core.language_models.chat_models import BaseChatModel
+        from langchain_core.messages import AIMessage, HumanMessage
+        from langchain_core.outputs import ChatGeneration, ChatResult
+
+        from agent.improve.agent import build_agent
+
+        calls = {"task": 0, "write": 0}
+
+        class Scripted(BaseChatModel):
+            """Parent delegates to `task`; the subagent tries one write."""
+
+            @property
+            def _llm_type(self):
+                return "scripted"
+
+            def bind_tools(self, tools, **kwargs):
+                object.__setattr__(self, "_names", {
+                    t.name if hasattr(t, "name") else t["name"] for t in tools})
+                return self
+
+            def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+                names = getattr(self, "_names", set())
+                text = " ".join(str(getattr(m, "content", "")) for m in messages)
+                parent = "PARENT-TURN" in text
+                if not parent and calls["write"] == 0 and "write_file" in names:
+                    calls["write"] += 1
+                    call = {"name": "write_file",
+                            "args": {"file_path": "/escaped.txt",
+                                     "content": "the subagent wrote this"},
+                            "id": "w1"}
+                elif parent and calls["task"] == 0 and "task" in names:
+                    calls["task"] += 1
+                    call = {"name": "task",
+                            "args": {"description": "write /escaped.txt",
+                                     "subagent_type": "general-purpose"},
+                            "id": "t1"}
+                else:
+                    call = None
+                message = (AIMessage(content="", tool_calls=[call]) if call
+                           else AIMessage(content="done"))
+                return ChatResult(generations=[ChatGeneration(message=message)])
+
+        (tmp_path / "evals" / "results" / "runs").mkdir(parents=True)
+        agent = build_agent(tmp_path, Scripted(), peers=())
+        agent.invoke({"messages": [HumanMessage("PARENT-TURN")]},
+                     {"recursion_limit": 30})
+
+        assert calls["task"] == 1, "the parent never reached `task`"
+        assert calls["write"] == 1, "the subagent never tried to write"
+        assert not (tmp_path / "escaped.txt").exists()
+
 
 class TestStaleEvidence:
     """The guard the first live pass needed and did not have.

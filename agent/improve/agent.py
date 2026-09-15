@@ -183,8 +183,10 @@ class ReadOnlyMiddleware(AgentMiddleware):
     The ledger needs no hole in it: `write_issue` writes through Python, not
     through the filesystem tools.
 
-    Known gap: the `general-purpose` sub-agent the framework adds for `task`
-    gets the framework's middleware only, so this does not reach it.
+    This has to be installed twice. The framework adds a `general-purpose`
+    sub-agent for `task` and builds it its own middleware stack, so the
+    sub-agent held a `write_file` into this repository until `build_agent`
+    started passing the spec itself.
     """
 
     def _refusal(self, request) -> Optional[ToolMessage]:
@@ -218,6 +220,7 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
     building a drafted scenario. They become tools, not a prompt paragraph.
     """
     from deepagents import create_deep_agent
+    from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 
     from agent.runtime.backend import RestrictedShellBackend
 
@@ -238,6 +241,16 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
                                        allowed_programs=(), allow_git=True,
                                        allow_shell=False),
         middleware=middleware,
+        # The same boundary, one level down. deepagents adds a `general-purpose`
+        # subagent on its own unless one is passed, and it builds that one a
+        # fresh middleware stack -- `FilesystemMiddleware` over *this* backend,
+        # and nothing of `middleware=` above. So `task` handed the model a
+        # `write_file` into this repository that the parent refuses, which is
+        # the one thing this agent claims it cannot do. Passing the spec is how
+        # the library documents overriding the default, and `middleware` on it
+        # is carried through to the subagent
+        # ([the deepagents skill](../../.claude/skills/deepagents/SKILL.md)).
+        subagents=[{**GENERAL_PURPOSE_SUBAGENT, "middleware": middleware}],
     )
 
 
