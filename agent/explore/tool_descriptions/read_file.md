@@ -15,8 +15,9 @@ read reaches you already:
 Usage:
 - Paths are absolute within this workspace: `/{research_dir}/pricing.md`,
   `/llm_router/config.yaml`. There is no filesystem above `/`.
-- Reads the first 100 lines by default. Pass `offset` and `limit` to page
-  through a long file rather than pulling all of it into the conversation.
+- Reads the WHOLE file by default, which is what you normally want: one call,
+  and you have the page. `offset` and `limit` take a window out of a file too
+  long to hold; `offset` is 0-based, so the line printed as 148 is `offset=147`.
 - Output is `cat -n` style, one line number per source line.
 - You must read a file before `edit_file` will change it.
 - Re-reading a file you already read costs a request and tells you nothing new.

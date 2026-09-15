@@ -83,14 +83,21 @@ read_file("/a.py") → wait → read_file("/b.py") → wait
 
 ## File Reading
 
-Use pagination so a large file cannot flood your context.
+`read_file` gives you the whole file. Read it in one call and work from what it
+says — do not scan the first hundred lines and then ask again for the rest. A
+second call to the same file costs a whole request against the daily quota and
+re-sends the entire conversation to get it.
 
-1. First scan: `read_file(file_path="...", limit=100)` — structure and key sections.
-2. Targeted read: `read_file(file_path="...", offset=100, limit=200)`.
-3. Full read: only when the file is small, or you are about to edit it.
+Two exceptions, and only two:
 
-Paginate any file over 500 lines, and always start at `limit=100` in an
-unfamiliar codebase.
+- the result comes back marked truncated — then read the part you need with
+  `read_file(file_path="...", offset=<n>, limit=<n>)`. `offset` is 0-based
+  and the printed line numbers are 1-based, so line 148 is `offset=147`;
+- you already know which lines you want, because `grep` told you.
+
+Before reading an unfamiliar tree, `glob` and `grep` to decide *which* files are
+worth a call. Choosing the right file is what saves requests; reading half of
+one is not.
 
 ## Verification
 
