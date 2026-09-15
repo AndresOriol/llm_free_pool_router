@@ -11,18 +11,6 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage, ToolMessage
 
 from agent.code import agent as code
-from agent.utils.shell import ShellAllowListMiddleware
-
-
-class _Request:
-    """The bit of ToolCallRequest the middleware actually reads."""
-
-    def __init__(self, name, args):
-        self.tool_call = {"name": name, "args": args, "id": "call_1"}
-
-
-def _refuse(middleware, command):
-    return middleware._refusal(_Request("execute", {"command": command}))
 
 
 def _prompt(floor=128_000, members=0, programs=()):
@@ -42,12 +30,15 @@ def test_prompt_states_the_floor_not_a_model_name():
     assert "pool of models" in text
 
 
-def test_prompt_roots_paths_at_the_jail():
+def test_prompt_roots_the_file_tools_at_the_workspace():
     # The backend runs virtual_mode=True, so telling the model to build host
-    # paths -- which is what dcode's prompt does -- would fail every tool call.
+    # paths for the *file tools* -- which is what dcode's prompt does -- would
+    # fail every one of those calls. `execute` is the host shell and is told so
+    # separately, because saying `/` is all it can reach would be false.
     text = _prompt()
     assert "rooted at `/`" in text
-    assert "C:\\Users\\..." in text
+    assert "absolute *within the project*" in text
+    assert "`execute` runs in the project directory" in text
 
 
 def test_prompt_forbids_editing_the_thing_that_contradicts_the_task(monkeypatch):
@@ -141,40 +132,14 @@ def test_the_account_rule_is_a_configuration_that_can_be_turned_off(monkeypatch)
     assert not re.findall(r"\{[a-z_]+\}", text)
 
 
-def test_shell_allows_an_allowlisted_program():
-    middleware = ShellAllowListMiddleware(["python", "pytest"])
-    assert _refuse(middleware, "python -m pytest -q") is None
+def test_the_prompt_does_not_claim_the_shell_is_confined(tmp_path):
+    """`execute` is the host shell. A prompt that says otherwise is a promise
+    the harness cannot keep, and the model plans around promises."""
+    text = code.system_prompt(code.template_values())
 
-
-def test_shell_refuses_an_unlisted_program():
-    middleware = ShellAllowListMiddleware(["python"])
-    message = _refuse(middleware, "rm -rf /")
-    assert isinstance(message, ToolMessage)
-    assert message.status == "error"
-    # The refusal has to say what *is* allowed, or the model's next step is a
-    # guess -- the whole reason this returns a message instead of raising.
-    assert "python" in message.content
-
-
-def test_shell_refuses_a_program_named_by_path():
-    middleware = ShellAllowListMiddleware(["python"])
-    message = _refuse(middleware, "./evil.sh")
-    assert isinstance(message, ToolMessage)
-    assert "bare" in message.content
-
-
-def test_shell_ignores_tools_that_are_not_execute():
-    middleware = ShellAllowListMiddleware(["python"])
-    assert middleware._refusal(_Request("read_file", {"file_path": "/a.py"})) is None
-
-
-def test_shell_rejects_an_empty_allow_list():
-    # An empty list would refuse everything while reading like a policy.
-    try:
-        ShellAllowListMiddleware([])
-    except ValueError:
-        return
-    raise AssertionError("expected ValueError")
+    assert "`/` is all you can reach" not in text
+    assert "Nothing else runs at all" not in text
+    assert "Stay inside the project" in text
 
 
 def test_tree_skips_caches_and_dotfiles(tmp_path: Path):

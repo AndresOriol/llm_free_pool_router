@@ -309,7 +309,7 @@ class Server(ThreadingHTTPServer):
         self.token = token
 
 
-def build(host: str, port: int, *, floor: int, allow_shell: bool, record_dir,
+def build(host: str, port: int, *, floor: int, record_dir,
           token: Optional[str]) -> Server:
     """The server, with its worker already running.
 
@@ -317,5 +317,5 @@ def build(host: str, port: int, *, floor: int, allow_shell: bool, record_dir,
     wide enough, a port already taken -- so a container that comes up is a
     container that can serve.
     """
-    runner = Runner(floor=floor, allow_shell=allow_shell, record_dir=record_dir)
+    runner = Runner(floor=floor, record_dir=record_dir)
     return Server((host, port), runner, token)

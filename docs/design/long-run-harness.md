@@ -163,12 +163,12 @@ R8 reverses *"No git. The agent cannot commit"*
 gate moves from "cannot commit" to "cannot merge", which lets a session verify
 its own work and still leaves a one-command undo.
 
-The cost is a third allowed binary next to `python`/`pytest`, so it is a
-**subcommand allowlist**, not a git tool:
-
-- **Allowed:** `status`, `diff`, `log`, `add`, `commit`, `checkout -b`, `branch`.
-- **Refused:** `push`, `merge`, `rebase`, `reset --hard`, `clean`, checking out
-  an existing branch — anything touching a remote or destroying committed work.
+This was built as a **subcommand allowlist** — `status`, `diff`, `log`, `add`,
+`commit`, `checkout -b`, `branch` allowed; `push`, `merge`, `rebase`,
+`reset --hard` and `clean` refused — and then removed along with every other
+execution restriction ([6.2.1](../06-agent.md#621-why-the-restrictions-went)).
+`git` is now unfiltered. **The gate the agent is asked to respect is still the
+merge**; nothing enforces it, so the human's real gate is reading the branch.
 
 Commits are **incremental**, one per completed unit, which doubles as R2's
 checkpoint and gives a readable history of what was tried. Squashing at merge
@@ -181,11 +181,14 @@ works, and writes throwaway scripts to probe behaviour the test suite doesn't
 cover. A subcommand allowlist is not available here the way it is for git —
 bash is arbitrary by construction.
 
-**This is less of a change than it appears.** The current allowlist is
-`python`/`pytest`, and [6.2](../06-agent.md#62-the-blast-radius) already states
-the consequence plainly: `python` *is* arbitrary code execution, so what exists
-today is "a small blast radius, not a sandbox". Allowing bash does not open a
-door that was locked; it stops pretending the door was locked. What it changes is
+**Landed, and further than this section proposed:** every agent now runs on
+deepagents' `LocalShellBackend`, so the shell is not the Executor's alone.
+
+The argument held. The allowlist was `python`/`pytest`, and
+[6.2](../06-agent.md#62-the-blast-radius) already stated the consequence
+plainly: `python` *is* arbitrary code execution, so what existed was "a small
+blast radius, not a sandbox". Allowing bash did not open a door that was locked;
+it stopped pretending the door was locked. What it changes is
 convenience — and the honest response is the one that page already names:
 **for real isolation, run the session in a container.** That becomes a
 prerequisite the day sessions run unattended overnight, not a nicety.

@@ -43,10 +43,10 @@ Four properties of it shape every review you will write:
   Nothing the model "knows" outside the conversation survives a reroute — which is
   why the prompt states a context *floor* rather than a model identity
   (`agent/utils/prompts/model_identity.md`).
-- **The blast radius is a jail.** `/` is the workdir; only `python`, `pytest` and
-  `git` run, by subcommand, `shell=False`. A run that spent its turns fighting a
-  refused command is a tooling failure, not a reasoning one
-  (`agent/utils/shell.py`, `agent/utils/backend.py`).
+- **The blast radius is the host.** The file tools are rooted at the workdir;
+  `execute` is the host shell and restricts nothing. A run that spent its turns
+  fighting its tooling is a tooling failure, not a reasoning one
+  (`local_shell` in `agent/code/agent.py`).
 
 **The open question about it is cost.** The conversational loop lost the last
 comparison 226,854 input tokens to 5,756, and the arm that won was retired
@@ -227,8 +227,8 @@ One or two changes, each naming the mechanism:
 - the system prompt (`agent/code/prompts/`, and `agent/utils/prompts/` for
   the sections every agent shares),
 - what the project section states, or how far it lists (`agent/code/agent.py`),
-- the execution allowlist or the jail (`agent/utils/shell.py`,
-  `agent/utils/backend.py`),
+- the backend the agent runs on, and what its `execute` is given
+  (`local_shell` in `agent/code/agent.py`),
 - a loop knob — `RECURSION_LIMIT`, the middleware list, the subagent list
   (`agent/code/agent.py`), or `CONTEXT_FLOOR` (`agent/utils/pool.py`),
 - summarization's own settings, which are the SDK's defaults today and have never

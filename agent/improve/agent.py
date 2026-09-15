@@ -67,7 +67,6 @@ from agent.improve.tools import make_tools
 from agent.utils import run_tree
 from agent.utils.pool import CONTEXT_FLOOR, connect  # noqa: F401 - section 3
 from agent.utils.prompts import fill, shared_values
-from agent.utils.shell import ShellAllowListMiddleware
 from agent.utils.trace import traced
 
 logger = logging.getLogger("harness.improve")
@@ -75,14 +74,6 @@ logger = logging.getLogger("harness.improve")
 HERE = Path(__file__).parent
 
 # --- 1. Settings --------------------------------------------------------------
-
-# `git` and nothing else. The coding agent gets `python` and `pytest` because it
-# has to run the tests it writes; this one runs no tests and writes no code, and
-# `python` would be a way around every boundary here -- it could launch a batch
-# without `run_evals`'s ceiling on it, or edit a file the middleware refuses.
-# What it genuinely needs a program for is reading history: which commit the
-# coding agent just made, and what moved in it.
-ALLOWED_PROGRAMS = ("git",)
 
 # Supersteps: a budget, not a loop guard, sized as the coding agent's
 # (agent/code/agent.py).
@@ -109,7 +100,7 @@ def template_values(floor: int = CONTEXT_FLOOR, members: int = 0,
     """
     return {
         # Shared with the other agents: where they run, not what they do.
-        **shared_values(floor, members, ALLOWED_PROGRAMS),
+        **shared_values(floor, members),
         "ledger_section": ledger,
     }
 
@@ -220,26 +211,25 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
     building a drafted scenario. They become tools, not a prompt paragraph.
     """
     from deepagents import create_deep_agent
+    from deepagents.backends.local_shell import LocalShellBackend
     from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
-
-    from agent.utils.backend import RestrictedShellBackend
 
     workdir = Path(workdir)
     values = template_values(floor, members, ledger=ledger_section(workdir))
 
-    middleware = [ReadOnlyMiddleware(),
-                  ShellAllowListMiddleware(ALLOWED_PROGRAMS)]
+    middleware = [ReadOnlyMiddleware()]
     middleware += list(extra_middleware or [])
 
     return create_deep_agent(
         model=model,
         tools=list(make_tools(workdir, peers).values()),
         system_prompt=system_prompt(values),
-        # Where the file tools and `execute` work: this repository, jailed,
-        # running `git` alone.
-        backend=RestrictedShellBackend(root_dir=str(workdir),
-                                       allowed_programs=(), allow_git=True,
-                                       allow_shell=False),
+        # Where the file tools and `execute` work: this repository. The file
+        # tools are rooted at `/` and `ReadOnlyMiddleware` refuses the ones that
+        # change a file; `execute` is the host shell, so that refusal is a
+        # convention this agent is asked to keep, not a boundary it is held to.
+        backend=LocalShellBackend(root_dir=str(workdir), virtual_mode=True,
+                                  inherit_env=True),
         middleware=middleware,
         # The same boundary, one level down. deepagents adds a `general-purpose`
         # subagent on its own unless one is passed, and it builds that one a

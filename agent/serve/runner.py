@@ -58,10 +58,9 @@ class Busy(RuntimeError):
 class Runner:
     """The queue, the worker, and every task this process has seen."""
 
-    def __init__(self, *, floor: int, allow_shell: bool = False,
+    def __init__(self, *, floor: int,
                  record_dir: Optional[Path] = None) -> None:
         self.floor = floor
-        self.allow_shell = allow_shell
         self.record_dir = Path(record_dir) if record_dir else None
         self.store = TaskStore(self.record_dir)
 

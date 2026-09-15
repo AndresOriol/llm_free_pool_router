@@ -15,9 +15,10 @@
 # settled fact -- but nothing has closed it, and `tokens_in` is the column
 # to read first on every batch (docs/06-agent.md#611-the-arm-that-was-deleted).
 #
-# HARNESS_SHELL is deliberately absent: the agent is more capable with a real
-# shell, but eval runs are not containerized, and the default must not widen the
-# blast radius silently (docs/design/long-run-harness.md#42-bash-for-the-executor).
+# `HARNESS_SHELL` is gone: every arm now runs on deepagents' `LocalShellBackend`,
+# so the shell is unrestricted and there is no knob to set
+# (docs/06-agent.md#621-why-the-restrictions-went). Eval runs are not
+# containerized, so a scenario is running real commands on this machine.
 name: code
 repo: ../..
 ref: master

@@ -63,12 +63,15 @@ everything that is not closed, and only then go looking for something new.
 The agent that diagnoses is not the agent that changes the code.
 
 [`ReadOnlyMiddleware`](../agent/improve/agent.py) refuses `write_file`, `edit_file`
-and their kin as a `ToolMessage` — the shape
-[`ShellAllowListMiddleware`](../agent/utils/shell.py) uses, so the model can read
-the refusal and correct from it in one step rather than losing the run to an
-exception. The only program it may run is `git`, for reading history; it gets no
-`python` and no `pytest`, which would otherwise be a way round every boundary
-above it — including a way to launch a batch without `run_evals`' ceiling.
+and their kin as a `ToolMessage`, so the model can read the refusal and correct
+from it in one step rather than losing the run to an exception.
+
+**That is now the whole of it, and it only covers the tools.** This agent runs
+on `LocalShellBackend` like the coding agent, so `execute` is the host shell and
+a `python -c` away from writing any file the middleware refuses
+([6.2.1](06-agent.md#621-why-the-restrictions-went)). Not changing the harness
+is a discipline this agent is asked to keep — stated in its prompt, enforced
+nowhere. Read its diffs, not its summary.
 
 The reason is not containment, it is reviewability. A diff written by the agent
 that diagnosed it is the only account of itself; a diff written by a different
@@ -290,7 +293,8 @@ Three changes came out of it, all in this repo:
    10 of its 28 `execute` calls were refused programs, 8% of the run spent
    discovering a boundary the prompt had misdescribed. It is the exact failure
    this project already names — a description promising what the backend will
-   not do — and it had never been checked against a second caller's allowlist.
+   not do. Both halves are gone now: there is no allowlist to misdescribe, and
+   the shared section that described one was deleted with it.
 
 Two findings that are not about this agent are in the ledger rather than fixed:
 the coding agent's false account, and the fact that a delegated session leaves
@@ -299,10 +303,12 @@ why the false account had to be caught by hand.
 
 ## 19.11 What is deliberately not built
 
-- **No pull request.** The coding agent commits on a branch and never pushes
-  ([backend](../agent/utils/backend.py) refuses `merge` and `push`). Opening a
-  PR is a remote operation and this project has decided the agent does not do
-  those; the branch and the ledger entry are what a human reviews.
+- **No pull request.** The coding agent commits on a branch and is asked not to
+  push. Opening a PR is a remote operation and this project has decided the
+  agent does not do those; the branch and the ledger entry are what a human
+  reviews. Since the git allowlist went
+  ([6.2.1](06-agent.md#621-why-the-restrictions-went)) this is prompt and
+  convention, not enforcement.
 - **No severity model, no scoring, no dashboard.** The ledger is a directory of
   JSON files and `check_issue` prints it. A panel would be a second place for
   the status to be wrong.

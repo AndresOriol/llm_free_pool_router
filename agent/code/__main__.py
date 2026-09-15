@@ -21,8 +21,6 @@ Environment:
                      (docs/16-delegation.md)
   AGENT_INVARIANT_GUARD=0, AGENT_WRITE_ACCOUNT=0
                      leave that section out of the prompt (agent.py)
-  HARNESS_SHELL=1    give the agent an unrestricted shell -- not contained,
-                     so this is the operator's call, never a default
 
 What the agent is and how it is built is [agent.py](agent.py).
 """
@@ -56,11 +54,6 @@ def main() -> None:
     budget = int(os.environ.get("AGENT_STEP_BUDGET") or RECURSION_LIMIT)
     model, members = connect(floor)
 
-    shell = os.environ.get("HARNESS_SHELL") == "1"
-    if shell:
-        logging.warning("HARNESS_SHELL=1: the agent has an unrestricted shell. "
-                        "Run this inside a container.")
-
     # The eval runner names the trace itself, per run, so a configuration
     # cannot set AGENT_TRACE_FILE ahead of time -- it does not yet know the run
     # directory. It exports EVAL_TRACE_FILE instead, pointing at the flat
@@ -84,7 +77,7 @@ def main() -> None:
     with keep_awake():
         final, written = run(
             model, task, workdir, config={"recursion_limit": budget},
-            floor=floor, members=members, allow_shell=shell,
+            floor=floor, members=members,
             # Probed, not declared: an agent offered and then unusable costs a
             # session to discover (docs/16-delegation.md).
             peers=delegation.available(),

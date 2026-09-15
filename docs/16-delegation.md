@@ -8,8 +8,8 @@ protocol, what that costs, and why the deliverable is still a file on disk.*
 ## 16.1 The problem: the human was the message bus
 
 Three agents exist ([6](06-agent.md), [15](15-explorer.md),
-[19](19-improvement-agent.md)) and they already share a workdir, a pool, a jail
-and a loop. What they did not share was a way for one to *ask* another for
+[19](19-improvement-agent.md)) and they already share a workdir, a pool, a
+backend and a loop. What they did not share was a way for one to *ask* another for
 something. The handoff was a directory:
 
 ```bash
@@ -144,24 +144,28 @@ started from the command line was alone regardless of the setting. Only
 `delegation.available()` like they do — which means the numbers above are also
 the first ones measured on a CLI run that actually had peers.
 
-## 16.3 What the jail has to bend, and how far
+## 16.3 What a delegated child needs
 
-The child is a real process launched from inside the filesystem jail, so three
-of the jail's defaults would each stop it dead. `python -m agent.<name>` is the
-only command they bend for, and
-[`_is_agent`](../agent/utils/backend.py) is the one place that decides which.
+The child is a real process, and three things it needs are not what a shell
+command ordinarily gets. Two come from the backend's environment and the third
+the model asks for per call.
 
-| Default | Why it exists | Why a delegation is different |
+| What | Where it comes from | Why |
 | --- | --- | --- |
-| Secret env vars are stripped from children | so a project's own `pytest` run cannot read the pool's keys | a delegated session **is** the pool's consumer; without keys it dies at start-up with "no providers loaded" |
-| 300s timeout | sized for a test run | an agent session is tens of minutes to hours; the ordinary ceiling would kill every delegation after the quota was already spent |
-| The child inherits no `PYTHONPATH` | nothing needed one | the workspace is routinely some *other* project, where `import agent` does not resolve |
+| The pool's API keys | `inherit_env=True` on the backend | a delegated session **is** the pool's consumer; without keys it dies at start-up with "no providers loaded" |
+| This repository on `PYTHONPATH` | `env=` on the backend ([`local_shell`](../agent/code/agent.py)) | the workspace is routinely some *other* project, where `import agent` does not resolve |
+| An hour instead of 300s | the model passes `timeout=3600` on the `execute` call | an agent session is tens of minutes to hours; the ordinary ceiling would kill every delegation after the quota was already spent |
 
-Everything else holds unchanged: the command is still parsed with `shlex` and
-run with `shell=False`, still has no stdin, and is still refused if it names a
-path or carries shell syntax. **`--task` exists because of the "no stdin" half
-of that**: the brief has to be sayable on the command line, since a redirect is
-a shell's job and there is no shell here.
+The last one is prose, not Python. Nothing in the harness knows that one command
+is a delegation — an earlier version sniffed `argv` for `python -m agent.*` and
+granted the longer timeout itself — so the
+[`delegate` skill](../agent/code/skills/delegate/SKILL.md) tells the model to
+ask for it, and 3600s is the most deepagents' `execute` accepts. A delegation
+killed at 300s has already spent its brief and some of its quota, so this is
+worth checking in a trace when one comes back empty.
+
+**`--task` exists because the child gets no stdin**: `execute` runs its command
+with stdin at `/dev/null`, so the brief has to be sayable on the command line.
 
 ## 16.4 Why a subprocess costs something real
 
@@ -296,8 +300,8 @@ the transport that produced them.
 | Where | What | Fix |
 | --- | --- | --- |
 | the delegation handler | **Every delegated event was traced twice.** The handler added a tracer to the child config; the child already inherited the caller's handlers. The caller's own tools appeared once each and the delegate's `web_search` twenty times for ten searches. | The child got no callbacks of its own. Moot now — a subprocess cannot inherit them, and it appends to the same file instead. |
-| `deepagents` filesystem jail | `Path.resolve()` on Windows returns the `\?\` extended-length form when another process holds the file open, and the root was resolved once without it — so a write **inside** the jail is refused as an escape. Three files into a directory, the fourth was refused, and it killed the session. | `RestrictedShellBackend._resolve_path` normalizes both sides ([agent/utils/backend.py](../agent/utils/backend.py)). |
-| `agent/utils/backend.py` | The git allowlist denied `--delete` and `-D` and **not `-d`** — and the agent used `-d`. A list that claims to forbid deletion while permitting the spelling an agent reaches for first is worse than no list. | `-d` denied. |
+| `deepagents` `FilesystemBackend` | `Path.resolve()` on Windows returns the `\?\` extended-length form when another process holds the file open, and the root was resolved once without it — so a write **inside** the workspace is refused as an escape. Three files into a directory, the fourth was refused, and it killed the session. | Was fixed by a subclass; **live again** since the harness moved to the stock backend ([6.2.1](06-agent.md#621-why-the-restrictions-went)). |
+| the old `RestrictedShellBackend` | The git allowlist denied `--delete` and `-D` and **not `-d`** — and the agent used `-d`. A list that claims to forbid deletion while permitting the spelling an agent reaches for first is worse than no list. | Moot: the allowlist is gone and `git` is unfiltered. |
 
 The first is the one worth dwelling on: it inflated `tokens_in`, the single
 number the whole comparison rests on ([10. Metrics](10-metrics.md)), and it did

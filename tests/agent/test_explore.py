@@ -18,7 +18,7 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
 from agent.explore import agent as explore
-from agent.utils.backend import JailedFilesystemBackend
+from deepagents.backends.filesystem import FilesystemBackend
 from llm_router.tavily_router import NoSearchPool, TavilyPoolRouter
 
 
@@ -111,7 +111,7 @@ def test_the_explorer_has_nothing_to_run_programs_with():
     `execute` only on a backend that can execute, so it is never offered."""
     from deepagents.backends.protocol import SandboxBackendProtocol
 
-    backend = JailedFilesystemBackend(root_dir=tempfile.mkdtemp())
+    backend = FilesystemBackend(virtual_mode=True, root_dir=tempfile.mkdtemp())
     assert not isinstance(backend, SandboxBackendProtocol)
     assert not hasattr(backend, "execute")
 
@@ -120,7 +120,7 @@ def test_the_explorer_still_reads_and_writes_files():
     # The handoff to the coding agent is the filesystem, so this is the one
     # capability the explorer cannot lose.
     root = Path(tempfile.mkdtemp())
-    backend = JailedFilesystemBackend(root_dir=str(root))
+    backend = FilesystemBackend(virtual_mode=True, root_dir=str(root))
     backend.write("/research/notes.md", "# what I found\n")
     assert (root / "research" / "notes.md").read_text() == "# what I found\n"
     assert "what I found" in (backend.read("/research/notes.md")
@@ -339,7 +339,7 @@ def test_the_researcher_sub_agent_gets_the_same_surface(tmp_path):
         # profile now, and an unkeyed model resolves none of them.
         model=_recorder().for_agent(explore.AGENT), tools=spec["tools"],
         system_prompt=spec["system_prompt"], middleware=spec["middleware"],
-        backend=JailedFilesystemBackend(root_dir=str(tmp_path)),
+        backend=FilesystemBackend(virtual_mode=True, root_dir=str(tmp_path)),
     ).invoke({"messages": [("user", "research something")]})
 
     for excluded in (*explore.EXCLUDED_TOOLS, "execute"):

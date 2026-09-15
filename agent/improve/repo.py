@@ -18,11 +18,12 @@ started on, and the pass puts the tree back where it found it before it ends.
 `master` is never the branch a delegation runs on, and a broken branch is a
 branch — not the checkout everything else uses.
 
-**Nothing here merges.** The backend already refuses `merge` and `push` for the
-coding agent ([agent/utils/backend.py](../runtime/backend.py)), and this keeps
-the same line for the same reason: a branch plus a ledger entry is what a human
-reviews, and an unattended loop that could merge its own work would have no
-reviewer at all ([19.3](../../docs/19-improvement-agent.md#193-it-cannot-change-the-harness-and-that-is-the-point)).
+**Nothing here merges.** Nothing stops it either -- `git` is unfiltered since
+the harness moved to deepagents' own backend
+([6.2.1](../../docs/06-agent.md#621-why-the-restrictions-went)) -- so this is a
+line the code keeps rather than one the harness enforces: a branch plus a ledger
+entry is what a human reviews, and an unattended loop that merged its own work
+would have no reviewer at all ([19.3](../../docs/19-improvement-agent.md#193-it-cannot-change-the-harness-and-that-is-the-point)).
 """
 
 from __future__ import annotations

@@ -28,8 +28,6 @@ Environment:
                      (default 4 hours)
   EVAL_SCENARIOS     the scenario repository, for building a drafted scenario;
                      unset looks for `agent_evals` beside this one
-  HARNESS_SHELL=1    give the *delegated* coding agent an unrestricted shell.
-                     This agent never gets one: it runs no programs but `git`.
 
 What the agent is and how it is built is [agent.py](agent.py).
 """

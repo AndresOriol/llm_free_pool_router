@@ -86,9 +86,8 @@ project:
 - **A lever.** Name the file or knob a fix lands in. The real ones are
   `/agent/code/prompts/` and `/agent/utils/prompts/` (what the model is
   told), `/agent/code/agent.py` (what it starts knowing about the project, and
-  the knobs: `RECURSION_LIMIT`, `ALLOWED_PROGRAMS`, the middleware and subagent
-  lists), `/agent/utils/shell.py` and `/agent/utils/backend.py` (what it is
-  allowed to run), `/agent/utils/tools.py` (what its tools promise),
+  the knobs: `RECURSION_LIMIT`, the backend, the middleware and subagent
+  lists), `/agent/utils/tools.py` (what its tools promise),
   `/agent/utils/pool.py` (`CONTEXT_FLOOR`), `/llm_router/config.yaml` (which
   members serve it), and
   `/evals/` when the fault is in the instrument rather than the agent. An issue

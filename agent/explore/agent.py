@@ -259,10 +259,9 @@ def subagents(tools: list, values: dict, described: dict) -> list:
 
 def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
                 members: int = 0, research_dir: str = RESEARCH_DIR):
-    """The research orchestrator over a jailed workdir, the pool and the web."""
+    """The research orchestrator over a workdir, the pool and the web."""
     from deepagents import create_deep_agent
-
-    from agent.utils.backend import JailedFilesystemBackend
+    from deepagents.backends.filesystem import FilesystemBackend
 
     workdir = Path(workdir)
     research_dir = research_dir.strip("/") or RESEARCH_DIR
@@ -283,9 +282,10 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
         tools=tools,
         system_prompt=prompt(ORCHESTRATOR_PROMPTS, values),
         # Where read_file, write_file and edit_file read and write: the
-        # workdir, jailed. Files only -- it has no `execute`, so none is offered.
-        # Sub-agents share it.
-        backend=JailedFilesystemBackend(root_dir=str(workdir)),
+        # workdir, rooted at `/`. Files only -- `FilesystemBackend` implements
+        # no `execute`, so the framework offers no shell tool and no prompt
+        # section about one. Sub-agents share it.
+        backend=FilesystemBackend(root_dir=str(workdir), virtual_mode=True),
         # Caller middleware runs after the framework's, so it sees the prompt
         # sections those inject.
         middleware=[FrameworkSurface(described)],

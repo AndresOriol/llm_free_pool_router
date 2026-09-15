@@ -11,7 +11,7 @@ This file is the whole harness. Read top to bottom:
    `template_values()`.
 3. **Model** -- the pool, held to a context floor (`connect`).
 4. **The project** -- what the agent knows before its first tool call.
-5. **The agent** -- `build_agent()`: `create_deep_agent` over a jailed shell.
+5. **The agent** -- `build_agent()`: `create_deep_agent` over a local shell.
 6. **A run** -- `run()`, and the wrap-up that lands the work of a run that
    spends its whole budget.
 
@@ -56,10 +56,9 @@ Three things follow from that, and they are the whole of `render_skills()`:
   start-up, so the roster *and* the description are filled per run, into a
   temporary directory that dies with the agent. No peers, no skill, no
   middleware -- which is what keeps `AGENT_PEERS=` a baseline arm;
-- **it is mounted.** The agent is jailed to a workspace that is usually not this
-  repository, so a path outside it is a skill it cannot read. A
-  `CompositeBackend` route puts the rendered directory at `/skills/`; `execute`
-  is not path-routed, so what the agent may run is untouched.
+- **it is mounted.** The agent's `/` is a workspace that is usually not this
+  repository, so a path outside it is a skill its file tools cannot read. A
+  `CompositeBackend` route puts the rendered directory at `/skills/`.
 
 The split with `prompts/` is what changes and when: a prompt section is on every
 call and holds what is always true; a skill body is read on demand and holds a
@@ -74,8 +73,8 @@ procedure most runs never need ([6.6](../../docs/06-agent.md#66-skills)).
 | --- | --- |
 | generated system prompt, interactive or headless | `prompts/system.md`, always headless |
 | `LocalContextMiddleware` (git, tree) | `project_section`, once into the prompt |
-| `ShellAllowListMiddleware` when non-interactive | the same, always (agent/utils/shell.py) |
-| `LocalShellBackend`, `virtual_mode=False` | `RestrictedShellBackend`, jailed |
+| `ShellAllowListMiddleware` when non-interactive | not carried over -- the shell is unrestricted |
+| `LocalShellBackend`, `virtual_mode=False` | the same, `virtual_mode=True` so `/` is the workspace |
 | `general-purpose` subagent so `task` exists | same |
 | `SkillsMiddleware` over `.claude/skills` | the same, over `skills/` beside this file |
 | `AskUserMiddleware` | never installed -- nobody is watching |
@@ -100,7 +99,6 @@ from agent import delegation
 from agent.utils import run_tree
 from agent.utils.pool import CONTEXT_FLOOR, connect  # noqa: F401 - section 3
 from agent.utils.prompts import fill, shared_values
-from agent.utils.shell import ShellAllowListMiddleware
 from agent.utils.trace import traced
 
 logger = logging.getLogger("harness.code")
@@ -121,14 +119,9 @@ RECURSION_LIMIT = 400
 # written working code reported nothing and left it uncommitted.
 WRAP_UP_RESERVE = 40
 
-# What `execute` runs: the backend's default allowlist plus `git`. One list,
-# read by the prompt that states it and the middleware that explains a refusal;
-# the backend is what enforces it.
-ALLOWED_PROGRAMS = ("python", "python3", "py", "pytest", "git")
-
 # Skills: `<name>/SKILL.md` beside this file, mounted into the agent's
 # filesystem at `SKILLS_ROOT` so `read_file` can reach one from whatever
-# workspace the run is jailed to. deepagents' `SkillsMiddleware` puts the name
+# workspace the run is rooted at. deepagents' `SkillsMiddleware` puts the name
 # and description in the prompt and nothing else; the model reads the body only
 # if it decides the skill applies -- progressive disclosure, and no tool
 # ([6.6](../../docs/06-agent.md#66-skills)).
@@ -137,9 +130,7 @@ SKILLS_ROOT = "/skills/"
 
 # Memory: the project's standing instructions to whoever changes it, read from
 # the workspace root and injected into the system prompt by deepagents'
-# `MemoryMiddleware`. Not a skill -- there is no moment it applies to, it is
-# true for every step of every run -- and not this repo's own CLAUDE.md: the
-# workspace is usually some other project, and this is that project speaking.
+# `MemoryMiddleware`.
 #
 # `AGENTS.md` first because it is the vendor-neutral spec (<https://agents.md>)
 # and the one deepagents implements; `CLAUDE.md` is the fallback for a project
@@ -199,12 +190,11 @@ def render_skills(peers: Sequence[str], workdir) -> Optional[tempfile.TemporaryD
 
 
 def template_values(floor: int = CONTEXT_FLOOR, members: int = 0,
-                    programs: Sequence[str] = ALLOWED_PROGRAMS,
                     project: str = "", peers: str = "") -> dict:
     """What every `{placeholder}` in `prompts/system.md` is filled with."""
     return {
         # Shared with the other agents: where they run, not what they do.
-        **shared_values(floor, members, programs),
+        **shared_values(floor, members),
         "invariant_guard_section": optional(INVARIANT_GUARD_ENV,
                                             "contradicted_requests.md"),
         "account_section": optional(WRITE_ACCOUNT_ENV, "project_notes.md"),
@@ -255,7 +245,7 @@ def _git(workdir: Path, *args: str) -> str:
 
 def tree(workdir: Path, max_entries: int = MAX_ENTRIES,
          max_depth: int = MAX_DEPTH) -> str:
-    """A depth-limited listing of the project, as jail-relative paths.
+    """A depth-limited listing of the project, as workspace-relative paths.
 
     The walk is the backend's own `glob`, not a second implementation of one.
     It already returns POSIX paths relative to the same root the agent's file
@@ -271,9 +261,9 @@ def tree(workdir: Path, max_entries: int = MAX_ENTRIES,
     anything still appears in its files' paths, and an empty one was never
     orientation.
     """
-    from agent.utils.backend import JailedFilesystemBackend
+    from deepagents.backends.filesystem import FilesystemBackend
 
-    found = JailedFilesystemBackend(root_dir=str(workdir)).glob("**/*")
+    found = FilesystemBackend(root_dir=str(workdir), virtual_mode=True).glob("**/*")
     lines: list[str] = []
     for entry in (found.matches or []):
         path = entry["path"] if isinstance(entry, dict) else str(entry)
@@ -334,11 +324,39 @@ def project_section(workdir: Path) -> str:
 
 # --- 5. The agent ---------------------------------------------------------------
 
+def local_shell(workdir: Path):
+    """deepagents' own shell backend, over the workspace.
+
+    Three arguments, and each is a fact about this harness rather than a taste:
+
+    - `virtual_mode=True` roots the *file tools* at the workspace, which is what
+      `prompts/working_dir.md` describes and what `CompositeBackend` needs in
+      order to route a path. It does not confine `execute`, which is the host
+      shell ([6.2](../../docs/06-agent.md#62-the-blast-radius)).
+    - `inherit_env` plus `PYTHONPATH` is what lets a delegated
+      `python -m agent.<name>` build a router and import this repository from
+      whatever workspace the run is in ([16. Delegation](../../docs/16-delegation.md)).
+    - `timeout` is the ceiling on one command. The library's 120s is sized for
+      `ls`; a test run on a cold toolchain needs more. A delegated session needs
+      an hour and asks for it per call (`skills/delegate/SKILL.md`).
+    """
+    from deepagents.backends.local_shell import LocalShellBackend
+
+    # Prepended, not assigned: a workspace with a `PYTHONPATH` of its own keeps
+    # it, and this repository is still found first.
+    inherited = os.environ.get("PYTHONPATH")
+    path = os.pathsep.join(p for p in (str(delegation.HARNESS_ROOT), inherited) if p)
+
+    return LocalShellBackend(
+        root_dir=str(workdir), virtual_mode=True, inherit_env=True, timeout=300,
+        env={"PYTHONPATH": path})
+
+
 def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
-                members: int = 0, allow_shell: bool = False,
+                members: int = 0,
                 peers: Optional[Sequence[str]] = None,
                 extra_middleware: Optional[Sequence] = None):
-    """The coding agent over a jailed workdir.
+    """The coding agent over a workspace, with a shell on it.
 
     `peers` names the other agents this one may run. It costs a paragraph in the
     prompt and no tool: they are commands, and the agent already has `execute`
@@ -346,41 +364,39 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
     """
     from deepagents import create_deep_agent
     from deepagents.backends.composite import CompositeBackend
+    from deepagents.backends.filesystem import FilesystemBackend
     from deepagents.middleware.memory import MemoryMiddleware
     from deepagents.middleware.skills import SkillsMiddleware
     from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 
-    from agent.utils.backend import JailedFilesystemBackend, RestrictedShellBackend
-
     workdir = Path(workdir)
-    # HARNESS_SHELL: the backend runs anything, so there is no list to state
-    # and nothing for the middleware to mirror.
-    programs = () if allow_shell else ALLOWED_PROGRAMS
-    values = template_values(floor, members, programs,
+    values = template_values(floor, members,
                              project=project_section(workdir),
                              peers=delegation.prompt_section(peers or []))
 
     middleware = list(extra_middleware or [])
-    if programs:
-        # Refuses a command as a message the model can read and correct from.
-        middleware.append(ShellAllowListMiddleware(programs))
 
-    # Where the file tools and `execute` work: the workdir, jailed. Sub-agents
-    # share it.
-    jail = RestrictedShellBackend(root_dir=str(workdir), allow_git=True,
-                                  allow_shell=allow_shell)
+    # Where the file tools and `execute` work. `virtual_mode=True` roots the
+    # file tools at the workspace, which is what `prompts/working_dir.md`
+    # describes and what `CompositeBackend` needs to route a path; `execute` is
+    # the host shell and is not confined by it. `env` is layered over the
+    # inherited environment so a delegated `python -m agent.<name>` can import
+    # this repository from whatever workspace the run is in
+    # ([16. Delegation](../../docs/16-delegation.md)). Sub-agents share it.
+    shell = local_shell(workdir)
 
     # A skill is only usable if `read_file` can reach the path the middleware
     # prints, and the agent's `/` is a workspace that is usually not this
     # repository. So the rendered directory is mounted as a second route.
     # `execute` is not path-routed -- CompositeBackend always runs it on the
-    # default backend -- so the jail around what the agent *runs* is untouched.
+    # default backend, so the route only ever affects the file tools.
     # With no skills there is no route and no middleware, and the agent is
     # byte-for-byte what it was before skills existed.
     skills = render_skills(peers or [], workdir)
-    backend = jail if skills is None else CompositeBackend(
-        default=jail,
-        routes={SKILLS_ROOT: JailedFilesystemBackend(root_dir=skills.name)})
+    backend = shell if skills is None else CompositeBackend(
+        default=shell,
+        routes={SKILLS_ROOT: FilesystemBackend(root_dir=skills.name,
+                                               virtual_mode=True)})
     if skills is not None:
         middleware.append(SkillsMiddleware(
             backend=backend, sources=[(SKILLS_ROOT, "Harness")],
@@ -462,7 +478,7 @@ def _has_unanswered_call(messages: Sequence) -> bool:
 
 def run(model, task: str, workdir: Path, config=None,
         floor: int = CONTEXT_FLOOR, members: int = 0,
-        allow_shell: bool = False, peers: Optional[Sequence[str]] = None,
+        peers: Optional[Sequence[str]] = None,
         trace_path: Optional[Path] = None) -> tuple:
     """One session. Returns (final_state, run record written or None)."""
     config = traced(config)
@@ -470,7 +486,7 @@ def run(model, task: str, workdir: Path, config=None,
     workdir = Path(workdir)
 
     agent = build_agent(workdir, model, floor=floor, members=members,
-                        allow_shell=allow_shell, peers=peers)
+                        peers=peers)
 
     # Two phases, so that spending the budget ends the run instead of killing
     # it: everything but the reserve, then -- only if that runs out -- the

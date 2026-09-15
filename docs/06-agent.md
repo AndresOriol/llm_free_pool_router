@@ -82,42 +82,69 @@ North Star describes therefore has a hole in it until that is rebuilt on this ar
 
 ## 6.2 The blast radius
 
-Two independent restrictions, both worth understanding before pointing this at
-anything you care about.
+**There is no jail.** The coding agent runs on deepagents'
+[`LocalShellBackend`](../agent/code/agent.py), whose `execute` is
+`subprocess.run(shell=True)` on the host. Anything the user account running the
+harness can do, an unattended session can do: install packages, reach the
+network, delete files anywhere on the disk, push to a remote. Read that sentence
+before pointing this at a machine you care about.
 
-**Filesystem jail.** The backend is rooted at `workdir`. The agent's `/` *is*
-the workdir; absolute paths and `..` cannot escape it. A brief should tell the
-agent to write at `/`, not at a host path.
+`virtual_mode=True` is still set, and it is worth being precise about what it
+does. It roots the **file tools** at the workspace — `read_file`, `write_file`,
+`edit_file`, `glob` and `grep` treat `/` as the workdir and refuse `..`. It does
+nothing to `execute`, which is why
+[`prompts/working_dir.md`](../agent/utils/prompts/working_dir.md) now describes
+the two separately instead of claiming `/` is all the agent can reach. A prompt
+that overstates the boundary is worse than one that states none: the model plans
+around a rule the harness will not enforce.
 
-**Execution allowlist.** Only `python` and `pytest` (plus `git`, below), named
-bare with no path, `shell=False`, secrets stripped from the child environment,
-and a 300s timeout ([backend.py](../agent/utils/backend.py)).
-Shell syntax is *refused* rather than passed through as a literal argument —
-accepting it silently once cost a run 900 seconds in heredocs that hung until
-the timeout. The *prompt* names the same programs, from the same constant, so
-the model is told the shape of `execute` before it spends a step discovering
-it: every recorded run before that spent at least one being refused, usually
-on `&&`.
+So staying inside the project is a **convention the agent is asked to keep**,
+not a boundary it is held to. The prompt asks; nothing checks.
 
-Because `python` is on that list, the way round every other restriction is
-`python -c "subprocess.run([...])"`, and agents find it immediately. It has one
-sharp edge: the wrapper exits 0 whatever the child did, so `execute` reports a
-**failing** build as `[Command succeeded with exit code 0]`. A recorded run
-read that line over its own broken verification script and reported the gate as
-passing. The prompt now says to carry the child's code out with
-`sys.exit(res.returncode)` — the harness cannot tell the difference itself,
-because as far as it is concerned the program it launched succeeded.
+### 6.2.1 Why the restrictions went
 
-**Git, by subcommand.** A session commits its own work incrementally on its own
-branch, so the human's gate is the **merge**, not the commit. `push`, `merge`,
-`rebase`, `reset` and `clean` are refused
-([design note §4.1](design/long-run-harness.md#41-git)).
+Earlier versions of this harness shipped `RestrictedShellBackend`: an allowlist
+of `python`/`pytest`/`git`, `shell=False` so no metacharacter was ever
+interpreted, git filtered by subcommand, secrets stripped from the child
+environment. It was ~360 lines with its own tests, and it is gone.
 
-This is a **small blast radius, not a sandbox**. `python` is arbitrary code
-execution. For real isolation, run the whole thing inside a container — which
-becomes a prerequisite the day sessions run unattended overnight.
+The case against it is the one it made against itself. `python` was on the
+allowlist because the agent has to run the tests it writes — and `python -c
+"subprocess.run([...])"` is a complete escape from every other rule, which
+agents found immediately. The allowlist stopped the careless command and never
+the determined one, while costing real work: a run spent 900 of its 1,050
+seconds on heredocs the backend had to refuse, and the `python -c` wrapper
+exits 0 whatever the child did, so `execute` reported a **failing** build as
+`[Command succeeded with exit code 0]` and a session called its own broken
+verification gate passing.
 
-### 6.2.1 The step budget
+A boundary that stops nothing an attacker would do, while shaping how the agent
+works around it, is not a boundary. It is a tax. **The isolation was always a
+container's job**, and naming that plainly is more honest than a list that read
+like a policy.
+
+What went with it: `agent/utils/backend.py`, `agent/utils/shell.py` and its
+`ShellAllowListMiddleware`, the `HARNESS_SHELL=1` opt-in (now the only mode),
+the `{running_commands}` prompt sections, and two test files.
+
+Two Windows fixes went with them, and both failure modes are live again:
+
+- `FilesystemBackend._resolve_path` compares a resolved path against a root
+  resolved once at startup. On Windows `Path.resolve()` cannot strip the `\\?\`
+  extended-length prefix while another process holds the file open, so a write
+  **inside** the workspace is intermittently refused as an escape. This killed a
+  session after three successful writes to the same directory.
+- `LocalShellBackend` decodes child output with `text=True`, which is the
+  platform codepage. On Windows that is cp1252, whose strict decode raises on
+  `0x81`, `0x8d`, `0x8f`, `0x90` and `0x9d` — so a traceback or a `git diff`
+  carrying one of those bytes raises inside `execute()` instead of returning
+  output.
+
+Both are upstream bugs rather than missing restrictions. If either starts
+costing runs, the fix is a narrow subclass or a patch upstream, not the
+allowlist coming back.
+
+### 6.2.2 The step budget
 
 A session gets **400 supersteps** (`AGENT_STEP_BUDGET`), of which the last 40
 are held back. Spending them is an ordinary way for a run to end, not a crash:
@@ -210,8 +237,8 @@ cheaper agent reaches this failure mode sooner, not later.**
 [agent/code/](../agent/code/). Almost none of this is agent design.
 `create_deep_agent` already assembles the todo list, the filesystem tools, the
 subagent `task` tool and summarization, and the `execute` tool switches itself
-on because `RestrictedShellBackend` satisfies `SandboxBackendProtocol`. Two
-things are worth knowing.
+on because `LocalShellBackend` satisfies `SandboxBackendProtocol`. Two things
+are worth knowing.
 
 ### 6.5.1 The pool drops in with no adapter
 
@@ -232,15 +259,14 @@ member seconds from returning.
 
 The configuration is ported from `deepagents-code`'s `create_cli_agent` (MIT):
 the generated system prompt, the project overview put in front of the model, and
-a shell allowlist that refuses a command **as a tool message** rather than as an
-exception, so the model reads the reason and corrects itself instead of retrying.
+the same backend it runs on.
 
 | Ported | Where |
 | --- | --- |
 | System prompt: understand → build → test → verify; match the spec exactly; parallel tool calls; paginated reads; git safety; root-cause debugging; stop after three identical failures | [prompts/system.md](../agent/code/prompts/system.md) |
 | Prompt assembly and its interpolated sections | `template_values` in [agent.py](../agent/code/agent.py), and [agent/utils/prompts/](../agent/utils/prompts/) for the sections every agent shares |
 | `LocalContextMiddleware` — git branch, status, a depth-limited tree | `project_section` in [agent.py](../agent/code/agent.py) |
-| `ShellAllowListMiddleware` | [agent/utils/shell.py](../agent/utils/shell.py) |
+| `LocalShellBackend` | `local_shell` in [agent.py](../agent/code/agent.py), with `virtual_mode=True` so `/` is the workspace |
 
 Three parts are **adapted rather than copied**, and each adaptation is a fact
 about this pool rather than a preference:

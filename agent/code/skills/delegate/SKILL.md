@@ -10,6 +10,10 @@ Each peer below is a command you run with `execute`. Running one starts a full
 agent session: it spends the same free-tier pool your own turns do, it blocks
 until that session ends — which can be an hour — and then prints a summary.
 
+**Pass `timeout=3600` on that `execute` call.** The default is sized for a test
+run, and a delegated session that hits it is killed partway through with its
+quota already spent. An hour is the most `execute` accepts.
+
 ## The agents this run can reach
 
 {roster}

@@ -144,31 +144,13 @@ def test_the_summary_finds_the_last_message_that_has_words():
     assert text(AIMessage(content=[{"type": "text", "text": "blocks"}])) == "blocks"
 
 
-def test_the_prompt_names_the_programs_execute_can_run():
-    """Every recorded run spent a step discovering this by being refused."""
-    text = system_prompt(template_values(128_000, 70,
-                                         ("python", "pytest", "git")))
-    assert "python, pytest, git" in text
-    assert "`&&`" in text
-    # And it must say what to do instead, not only what is forbidden.
-    assert "python -c" in text
+def test_the_prompt_states_no_rule_the_shell_does_not_enforce():
+    """`execute` is the host shell, so every sentence the prompt used to spend
+    on the allowlist -- which programs run, no `&&`, wrap the rest in
+    `python -c` -- is now false. A rule stated and not enforced is worse than
+    no rule: the model plans around it and pays for the detour."""
+    text = system_prompt(template_values(128_000, 70))
 
-
-def test_the_prompt_says_nothing_about_a_shell_it_does_not_restrict():
-    """With HARNESS_SHELL the backend runs anything; a rule here would lie."""
-    assert "## Running commands" not in system_prompt(
-        template_values(128_000, 70, ()))
-
-
-def test_the_prompt_warns_that_a_python_wrapper_masks_the_exit_code():
-    """A run read `[Command succeeded with exit code 0]` over a failing build.
-
-    `python -c "subprocess.run(...)"` is how this agent reaches any tool that
-    is not on its allowlist, and it exits 0 whatever the child did -- so the
-    harness's own success marker lied, and the session reported a broken
-    verification gate as passing.
-    """
-    text = system_prompt(template_values(128_000, 70,
-                                         ("python", "pytest", "git")))
-    assert "exit code" in text
-    assert "sys.exit(res.returncode)" in text
+    assert "## Running commands" not in text
+    assert "&&" not in text
+    assert "python -c" not in text

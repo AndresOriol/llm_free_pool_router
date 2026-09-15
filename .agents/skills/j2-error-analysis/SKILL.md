@@ -142,7 +142,7 @@ Cluster the notes into named categories and count them. Rules:
   "failed" rather than a diagnosis. Subdividing it is the standing job, and
   `stopping` needs the same treatment.
 - Each category must name **what would fix it**, and the levers are
-  `agent/code/system_prompt.md`, `context.py`, the shell allowlist, and the knobs
+  `agent/code/system_prompt.md`, `context.py`, the backend, and the knobs
   in `session.py` (`CONTEXT_FLOOR`, `RECURSION_LIMIT`, the middleware and
   subagent lists). A category whose fix is "be smarter" is not a category.
 

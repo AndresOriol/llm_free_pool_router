@@ -34,9 +34,6 @@ Environment:
   IMPROVE_RECORDS    extra directories of recorded runs the `improve` agent may
                      read; point it at SERVE_RECORD_DIR to include live runs
                      (docs/19-improvement-agent.md)
-  HARNESS_SHELL=1    give the served coding agent an unrestricted shell. Over a
-                     network this is remote code execution by design, so it is
-                     the operator's deliberate call and never a default
 """
 
 import logging
@@ -95,14 +92,7 @@ def main() -> None:
 
     floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
     record_dir = os.environ.get("SERVE_RECORD_DIR")
-    allow_shell = os.environ.get("HARNESS_SHELL") == "1"
-    if allow_shell:
-        logging.warning("HARNESS_SHELL=1: the served coding agent has an "
-                        "unrestricted shell. This is remote code execution to "
-                        "anyone holding the token.")
-
     server = app.build(host, port, floor=floor,
-                       allow_shell=allow_shell,
                        record_dir=Path(record_dir) if record_dir else None,
                        token=token)
 

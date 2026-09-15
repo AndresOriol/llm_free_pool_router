@@ -110,8 +110,8 @@ The gap is the finding: there was no long-running scenario, so anything about
 sustained sessions was unmeasurable here.
 
 **Closed the same day.** `scenario/ui-port/ui-port-to-typescript` (L3, refactor)
-is built to be long: three Python modules ported to TypeScript, a toolchain that
-is not on the execution allowlist, a package to delete and a README to rewrite.
+is built to be long: three Python modules ported to TypeScript, a toolchain the
+agent has to install itself, a package to delete and a README to rewrite.
 It is graded by running the built modules under `node`, so a port that compiles
 and misbehaves fails. Re-run this comparison against it before deciding anything
 about the budget -- the two prompt paragraphs are already decided, and the budget

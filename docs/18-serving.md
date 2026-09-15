@@ -102,9 +102,9 @@ One rule: **a workspace is a direct child of `WORKSPACES_DIR`, named, never a
 path.**
 
 On the CLI the workdir is `sys.argv[1]` and the operator owns it. Over HTTP it
-is a string from a request, and the jail ([backend.py](../agent/utils/backend.py))
-constrains the agent only *after* it has been pointed somewhere — it has
-nothing to say about which root it was handed. So the binding is the boundary,
+is a string from a request, and `virtual_mode` roots the file tools only *after*
+the agent has been pointed somewhere — it has nothing to say about which root it
+was handed, and nothing at all to say about `execute`. So the binding is the boundary,
 and it refuses the separator outright rather than normalizing a path and
 hoping: a caller says `closet_ai` and gets `$WORKSPACES_DIR/closet_ai`, or an
 error. A containment check afterwards catches the symlink a name rule cannot
@@ -178,10 +178,10 @@ is alive, and it answers nothing else — though it answers enough to tell a
 server working a four-hour task from one whose worker died: `running`,
 `queued`, and how many pool members cleared the context floor.
 
-`HARNESS_SHELL=1` still drops the jail's allowlist, and over a network that is
-remote code execution to anyone holding the token. The compose file publishes
-to `127.0.0.1` for that reason; widening it is a decision, and TLS termination
-in front is someone's job.
+The coding agent's `execute` is the host shell, so over a network the token is
+remote code execution to anyone holding it. The compose file publishes to
+`127.0.0.1` for that reason; widening it is a decision, and TLS termination in
+front is someone's job.
 
 ## 18.7 What has to be a volume
 
@@ -238,12 +238,13 @@ elsewhere. That is a normal thing to want and a bad thing to improvise, because
 of what this particular service is.
 
 **Start from what the token buys.** A caller holding `SERVE_TOKEN` can ask the
-coding agent to write a Python file and run it. That is the agent's whole
-purpose ([backend.py](../agent/utils/backend.py) allows `python`, `pytest`
-and `git`), and it means the token is not "access to an app" — it is
-**execution on that host**, inside a container. With `HARNESS_SHELL=1` it is
-execution without even the allowlist. Every decision below follows from that
-one sentence, and none of it is generic advice about running a web service.
+coding agent to write a file and run it. That is the agent's whole purpose, and
+since its backend is deepagents' `LocalShellBackend`
+([6.2](06-agent.md#62-the-blast-radius)), "run it" means an arbitrary command in
+the container. The token is not "access to an app" — it is **execution on that
+host**, and the container is the only thing containing it. Every decision below
+follows from that one sentence, and none of it is generic advice about running a
+web service.
 
 ### Do not forward a port
 
@@ -333,8 +334,6 @@ same flat network as a laptop with mounted drives.
 
 - Keep `SERVE_TOKEN` long and per-caller if you can issue more than one; treat
   a leaked token as a compromised host, not a compromised password.
-- Leave `HARNESS_SHELL` unset. Over a network it removes the only program
-  allowlist there is.
 - Keep the container's limits: non-root, `cap_drop: ALL`, `no-new-privileges`,
   `pids_limit`, and memory ([docker-compose.yml](../docker-compose.yml)).
   Never mount the Docker socket into it — a container that can reach the daemon

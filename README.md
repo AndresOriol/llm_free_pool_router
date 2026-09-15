@@ -42,7 +42,8 @@ See [docs/06-agent.md](docs/06-agent.md).
 
 The other half: an agent that researches the web and writes what it finds into
 the project as Markdown, so the coding agent can read it later. Same pool, same
-jail, no shell.
+workdir, no shell — it runs on a plain `FilesystemBackend`, so it cannot run a
+program at all.
 
 ```bash
 echo "What are the current Gemini free-tier rate limits?" | python -m agent.explore ../my-project

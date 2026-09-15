@@ -146,19 +146,20 @@ Same jail as the coding agent, rooted at `workdir`, with one difference:
 | `read_file`, `write_file`, `edit_file` | ✓ | ✓ |
 | `write_todos`, `task` | ✓ | ✓ |
 | `ls`, `glob`, `grep` | ✓ | — |
-| `execute` — `python`, `pytest`, `git` | ✓ | — |
+| `execute` — the host shell | ✓ | — |
 | `tavily_search`, `think_tool`, `research_status` | — | ✓ |
 
 The coding agent needs a shell to close its own loop — write a test, run it,
 react to the result. A researcher has no loop to close, so its backend is
-the jail alone ([`JailedFilesystemBackend`](../agent/utils/backend.py)): it
-cannot run a program, and because it cannot, the framework never offers
-`execute` at all. Nothing is lost, and the blast radius of an unattended run
-drops to the files it writes
-([6.2](06-agent.md#62-the-blast-radius)).
+deepagents' plain [`FilesystemBackend`](../agent/explore/agent.py): it
+implements no `execute`, and because it does not, the framework never offers
+the tool and never writes a prompt section about one. Nothing is lost.
 
-`ShellAllowListMiddleware` is not installed here, unlike on the coding agent:
-there is no shell for it to mirror.
+**This is the one agent here that still has a boundary.** The coding agent's
+`execute` is the host shell and confines nothing
+([6.2](06-agent.md#62-the-blast-radius)); the explorer genuinely cannot run a
+program, so the blast radius of an unattended research run really is the files
+it writes under `virtual_mode`.
 
 **Where the agent's behaviour is written down.** Everything above is a
 property of *text*, and that is a rule this agent is held to rather than an

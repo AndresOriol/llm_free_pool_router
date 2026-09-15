@@ -3,10 +3,11 @@
 Three things can be wrong here silently, and each of them cost something once.
 
 **A delegation that cannot start.** The child is a real process, so it needs
-three things the jail withholds by default: the pool's keys, this repository on
-`PYTHONPATH`, and more than the 300 seconds a `pytest` run is sized for. Any one
-of them missing turns every delegation into a failure minutes in, after the
-brief has already been written.
+three things: the pool's keys, this repository on `PYTHONPATH`, and more than
+the seconds a `pytest` run is sized for. The first two come from the backend's
+environment and the third is asked for per call, so any one of them missing
+turns every delegation into a failure minutes in, after the brief has already
+been written.
 
 **A configuration that is not comparable.** `AGENT_PEERS=` is the baseline arm
 of the A/B ([13.7](../../docs/13-roadmap.md#137-how-to-propose-a-change)). If
@@ -25,8 +26,8 @@ import subprocess
 from pathlib import Path
 
 from agent import delegation
+from agent.code import agent as code
 from agent.utils import gitstate
-from agent.utils.backend import RestrictedShellBackend, _child_env, _is_agent
 
 
 # --- what is offered --------------------------------------------------------
@@ -151,50 +152,39 @@ def test_the_child_can_import_this_repository_from_anywhere(monkeypatch):
     assert both.endswith("/already/here")
 
 
-# --- what the jail lets through ---------------------------------------------
+# --- what the backend hands the child ---------------------------------------
 
 
-def test_only_an_agent_command_is_treated_as_a_delegation():
-    assert _is_agent(["python", "-m", "agent.explore", ".", "--task", "x"])
-    assert _is_agent(["python", "-m", "agent.code"])
-    assert not _is_agent(["python", "-m", "pytest"])
-    assert not _is_agent(["python", "agent.py"])
-    assert not _is_agent(["pytest"])
+def test_the_backend_puts_this_repository_on_the_child_pythonpath(tmp_path,
+                                                                 monkeypatch):
+    """`python -m agent.explore` runs with the *workspace* as its cwd, which is
+    routinely some other project entirely. The env the coding agent's backend
+    gives a command is the only thing that makes the import work."""
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    assert code.local_shell(tmp_path)._env["PYTHONPATH"] == str(
+        delegation.HARNESS_ROOT)
+
+    monkeypatch.setenv("PYTHONPATH", "/already/here")
+    both = code.local_shell(tmp_path)._env["PYTHONPATH"]
+    assert both.startswith(str(delegation.HARNESS_ROOT))
+    assert both.endswith("/already/here")
 
 
-def test_a_delegated_child_keeps_the_pool_keys_and_a_test_run_does_not():
-    """A delegated session *is* the pool's consumer and dies at start-up without
-    its keys. The rule it bends exists to stop a project's own test process
-    reading them, and that rule is unchanged."""
-    os.environ["PROBE_FAKE_API_KEY"] = "secret"
-    try:
-        assert "PROBE_FAKE_API_KEY" not in _child_env()
-        assert _child_env(for_agent=True)["PROBE_FAKE_API_KEY"] == "secret"
-    finally:
-        del os.environ["PROBE_FAKE_API_KEY"]
-
-
-def test_a_delegation_gets_hours_and_a_test_run_gets_minutes(tmp_path,
-                                                             monkeypatch):
-    """The ordinary ceiling is sized for `pytest`. Applied to a delegation it
-    would kill every one of them, after the quota had already been spent."""
-    seen = {}
-
-    def fake_run(argv, **kwargs):
-        seen["timeout"] = kwargs["timeout"]
-        seen["keys"] = "PROBE_FAKE_API_KEY" in kwargs["env"]
-        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
+def test_the_child_inherits_the_pool_keys(tmp_path, monkeypatch):
+    """A delegated session *is* the pool's consumer: it builds a router, and
+    without the keys it dies at start-up with 'no providers loaded'."""
     monkeypatch.setenv("PROBE_FAKE_API_KEY", "secret")
-    backend = RestrictedShellBackend(root_dir=str(tmp_path))
+    assert code.local_shell(tmp_path)._env["PROBE_FAKE_API_KEY"] == "secret"
 
-    backend.execute("python -m pytest")
-    assert seen == {"timeout": 300, "keys": False}
 
-    backend.execute("python -m agent.explore . --task hello")
-    assert seen["timeout"] == delegation.DEFAULT_TIMEOUT
-    assert seen["keys"] is True, "the child has a pool to build"
+def test_the_delegate_skill_asks_for_the_hour_a_session_needs(tmp_path):
+    """The backend's ceiling is sized for a test run, and nothing in Python
+    knows that one command is a delegation. The model is what asks for the
+    longer timeout, so the skill has to tell it to
+    ([16. Delegation](../../docs/16-delegation.md))."""
+    text = (Path(code.__file__).parent / "skills" / "delegate"
+            / "SKILL.md").read_text(encoding="utf-8")
+    assert "timeout=3600" in text
 
 
 # --- what comes back --------------------------------------------------------
