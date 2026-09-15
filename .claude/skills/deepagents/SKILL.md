@@ -107,14 +107,37 @@ skills catalog) → memory. Your text always goes *first*; nothing you pass
 removes the SDK's own sections.
 
 **Middleware order**: `TodoListMiddleware` → `SkillsMiddleware` (if `skills`) →
-`FilesystemMiddleware` → `SubAgentMiddleware` (if subagents) →
+`FilesystemMiddleware` → `SubAgentMiddleware` (near-always: see `task` below) →
 `SummarizationMiddleware` → `PatchToolCallsMiddleware` → **your `middleware=`** →
 profile `extra_middleware` → tool exclusion → prompt caching → `MemoryMiddleware`
 → `HumanInTheLoopMiddleware`.
 
-**`task` only exists if a synchronous subagent does.** With none passed, no
-`SubAgentMiddleware` is installed. Pass `GENERAL_PURPOSE_SUBAGENT` to get the
-default one back.
+**`task` is on by default, and it carries its own middleware stack.** This
+file used to say the opposite -- that with no `subagents=` there is no `task`.
+In 0.6.12 `create_deep_agent` *adds* a `general-purpose` subagent unless the
+harness profile disables it
+(`general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False)`) or you
+pass a spec named `general-purpose` yourself. Verified by listing the built
+agent's tools.
+
+The consequence is the part that bites. deepagents builds that auto-added
+subagent a *fresh* stack -- `TodoListMiddleware`, `FilesystemMiddleware` over
+**your backend**, summarization, `PatchToolCallsMiddleware` -- and **your
+`middleware=` is not in it**. Anything you enforce as middleware is enforced on
+the main agent only, so a boundary expressed that way has a hole the width of
+`task`: the subagent holds `write_file` over the same jail. `agent/improve`
+proved it, wrote a file through `task` that the parent refuses, and now passes
+the spec so the boundary is installed on both:
+
+```python
+subagents=[{**GENERAL_PURPOSE_SUBAGENT, "middleware": middleware}]
+```
+
+A caller-supplied spec's `middleware` *is* carried through
+(`graph.py`: `subagent_middleware.extend(spec.get("middleware", []))`), and
+supplying one named `general-purpose` suppresses the auto-added default. If you
+write middleware to enforce anything, assert it end to end through `task` --
+`tests/agent/test_improve_tools.py::TestReadOnly` is the worked example.
 
 **Rewording a built-in tool has a supported route.** Verified:
 
