@@ -305,10 +305,11 @@ def make_tools(workdir: Path, peers=None) -> dict:
         if baseline["holdout"]["runs"] == 0:
             empty_splits.append("holdout")
         if empty_splits:
+            commands = "\n".join(f"run_evals(config=\"code\", split=\"{s}\", ref=\"{branch}\")" for s in empty_splits)
             warning_note = (
-                f"\n\n⚠ **Warning:** The following split(s) have zero baseline runs recorded: {', '.join(empty_splits)}. "
+                f"\n\n**Warning:** The following split(s) have zero baseline runs recorded: {', '.join(empty_splits)}. "
                 f"The regression comparison for empty split(s) will be weaker or impossible. "
-                f"To fill them, run: `run_evals(config=\"code\", split=\"{empty_splits[0]}\", ref=\"{branch}\")`."
+                f"To fill them, run:\n{commands}"
             )
 
         request = (f"{brief.strip()}\n\n"
@@ -353,7 +354,8 @@ def make_tools(workdir: Path, peers=None) -> dict:
                 f"be verified or closed on this.\n\n```\n{_tail(suite_tail, 15)}"
                 f"\n```\n\nEither delegate a follow-up naming these failures, "
                 f"or say on the issue that the fix could not be made without "
-                f"breaking them. Do not run `run_evals` against this branch.")
+                f"breaking them. Do not run `run_evals` against this branch."
+                f"{warning_note}")
 
         if moved and issue.status in (issues_mod.OPEN, issues_mod.REOPENED):
             issue.note("status", f"{issue.status} -> {issues_mod.FIXING}")
@@ -377,7 +379,8 @@ def make_tools(workdir: Path, peers=None) -> dict:
                 f"not contain.\n\nTreat that as a finding about this issue: "
                 f"either the fix was already present (check the lever, and "
                 f"close this if so), or the brief did not say enough to act "
-                f"on. Do not delegate the same brief again.")
+                f"on. Do not delegate the same brief again."
+                f"{warning_note}")
 
         return (
             f"{rendered}\n\nRecorded against `{issue.id}`, now "
@@ -389,7 +392,8 @@ def make_tools(workdir: Path, peers=None) -> dict:
             f"issue was seen in with `ref=\"{branch}\"`, then `check_issue`. "
             f"**Passing `ref` is not optional** — the fix is on that branch and "
             f"a configuration pins `master`, so without it you would measure "
-            f"the unfixed code and conclude the fix failed.")
+            f"the unfixed code and conclude the fix failed."
+            f"{warning_note}")
 
     # -- grow the instrument -----------------------------------------------
 
@@ -521,6 +525,11 @@ def make_tools(workdir: Path, peers=None) -> dict:
         comb_s = cs.get("combined", {}).get("solved", 0)
         comb_r = cs.get("combined", {}).get("runs", 0)
 
+        undeclared = cs.get("undeclared", [])
+        undeclared_note = ""
+        if undeclared:
+            undeclared_note = f" Note: {len(undeclared)} run(s) scored on undeclared scenario(s) ({', '.join(sorted(set(undeclared)))}); add them to /evals/splits.yaml."
+
         caveat = "(a pass count at these sample sizes is weak evidence; this gate is a floor, not a proof)"
 
         if not report.get("has_post_fix_train") or not report.get("has_post_fix_holdout"):
@@ -532,20 +541,20 @@ def make_tools(workdir: Path, peers=None) -> dict:
             return (f"`{issue.id}` is still **{issue.status}**. The signature stops matching, "
                     f"but there are no post-fix runs on the following split(s): {', '.join(missing)}. "
                     f"The fix is unverified on the holdout and requires running `run_evals` on both splits. "
-                    f"Current score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout {caveat}.")
+                    f"Current score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout {caveat}.{undeclared_note}")
 
         if report.get("regressed"):
             return (f"`{issue.id}` is still **{issue.status}**. The signature stops matching, "
                     f"but the combined solved count regressed below baseline ({comb_s}/{comb_r} "
                     f"vs baseline {issue.baseline.get('combined', {}).get('solved', 0)}). "
-                    f"Score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout {caveat}.")
+                    f"Score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout {caveat}.{undeclared_note}")
 
         matching = ", ".join(f"`{r}`" for r in report["matching_runs"]) or "none"
         return (f"`{issue.id}`: {report['matched']} of {report['considered']} "
                 f"run(s) since {boundary or 'the beginning'} still match.\n"
                 f"Status {was} -> **{issue.status}**.\n"
                 f"Score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout, combined {comb_s}/{comb_r} {caveat}.\n"
-                f"Still matching: {matching}")
+                f"Still matching: {matching}{undeclared_note}")
 
     made = {
         "find_runs": StructuredTool.from_function(

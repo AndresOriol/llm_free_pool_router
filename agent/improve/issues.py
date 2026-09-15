@@ -249,13 +249,11 @@ def check(issue: Issue, found: list, since: str = "") -> dict:
     considered = [r for r in found if not since or (r.ts and r.ts > since)]
     matched = [r for r in considered if records_mod.matches(r, issue.signature)]
 
-    from evals import splits
     current_score = splits.score(considered)
 
     has_post_fix_train = current_score["train"]["runs"] > 0
     has_post_fix_holdout = current_score["holdout"]["runs"] > 0
 
-    baseline_combined = 0
     regressed = False
     has_baseline = bool(issue.baseline)
     if has_baseline:
@@ -274,6 +272,8 @@ def check(issue: Issue, found: list, since: str = "") -> dict:
         elif not has_post_fix_train or not has_post_fix_holdout:
             verdict = issue.status
         elif has_baseline and regressed:
+            verdict = issue.status
+        elif not has_baseline:
             verdict = issue.status
         else:
             verdict = CLOSED

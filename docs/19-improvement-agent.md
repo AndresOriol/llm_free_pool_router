@@ -158,16 +158,13 @@ same failure unable to recur silently after a fix ships.
 
 ## 19.6 The rule that decides whether a fix worked
 
-An issue defaults its boundary to when the fix was delegated, which is the only
-boundary that answers whether it stopped happening.
+An issue closes when the signature stops matching and the combined solved count
+over the train and holdout splits has not regressed, with at least one post-fix
+run on each split. Not when the coding agent says it is done, and not when the
+improvement agent finds the diagnosis convincing.
 
-The third is the one worth defending. An issue closes when the signature stops
-matching AND the combined solved count over the train and holdout splits has
-not regressed, with at least one post-fix run on each split.
-
-The two real issues (`invariant-guard-over-declines-explicit-doc-updates` and
-`recursion-limit-crash-on-long-running-sessions`) were diagnosed from exactly two
-runs of one scenario each, proving the old gate was too weak.
+`check_issue` defaults its boundary to when the fix was delegated, which is the
+only date that answers whether it stopped happening.
 
 | After the fix | Result |
 | --- | --- |
@@ -175,6 +172,16 @@ runs of one scenario each, proving the old gate was too weak.
 | Nothing matches, but no run on the holdout split | status unchanged, unverified on the holdout and names the `run_evals` call |
 | Nothing matches, both splits have runs, combined solved count below baseline | status unchanged, reported as a regression, naming which split lost |
 | Nothing matches, both splits have runs, combined solved count holds or improves | **closed** |
+
+An issue that closed because nobody looked — or because only the half it was
+diagnosed from was looked at — is worse than one still open, because it is a
+silent claim of a fix resting on no measurement. So a check with nothing to
+check, or with nothing on the holdout, leaves the status alone and reports the
+fix as unverified.
+
+The two real issues (`invariant-guard-over-declines-explicit-doc-updates` and
+`recursion-limit-crash-on-long-running-sessions`) were diagnosed from exactly two
+runs of one scenario each, proving the old gate was too weak.
 
 A pass count at these sample sizes is weak evidence and the gate is a floor,
 rather than a proof (see [6.4.2](06-agent.md#642-the-pass-column-is-noise)).

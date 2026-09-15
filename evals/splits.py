@@ -24,7 +24,8 @@ def load(path: Path = None) -> dict:
     return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
 
 
-def _maps():
+def _build_maps():
+    # The split declaration is a committed file that does not change while a process runs.
     data = load()
     s2s, t2s = {}, {}
     for sp in ("train", "holdout"):
@@ -37,9 +38,11 @@ def _maps():
     return s2s, t2s
 
 
+_S2S, _T2S = _build_maps()
+
+
 def split_of(scenario_or_topic: str) -> str:
     """Return 'train' or 'holdout', or raise ValueError if unlisted."""
-    s2s, t2s = _maps()
     val = scenario_or_topic
     if val.startswith("scenario/"):
         parts = val.split("/")
@@ -48,10 +51,10 @@ def split_of(scenario_or_topic: str) -> str:
         parts = val.split("/")
         val = parts[1] if len(parts) >= 2 else val
 
-    if val in s2s:
-        return s2s[val]
-    if val in t2s:
-        return t2s[val]
+    if val in _S2S:
+        return _S2S[val]
+    if val in _T2S:
+        return _T2S[val]
     raise ValueError(f"Scenario or topic {scenario_or_topic!r} is not listed in any split in /evals/splits.yaml")
 
 
