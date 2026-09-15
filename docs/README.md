@@ -124,7 +124,10 @@ else on this page is design and changes rarely; this block is state.*
 [6.2.1](06-agent.md#621-the-step-budget) The step budget ·
 [6.3](06-agent.md#63-what-failover-looks-like-in-practice) Failover in practice ·
 [6.4](06-agent.md#64-why-it-is-shaped-this-way) Why it is shaped this way ·
-[6.5](06-agent.md#65-what-makes-it-a-coding-agent) What makes it a coding agent
+[6.5](06-agent.md#65-what-makes-it-a-coding-agent) What makes it a coding agent ·
+[6.6](06-agent.md#66-skills) Skills ·
+[6.6.1](06-agent.md#661-the-description-is-the-gate) The description is the gate ·
+[6.7](06-agent.md#67-read_file-reads-the-whole-file) `read_file` reads the whole file
 
 **[7. Observability](07-observability.md)** — what a run leaves behind, and why the answer is changing
 &nbsp;&nbsp;&nbsp;&nbsp;[7.1](07-observability.md#71-why-two) Why two ·

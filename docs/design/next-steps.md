@@ -8,6 +8,7 @@ Improve the rerouting so that there are less misses when there is a lot of traff
 ### Optional (high complexity)
 
 Create an automatic classifier that selects the best model depending on the task and current availability of the pool. This implementation only makes sense if the previous 2 themes are already implemented. This improvement by itself can be considered an independent project.
+
 ## What the deepagents examples do that we do not
 
 From a review of <https://github.com/langchain-ai/deepagents/tree/main/examples>
