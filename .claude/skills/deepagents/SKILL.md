@@ -11,7 +11,7 @@ here is a line that has to survive a `deepagents` upgrade, so the default answer
 to "how do I change how the agent behaves" is *configuration or prose*, never a
 new module.
 
-Before you write anything, you owe two checks.
+Before you write anything, you owe three checks.
 
 ## 1. Check the version, always
 
@@ -65,6 +65,32 @@ reimplemented here:
 | self-grading against criteria | `RubricMiddleware` |
 | dropping a built-in tool | `HarnessProfile(excluded_tools=...)` |
 | rewording a built-in tool | `HarnessProfile(tool_description_overrides=...)` |
+
+## 3. Read how upstream does it before inventing a shape
+
+<https://github.com/langchain-ai/deepagents/tree/main/examples> is the library
+authors' own answer to "what is this for". Read the one nearest your task before
+designing: it shows the idiom they intend, and this repo has independently
+rebuilt two of them.
+
+| Example | What it is | Ours |
+| --- | --- | --- |
+| `better-harness` | an outer agent edits an inner agent's *surfaces* — prompts, tool files, skills, middleware — and a change is kept only if the **train + holdout** pass count improves | [agent/improve](../../../agent/improve/) + [evals](../../../evals/) |
+| `ralph_mode` | autonomous looping, **fresh context each iteration**, filesystem and git as the only memory | [docs/design/long-run-harness.md](../../../docs/design/long-run-harness.md) |
+| `rubric_middleware` | a grader model revises output until criteria pass | `RubricMiddleware` |
+| `deploy-coding-agent`, `content-builder-agent` | the plain shapes: a coding agent, memory + subagents | [agent/code](../../../agent/code/) |
+| `async-subagent-server` | agents behind HTTP | [agent/serve](../../../agent/serve/) |
+
+Two things worth stealing rather than re-deriving:
+
+- **`better-harness` splits train from holdout** and gates on the combined
+  count. Ours gates on a signature replay with no holdout, which is how a
+  harness change overfits the handful of scenarios it was diagnosed from.
+- **`better-harness` declares its editable surfaces** instead of naming a file
+  in prose. Our issues carry a free-text `lever`, which nothing can check.
+
+They are examples, not the API — the installed source still wins on any
+question of what a parameter does.
 
 ## Pick the lightest extension point that works
 
@@ -167,6 +193,35 @@ python -c "from agent.runtime.chat_model import RouterChatModel as R; print(R(ro
 `agent/runtime/file_tools.py` does this, and a test pins the key to the live
 class so renaming `RouterChatModel` fails CI instead of quietly dropping the
 override.
+
+**One profile for three agents is not a law — it is a missing field.** Because
+the key is the provider alone, a profile registered for this pool applies to
+`code`, `explore` and `improve` at once, which is why each of them reaches past
+the profile for middleware instead. But the lookup is
+`f"{provider}:{identifier}"` with a **fallback to the provider**, and the
+identifier is `model_name` or `model` on the instance
+(`deepagents/_models.py:get_model_identifier`). `RouterChatModel` declares
+neither, so the identifier is `None` and only the bare key can ever match.
+
+Give it an optional `model_name` set per agent and each gets its own profile
+**layered on the shared one** — verified, and they merge rather than replace:
+
+```
+model_name=None       -> excluded=[]                    read_file_override=True
+model_name='explore'  -> excluded=['glob','grep','ls']  read_file_override=True
+model_name='code'     -> excluded=[]                    read_file_override=True
+```
+
+That is the difference between extension point 3 being unavailable here and
+being the default answer. `excluded_tools`, `tool_description_overrides`,
+`base_system_prompt`, `system_prompt_suffix`, `excluded_middleware` and
+`general_purpose_subagent` all become per-agent and declarative.
+
+Two limits to know before leaning on it: `FilesystemMiddleware` and
+`SubAgentMiddleware` are in `_REQUIRED_MIDDLEWARE` and `excluded_middleware`
+raises `ValueError` rather than dropping them, so their prompt sections cannot
+be removed this way; and excluding a middleware takes its *tools* with it, so it
+is not a way to keep a tool and drop its prompt section.
 
 ## Anti-patterns, with the repo's own examples
 
