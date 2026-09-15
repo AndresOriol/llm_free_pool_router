@@ -1,0 +1,63 @@
+# Train and holdout splits for evaluation scenarios
+
+# Maintenance rules (§1.5):
+# - A newly authored topic joins holdout by default.
+# - A topic moves holdout -> train the moment an issue cites a run from it, and
+#   the move is recorded in the file with the issue id.
+# - A topic never moves train -> holdout, and the split is never edited after
+#   seeing a score. Doing that is the leak this whole change exists to prevent.
+# - A topic in neither list is a defect.
+#
+# Why this lives in the harness repo and not agent_evals:
+# The gate must be computable from recorded run.json files when the scenario repo
+# is not on disk at all, and the split is part of the method, which
+# /docs/08-evaluation-method.md §8.3 keeps in this repo with the code it measures.
+
+train:
+  http-headers:
+    reason: "L0, exhausted as an instrument (docs/11 §11.4); 39 of 105 recorded runs"
+    scenarios:
+      - retry-after-case
+  alerts:
+    reason: "14 runs; the most-run L2 bugfix"
+    scenarios:
+      - threshold-off-by-one
+  ledger:
+    reason: "23 runs across count-and-share + stale-categories"
+    scenarios:
+      - count-and-share
+      - stale-categories
+  pipeline:
+    reason: "issue invariant-guard-over-declines-explicit-doc-updates was diagnosed here"
+    scenarios:
+      - model-v3-propagation
+  ui-port:
+    reason: "issue recursion-limit-crash-on-long-running-sessions was diagnosed here"
+    scenarios:
+      - ui-port-to-typescript
+
+holdout:
+  bots:
+    reason: "3 runs, no issue diagnosed from it"
+    scenarios:
+      - bots-to-base-class
+  export:
+    reason: "3 runs, no issue diagnosed from it; the set's only generative"
+    scenarios:
+      - stock-export
+  sessions:
+    reason: "5 runs, no issue diagnosed from it"
+    scenarios:
+      - duration-notes
+  stocktake:
+    reason: "2 runs, no issue diagnosed from it"
+    scenarios:
+      - worst-first
+  suite:
+    reason: "3 runs, no issue diagnosed from it; the set's only tests"
+    scenarios:
+      - cover-the-rejections
+  usage:
+    reason: "4 runs, no issue diagnosed from it; the set's only ambiguous"
+    scenarios:
+      - which-accounts-are-active

@@ -43,7 +43,23 @@ def _scenarios(repo: Path, args) -> list:
             else scenario_mod.list_scenarios(repo, getattr(args, "topic", "") or ""))
     if not tags:
         sys.exit(f"No scenarios in {repo}. Expected tags like scenario/<topic>/<id>.")
-    return [scenario_mod.load(repo, tag) for tag in tags]
+    scenarios = [scenario_mod.load(repo, tag) for tag in tags]
+    split = getattr(args, "split", "")
+    if split:
+        if split not in ("train", "holdout"):
+            sys.exit(f"Invalid split {split!r}. Expected 'train' or 'holdout'.")
+        from evals import splits
+        filtered = []
+        for s in scenarios:
+            try:
+                if splits.split_of(s.id) == split:
+                    filtered.append(s)
+            except ValueError as exc:
+                sys.exit(f"Scenario {s.id!r} is not listed in /evals/splits.yaml. Add it before running with --split.")
+        scenarios = filtered
+        if not scenarios:
+            sys.exit(f"No scenarios matched split {split!r}.")
+    return scenarios
 
 
 def _selected_tasks(scenarios: list, suite: str, tags: list) -> list:
@@ -342,6 +358,8 @@ def main() -> int:
     run.add_argument("--scenarios", default="")
     run.add_argument("--topic", default="")
     run.add_argument("--scenario", help="a full tag, e.g. scenario/<topic>/<id>")
+    run.add_argument("--split", choices=["train", "holdout"], default="",
+                     help="restrict scenarios to train or holdout split")
     run.add_argument("--suite", default="")
     run.add_argument("--tags", nargs="*")
     run.add_argument("--reps", type=int, default=3)
