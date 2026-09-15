@@ -293,11 +293,14 @@ def test_the_memory_file_is_read_from_the_workspace(tmp_path: Path):
 def test_only_one_memory_file_is_read_when_a_project_has_both(tmp_path: Path):
     """A repository holding both holds two drafts of one document. Loading
     both pays for the overlap twice and leaves the model to work out which
-    draft is current -- so the first match wins and the other is not read."""
-    (tmp_path / "AGENTS.md").write_text("the current one\n", encoding="utf-8")
-    (tmp_path / "CLAUDE.md").write_text("the stale one\n", encoding="utf-8")
+    draft is current -- so the first match wins and the other is not read.
 
-    assert code.memory_file(tmp_path) == ["/AGENTS.md"]
+    `CLAUDE.md` is first because that is the file the projects this harness
+    works on actually keep current."""
+    (tmp_path / "CLAUDE.md").write_text("the current one\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("the stale one\n", encoding="utf-8")
+
+    assert code.memory_file(tmp_path) == ["/CLAUDE.md"]
     prompt_text = _system_prompt_of_a_run(tmp_path)
     assert "the current one" in prompt_text
     assert "the stale one" not in prompt_text

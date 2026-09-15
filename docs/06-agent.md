@@ -506,11 +506,12 @@ since one of them was last updated. This repository is the example: its
 [AGENTS.md](../AGENTS.md) and [CLAUDE.md](../CLAUDE.md) open with different
 north stars.
 
-So the harness picks, and the order is `AGENTS.md` then `CLAUDE.md`: the first
-is the vendor-neutral spec and the one deepagents implements, the second is the
-fallback for a project that only ever wrote instructions for one tool.
-Preferring one is not requiring it — a project with only a `CLAUDE.md` gets a
-memory file.
+So the harness picks, and the order is `CLAUDE.md` then `AGENTS.md`. The
+vendor-neutral spec is `AGENTS.md` and it is the one deepagents implements, so
+the abstract argument favours it — but the projects this harness is pointed at
+are worked on with Claude Code, and `CLAUDE.md` is the file that is actually
+kept current there. The stale draft is the one worth not reading. Preferring one
+is not requiring it — a project with only an `AGENTS.md` gets a memory file.
 
 ### 6.8.2 What it is allowed to be
 

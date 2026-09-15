@@ -132,13 +132,14 @@ SKILLS_ROOT = "/skills/"
 # the workspace root and injected into the system prompt by deepagents'
 # `MemoryMiddleware`.
 #
-# `AGENTS.md` first because it is the vendor-neutral spec (<https://agents.md>)
-# and the one deepagents implements; `CLAUDE.md` is the fallback for a project
-# that only ever wrote one for Claude Code. First match wins, and the other is
-# not read: a repository holding both holds two drafts of one document, and
-# loading both would pay for the overlap twice and leave the model to guess
+# `CLAUDE.md` first. `AGENTS.md` is the vendor-neutral spec (<https://agents.md>)
+# and the one deepagents implements, so the abstract argument favours it -- but
+# the projects this harness is pointed at are worked on with Claude Code, and
+# `CLAUDE.md` is the file actually kept current there. First match wins, and the
+# other is not read: a repository holding both holds two drafts of one document,
+# and loading both would pay for the overlap twice and leave the model to guess
 # which draft is current.
-MEMORY_FILES = ("AGENTS.md", "CLAUDE.md")
+MEMORY_FILES = ("CLAUDE.md", "AGENTS.md")
 
 # Two prompt sections, each on by default so it is a configuration an A/B
 # can measure. `=0` leaves the file out: that is the other arm.
