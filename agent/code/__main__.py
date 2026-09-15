@@ -34,22 +34,12 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage
 
+from agent import delegation
 from agent.code.agent import CONTEXT_FLOOR, RECURSION_LIMIT, connect, run
-from agent.runtime import cli, gitstate
-from agent.runtime.awake import keep_awake
+from agent.utils import cli, gitstate
+from agent.utils.awake import keep_awake
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s - %(levelname)s - %(message)s")
-logging.getLogger("LLMRouter").setLevel(logging.INFO)
-
-# Models emit characters the Windows console codepage cannot encode, and an
-# unencodable character in the summary raised UnicodeEncodeError *after* the
-# work was done -- losing the diagnostics on a run that had actually passed.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):  # not a reconfigurable stream
-        pass
+cli.setup()
 
 
 def main() -> None:
@@ -74,9 +64,9 @@ def main() -> None:
     # The eval runner names the trace itself, per run, so a configuration
     # cannot set AGENT_TRACE_FILE ahead of time -- it does not yet know the run
     # directory. It exports EVAL_TRACE_FILE instead, pointing at the flat
-    # `trace.jsonl` the callback handler writes (agent/runtime/trace.py). The
+    # `trace.jsonl` the callback handler writes (agent/utils/trace.py). The
     # run tree is a second, nested record fetched from LangSmith
-    # (agent/runtime/run_tree.py), so it takes the directory and not the name:
+    # (agent/utils/run_tree.py), so it takes the directory and not the name:
     # writing a JSON tree to a `.jsonl` path would both lie about the format
     # and overwrite the file every metric is summed over.
     trace_file = os.environ.get("AGENT_TRACE_FILE")
@@ -85,7 +75,7 @@ def main() -> None:
 
     # The head this run starts from, so the summary can say what actually moved
     # rather than leaving a reader to trust the closing message
-    # (agent/runtime/gitstate.py).
+    # (agent/utils/gitstate.py).
     before = gitstate.head(workdir)
 
     # Hours of wall time with long gaps between calls looks like an idle
@@ -95,6 +85,9 @@ def main() -> None:
         final, written = run(
             model, task, workdir, config={"recursion_limit": budget},
             floor=floor, members=members, allow_shell=shell,
+            # Probed, not declared: an agent offered and then unusable costs a
+            # session to discover (docs/16-delegation.md).
+            peers=delegation.available(),
             trace_path=Path(trace_file) if trace_file else None)
 
     _summary(final, written, gitstate.state(workdir, before))
@@ -104,13 +97,6 @@ def main() -> None:
     # opposite (docs/08-evaluation-method.md#85-the-run-lifecycle).
     sys.exit(0)
 
-
-def _text(message) -> str:
-    content = getattr(message, "content", "")
-    if isinstance(content, list):  # content blocks
-        content = " ".join(str(b.get("text", "")) for b in content
-                           if isinstance(b, dict))
-    return str(content).strip()
 
 
 def final_message(final) -> str:
@@ -124,7 +110,7 @@ def final_message(final) -> str:
     """
     said = [m for m in (final or {}).get("messages") or []
             if isinstance(m, AIMessage)]
-    return next((t for t in map(_text, reversed(said)) if t), "")
+    return next((t for t in map(cli.text, reversed(said)) if t), "")
 
 
 def _summary(final, written, state=None) -> None:

@@ -138,10 +138,10 @@ def test_the_summary_reports_a_stopped_run_differently_from_a_finished_one(capsy
 
 def test_the_summary_finds_the_last_message_that_has_words():
     """A stopped run ends on an empty tool call; the account is further back."""
-    from agent.code.__main__ import _text
-    assert _text(AIMessage(content="", tool_calls=[])) == ""
-    assert _text(AIMessage(content="  the account  ")) == "the account"
-    assert _text(AIMessage(content=[{"type": "text", "text": "blocks"}])) == "blocks"
+    from agent.utils.cli import text
+    assert text(AIMessage(content="", tool_calls=[])) == ""
+    assert text(AIMessage(content="  the account  ")) == "the account"
+    assert text(AIMessage(content=[{"type": "text", "text": "blocks"}])) == "blocks"
 
 
 def test_the_prompt_names_the_programs_execute_can_run():

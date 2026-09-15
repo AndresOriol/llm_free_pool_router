@@ -34,21 +34,10 @@ import sys
 from pathlib import Path
 
 from agent.explore.agent import CONTEXT_FLOOR, RESEARCH_DIR, connect, run
-from agent.runtime import cli
-from agent.runtime.awake import keep_awake
+from agent.utils import cli
+from agent.utils.awake import keep_awake
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s - %(levelname)s - %(message)s")
-logging.getLogger("LLMRouter").setLevel(logging.INFO)
-
-# Models emit characters the Windows console codepage cannot encode, and an
-# unencodable character in the summary raised UnicodeEncodeError *after* the
-# work was done -- losing the diagnostics on a run that had actually passed.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):  # not a reconfigurable stream
-        pass
+cli.setup()
 
 
 def main() -> None:

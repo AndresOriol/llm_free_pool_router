@@ -46,21 +46,10 @@ from agent.improve.agent import (CONTEXT_FLOOR, RECURSION_LIMIT,
                                  NothingToImproveOn, check_records, connect,
                                  prompt, run)
 from agent.improve.issues import IssueStore
-from agent.runtime import cli
-from agent.runtime.awake import keep_awake
+from agent.utils import cli
+from agent.utils.awake import keep_awake
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s - %(levelname)s - %(message)s")
-logging.getLogger("LLMRouter").setLevel(logging.INFO)
-
-# Models emit characters the Windows console codepage cannot encode, and an
-# unencodable character in the summary raised UnicodeEncodeError *after* the
-# work was done -- losing the diagnostics on a run that had actually passed.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):  # not a reconfigurable stream
-        pass
+cli.setup()
 
 
 def main() -> None:
@@ -115,13 +104,6 @@ def main() -> None:
     sys.exit(0)
 
 
-def _text(message) -> str:
-    content = getattr(message, "content", "")
-    if isinstance(content, list):  # content blocks
-        content = " ".join(str(b.get("text", "")) for b in content
-                           if isinstance(b, dict))
-    return str(content).strip()
-
 
 def _summary(final, written, workdir: Path) -> None:
     """The pass's account of itself on stdout, final message first.
@@ -132,7 +114,7 @@ def _summary(final, written, workdir: Path) -> None:
     """
     messages = (final or {}).get("messages") or []
     said = [m for m in messages if isinstance(m, AIMessage)]
-    text = next((t for t in map(_text, reversed(said)) if t), "")
+    text = next((t for t in map(cli.text, reversed(said)) if t), "")
     if text:
         print(f"\n{text}")
     print(f"\n=== DONE after {len(messages)} message(s) ===")
