@@ -6,7 +6,7 @@ This file is the whole harness. Read top to bottom:
    it is refused.
 2. **Text** -- every word the model reads is a Markdown file: `prompts/` beside
    this one for the job, `tool_descriptions/` for what each tool is for, and
-   `agent/runtime/prompts/` for what every agent is told about where it runs.
+   `agent/utils/prompts/` for what every agent is told about where it runs.
    Each is a template, and `{name}` is filled from `template_values()`.
 3. **Model** -- the pool, held to a context floor (`connect`).
 4. **What it knows before it starts** -- the recorded runs, and the ledger.
@@ -64,11 +64,11 @@ from langchain_core.tracers.context import collect_runs
 from agent.improve import records, repo
 from agent.improve.issues import IssueStore
 from agent.improve.tools import make_tools
-from agent.runtime import run_tree
-from agent.runtime.pool import CONTEXT_FLOOR, connect  # noqa: F401 - section 3
-from agent.runtime.prompts import fill, shared_values
-from agent.runtime.shell import ShellAllowListMiddleware
-from agent.runtime.trace import tracer_from_env
+from agent.utils import run_tree
+from agent.utils.pool import CONTEXT_FLOOR, connect  # noqa: F401 - section 3
+from agent.utils.prompts import fill, shared_values
+from agent.utils.shell import ShellAllowListMiddleware
+from agent.utils.trace import traced
 
 logger = logging.getLogger("harness.improve")
 
@@ -121,7 +121,7 @@ def system_prompt(values: dict) -> str:
 
 # --- 3. Model -------------------------------------------------------------------
 #
-# The model is the pool: `connect(floor)` (agent/runtime/pool.py) returns a
+# The model is the pool: `connect(floor)` (agent/utils/pool.py) returns a
 # RouterChatModel that routes only to members holding `floor` input tokens, and
 # how many there are, which the prompt states.
 
@@ -222,7 +222,7 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
     from deepagents import create_deep_agent
     from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 
-    from agent.runtime.backend import RestrictedShellBackend
+    from agent.utils.backend import RestrictedShellBackend
 
     workdir = Path(workdir)
     values = template_values(floor, members, ledger=ledger_section(workdir))
@@ -261,13 +261,9 @@ def run(model, task: str, workdir: Path, config=None,
         peers: Optional[Sequence[str]] = None,
         trace_path: Optional[Path] = None) -> tuple:
     """One improvement pass. Returns (final_state, run record written or None)."""
-    config = dict(config or {})
+    config = traced(config)
     config.setdefault("recursion_limit", RECURSION_LIMIT)
     workdir = Path(workdir)
-
-    jsonl = tracer_from_env()
-    if jsonl is not None:
-        config["callbacks"] = list(config.get("callbacks") or []) + [jsonl]
 
     agent = build_agent(workdir, model, floor=floor, members=members,
                         peers=peers)
@@ -280,10 +276,7 @@ def run(model, task: str, workdir: Path, config=None,
     with repo.restored(workdir), collect_runs() as collected:
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
 
-    written = run_tree.record(collected.traced_runs, trace_path, {
-        "workdir": str(workdir),
-        "harness": "improve",
-        "context_floor": floor,
-        "eligible_providers": members,
-    })
+    written = run_tree.record(
+        collected.traced_runs, trace_path,
+        run_tree.about(workdir, "improve", floor, members))
     return final, written
