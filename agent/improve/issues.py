@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Optional
 
 from agent.improve import records as records_mod
+from evals import splits
 
 # Beside `reports/`, `reviews/` and `runs/`, because it indexes the same runs
 # and a reader who found one directory has found them all.
@@ -83,6 +84,7 @@ class Issue:
     tasks: list = field(default_factory=list)        # delegations to `code`
     checks: list = field(default_factory=list)       # verification passes
     history: list = field(default_factory=list)      # append-only
+    baseline: dict = field(default_factory=dict)
 
     def note(self, event: str, detail: str = "") -> None:
         self.history.append({"ts": now(), "event": event, "detail": detail})
@@ -101,13 +103,22 @@ class Issue:
                  f"{self.first_seen[:19] or '?'} → {self.last_seen[:19] or '?'}",
                  f"- **Signature:** `{json.dumps(self.signature, sort_keys=True)}`",
                  ""]
+        if self.evidence:
+            lines += ["## Evidence", ""] + [f"- `{r}`" for r in self.evidence] + [""]
         for heading, body in (("What goes wrong", self.summary),
                               ("Diagnosis", self.diagnosis),
                               ("Fix", self.fix)):
             if body:
                 lines += [f"## {heading}", "", body, ""]
-        if self.evidence:
-            lines += ["## Evidence", ""] + [f"- `{r}`" for r in self.evidence] + [""]
+        if self.baseline:
+            b_ts = str(self.baseline.get("ts", ""))[:19]
+            b_train = self.baseline.get("train", {})
+            b_hold = self.baseline.get("holdout", {})
+            b_comb = self.baseline.get("combined", {})
+            lines += [f"## Baseline ({b_ts})", "",
+                      f"- Train: solved {b_train.get('solved', 0)}/{b_train.get('runs', 0)}",
+                      f"- Holdout: solved {b_hold.get('solved', 0)}/{b_hold.get('runs', 0)}",
+                      f"- Combined: solved {b_comb.get('solved', 0)}/{b_comb.get('runs', 0)}", ""]
         if self.tasks:
             lines += ["## Delegated", ""]
             lines += [f"- {t.get('ts', '')[:19]} `{t.get('task_id', '?')}` → "
@@ -224,8 +235,10 @@ def check(issue: Issue, found: list, since: str = "") -> dict:
 
     - Something matched after the fix → the issue is not fixed. If it was
       `closed`, it **reopens**, which is the case the ledger exists to catch.
-    - Nothing matched, and there was at least one run after the fix to not match
-      → **closed**.
+    - Nothing matched, and there was at least one post-fix run on each split,
+      and no regression against baseline (when recorded) → **closed**.
+    - Nothing matched, but no post-fix run on the holdout split → status unchanged, unverified on the holdout.
+    - Nothing matched, both splits have runs, but combined solved count is below baseline → status unchanged, reported as a regression.
     - Nothing matched and nothing ran → unchanged, and the report says so. An
       issue must never close because nobody looked.
     - Nothing matched, but the signature has never matched any run (evidence is
@@ -236,6 +249,20 @@ def check(issue: Issue, found: list, since: str = "") -> dict:
     considered = [r for r in found if not since or (r.ts and r.ts > since)]
     matched = [r for r in considered if records_mod.matches(r, issue.signature)]
 
+    from evals import splits
+    current_score = splits.score(considered)
+
+    has_post_fix_train = current_score["train"]["runs"] > 0
+    has_post_fix_holdout = current_score["holdout"]["runs"] > 0
+
+    baseline_combined = 0
+    regressed = False
+    has_baseline = bool(issue.baseline)
+    if has_baseline:
+        b_comb = issue.baseline.get("combined", {}).get("solved", 0)
+        combined_solved = current_score["combined"]["solved"]
+        regressed = combined_solved < b_comb
+
     never_matched = (not issue.evidence
                      and not any(c.get("matched", 0) > 0 for c in issue.checks))
 
@@ -244,6 +271,10 @@ def check(issue: Issue, found: list, since: str = "") -> dict:
     elif considered:
         if never_matched:
             verdict = UNPROVEN
+        elif not has_post_fix_train or not has_post_fix_holdout:
+            verdict = issue.status
+        elif has_baseline and regressed:
+            verdict = issue.status
         else:
             verdict = CLOSED
     else:
@@ -251,7 +282,12 @@ def check(issue: Issue, found: list, since: str = "") -> dict:
 
     report = {"ts": now(), "since": since, "considered": len(considered),
               "matched": len(matched), "verdict": verdict,
-              "matching_runs": [r.id for r in matched[:20]]}
+              "matching_runs": [r.id for r in matched[:20]],
+              "current_score": current_score,
+              "has_post_fix_train": has_post_fix_train,
+              "has_post_fix_holdout": has_post_fix_holdout,
+              "regressed": regressed,
+              "has_baseline": has_baseline}
     issue.checks.append(report)
     if verdict != issue.status and verdict != UNPROVEN:
         issue.note("status", f"{issue.status} -> {verdict} (check)")

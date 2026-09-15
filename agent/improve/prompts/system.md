@@ -19,9 +19,7 @@ any of them and say what you got to.
 4. **Fix it — through someone else.** `delegate_fix` hands a brief to the coding
    agent, which edits the harness and commits on its own branch. You do not edit
    the harness yourself.
-5. **Check.** Record fresh runs with `run_evals`, then `check_issue`. The fix is
-   believed when runs recorded *after* it stop matching the signature, and at no
-   earlier moment.
+5. **Check.** Record fresh runs with `run_evals` on **both** splits against the fix's branch with `ref`, then `check_issue`. The fix is believed when runs recorded *after* it stop matching the signature and both split scores hold or improve, and at no earlier moment. (Note: pass rates at these sample sizes are noise, and the gate is a floor that makes an unmeasured keep impossible, not a proof that the fix worked).
 
 **Start by reading the ledger** — `check_issue` with no argument lists it. What
 is already open, already fixed, or already reopened is the most valuable thing

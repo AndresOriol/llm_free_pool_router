@@ -50,6 +50,7 @@ from agent.utils import gitstate
 from agent.utils.prompts import fill
 from agent.improve import issues as issues_mod
 from agent.improve import records as records_mod
+from evals import splits
 from agent.improve import repo
 from agent.improve import scenarios as scenarios_mod
 
@@ -285,6 +286,31 @@ def make_tools(workdir: Path, peers=None) -> dict:
         else:
             branch = ""
 
+        # Record baseline
+        from evals import splits
+        records_list = _records()
+        baseline = splits.score(records_list)
+        issue.baseline = {
+            "ts": issues_mod.now(),
+            "train": baseline["train"],
+            "holdout": baseline["holdout"],
+            "combined": baseline["combined"],
+        }
+        store.save(issue)
+
+        warning_note = ""
+        empty_splits = []
+        if baseline["train"]["runs"] == 0:
+            empty_splits.append("train")
+        if baseline["holdout"]["runs"] == 0:
+            empty_splits.append("holdout")
+        if empty_splits:
+            warning_note = (
+                f"\n\n⚠ **Warning:** The following split(s) have zero baseline runs recorded: {', '.join(empty_splits)}. "
+                f"The regression comparison for empty split(s) will be weaker or impossible. "
+                f"To fill them, run: `run_evals(config=\"code\", split=\"{empty_splits[0]}\", ref=\"{branch}\")`."
+            )
+
         request = (f"{brief.strip()}\n\n"
                    f"---\nThis addresses issue `{issue.id}` — {issue.title}. "
                    f"The diagnosis behind it is in "
@@ -423,9 +449,9 @@ def make_tools(workdir: Path, peers=None) -> dict:
     # -- make new evidence -------------------------------------------------
 
     def run_evals(config: str = "code", scenario: str = "", reps: int = 1,
-                  ref: str = "", topic: str = "") -> str:
-        if not scenario and not topic:
-            return ("error: name a `scenario` or a `topic`. Running the whole "
+                  ref: str = "", topic: str = "", split: str = "") -> str:
+        if not scenario and not topic and not split:
+            return ("error: name a `scenario`, `topic` or `split`. Running the whole "
                     "suite from a tool call would spend hours of quota on runs "
                     "nobody asked for.")
         reps = max(1, min(int(reps or 1), MAX_REPS))
@@ -438,6 +464,8 @@ def make_tools(workdir: Path, peers=None) -> dict:
             command += ["--scenario", scenario]
         if topic:
             command += ["--topic", topic]
+        if split:
+            command += ["--split", split]
         if ref:
             command += ["--ref", ref]
 
@@ -484,10 +512,40 @@ def make_tools(workdir: Path, peers=None) -> dict:
             return (f"`{issue.id}` is still **{issue.status}**. No run has been "
                     f"recorded since {boundary or 'the beginning'}, so the fix "
                     f"is unverified — record some with `run_evals`.")
+
+        cs = report.get("current_score", {})
+        train_s = cs.get("train", {}).get("solved", 0)
+        train_r = cs.get("train", {}).get("runs", 0)
+        hold_s = cs.get("holdout", {}).get("solved", 0)
+        hold_r = cs.get("holdout", {}).get("runs", 0)
+        comb_s = cs.get("combined", {}).get("solved", 0)
+        comb_r = cs.get("combined", {}).get("runs", 0)
+
+        caveat = "(a pass count at these sample sizes is weak evidence; this gate is a floor, not a proof)"
+
+        if not report.get("has_post_fix_train") or not report.get("has_post_fix_holdout"):
+            missing = []
+            if not report.get("has_post_fix_train"):
+                missing.append("train")
+            if not report.get("has_post_fix_holdout"):
+                missing.append("holdout")
+            return (f"`{issue.id}` is still **{issue.status}**. The signature stops matching, "
+                    f"but there are no post-fix runs on the following split(s): {', '.join(missing)}. "
+                    f"The fix is unverified on the holdout and requires running `run_evals` on both splits. "
+                    f"Current score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout {caveat}.")
+
+        if report.get("regressed"):
+            return (f"`{issue.id}` is still **{issue.status}**. The signature stops matching, "
+                    f"but the combined solved count regressed below baseline ({comb_s}/{comb_r} "
+                    f"vs baseline {issue.baseline.get('combined', {}).get('solved', 0)}). "
+                    f"Score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout {caveat}.")
+
         matching = ", ".join(f"`{r}`" for r in report["matching_runs"]) or "none"
         return (f"`{issue.id}`: {report['matched']} of {report['considered']} "
                 f"run(s) since {boundary or 'the beginning'} still match.\n"
-                f"Status {was} -> **{issue.status}**.\nStill matching: {matching}")
+                f"Status {was} -> **{issue.status}**.\n"
+                f"Score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout, combined {comb_s}/{comb_r} {caveat}.\n"
+                f"Still matching: {matching}")
 
     made = {
         "find_runs": StructuredTool.from_function(

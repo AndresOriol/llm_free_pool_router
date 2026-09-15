@@ -87,12 +87,15 @@ class TestCheck:
 
     def test_a_clean_run_after_the_fix_closes_it(self, tmp_path):
         _record(tmp_path, "20260101T000000Z_before", {"failure_class": "stopping"})
-        _record(tmp_path, "20260901T000000Z_after", {"failure_class": ""})
+        _record(tmp_path, "20260901T000000Z_after",
+                {"failure_class": "", "scenario": "retry-after-case", "verified": True})
+        _record(tmp_path, "20260902T000000Z_after_holdout",
+                {"failure_class": "", "scenario": "stock-export", "verified": True})
         issue = self._issue()
 
         report = issues.check(issue, _records(tmp_path), since="2026-06-01")
 
-        assert (report["considered"], report["matched"]) == (1, 0)
+        assert (report["considered"], report["matched"]) == (2, 0)
         assert issue.status == issues.CLOSED
 
     def test_the_failure_coming_back_reopens_a_closed_issue(self, tmp_path):
@@ -130,6 +133,16 @@ class TestCheck:
 
         assert (report["considered"], report["matched"]) == (1, 0)
         assert report["verdict"] == "unproven"
+        assert issue.status == issues.FIXING
+
+    def test_missing_holdout_run_does_not_close(self, tmp_path):
+        _record(tmp_path, "20260101T000000Z_before", {"failure_class": "stopping"})
+        _record(tmp_path, "20260901T000000Z_after",
+                {"failure_class": "", "scenario": "retry-after-case", "verified": True})
+        issue = self._issue()
+
+        report = issues.check(issue, _records(tmp_path), since="2026-06-01")
+
         assert issue.status == issues.FIXING
 
 
