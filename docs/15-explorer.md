@@ -48,7 +48,7 @@ Search is [Tavily](https://tavily.com): a search API built for agents, whose fre
 tier is **1,000 credits a month** on a key you get by signing up. One
 `tavily_search` spends one credit for the URL discovery; fetching the pages costs
 nothing but the HTTP round trips, because the tool does that itself
-([agent/runtime/web.py](../agent/runtime/web.py)).
+([agent/utils/web.py](../agent/utils/web.py)).
 
 Held against everything else here, that budget is comfortable and genuinely
 scarce at the same time. Comfortable next to the *model* pool — twenty requests
@@ -65,7 +65,7 @@ touching config.
 
 **Today the pool holds one account**, which means failover has nowhere to go. A
 run says so once at startup rather than letting you find out at the wall
-([check_pool](../agent/runtime/web.py)).
+([check_pool](../agent/utils/web.py)).
 
 ### 15.2.1 A capability is a fact to probe, not to infer
 
@@ -149,7 +149,7 @@ Same jail as the coding agent, rooted at `workdir`, with one difference:
 
 The coding agent needs a shell to close its own loop — write a test, run it,
 react to the result. A researcher has no loop to close, so its backend is
-the jail alone ([`JailedFilesystemBackend`](../agent/runtime/backend.py)): it
+the jail alone ([`JailedFilesystemBackend`](../agent/utils/backend.py)): it
 cannot run a program, and because it cannot, the framework never offers
 `execute` at all. Nothing is lost, and the blast radius of an unattended run
 drops to the files it writes
@@ -174,7 +174,7 @@ Markdown:
 Every Markdown file is a template filled from one dictionary
 (`template_values` in [agent.py](../agent/explore/agent.py)): the research
 directory, the budgets, today's date, and the sections every agent shares
-([agent/runtime/prompts/](../agent/runtime/prompts/)). The Python left over is assembly: fill the files, filter a list,
+([agent/utils/prompts/](../agent/utils/prompts/)). The Python left over is assembly: fill the files, filter a list,
 hand the result to `create_deep_agent`. Nothing in it decides what the agent *does*, and a
 change to how the agent works should be a change to a Markdown file. When a
 behaviour was implemented as code here it has been removed again — see the
@@ -323,6 +323,27 @@ reply is a pointer to its note and cap it at 200 words.
 They are matched as the **imported constants**, so an upstream rewording makes
 the removal fail loudly rather than half-apply
 ([agent.py](../agent/explore/agent.py)).
+
+**How the surface is applied.** Choosing the tools and describing them was
+middleware rewriting `request.tools` on every model call; it is now a
+`HarnessProfileConfig` — `excluded_tools` and `tool_description_overrides` —
+registered under `routerchatmodel:explore` and applied by the framework to this
+agent and its sub-agents alike. That key is what a per-agent profile needs and
+it did not exist until `RouterChatModel` carried an identifier
+([chat_model.py](../agent/utils/chat_model.py)): profiles are looked up as
+`provider:identifier`, and with no identifier all three agents resolved to one
+shared profile. A per-agent profile *merges* with the shared one, so the pool's
+`read_file` default survives underneath.
+
+Two things stayed behind in `FrameworkSurface`, and both are library limits
+rather than preferences. The prompt sections above cannot be suppressed by
+configuration: `FilesystemMiddleware` and `SubAgentMiddleware` are required
+middleware, so `excluded_middleware` refuses to drop them, and dropping a
+middleware would take its tools with it. And `write_todos` is described by
+langchain's `TodoListMiddleware`, which takes a `tool_description` deepagents
+never passes on — excluding it and supplying a configured one does not work
+either, because the exclusion is applied to the caller's middleware too and the
+tool disappears entirely.
 
 **What this arithmetic comes to.** Measured on the assembled agent, before any
 conversation: system prompt plus every tool schema is 26,864 characters, against

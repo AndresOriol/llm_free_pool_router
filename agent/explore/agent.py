@@ -50,11 +50,11 @@ from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tracers.context import collect_runs
 
-from agent.runtime import run_tree
-from agent.runtime.pool import CONTEXT_FLOOR, connect as connect_model
-from agent.runtime.prompts import fill, shared_values
-from agent.runtime.trace import tracer_from_env
-from agent.runtime.web import check_pool, search
+from agent.utils import run_tree
+from agent.utils.pool import CONTEXT_FLOOR, connect as connect_model, keyed
+from agent.utils.prompts import fill, shared_values
+from agent.utils.trace import traced
+from agent.utils.web import check_pool, search
 
 logger = logging.getLogger("harness.explore")
 
@@ -86,6 +86,27 @@ RESEARCHER_PROMPTS = ("researcher.md",)
 # do (15.5.1). There is no `execute` to remove: the backend cannot run anything,
 # so the framework never offers one.
 EXCLUDED_TOOLS = ("ls", "glob", "grep")
+
+# This agent's harness profile, keyed `provider:identifier`. `pool.keyed` puts
+# the identifier on the model; without it deepagents falls back to the shared
+# `routerchatmodel` profile and this agent's surface is never applied.
+NL3 = r"\n{3,}"
+NL2 = "\n\n"
+
+AGENT = "explore"
+PROFILE_KEY = f"routerchatmodel:{AGENT}"
+
+# Tools `tool_description_overrides` does not reach. deepagents wires that field
+# to `FilesystemMiddleware`'s tools and to `SubAgentMiddleware`'s `task`, but
+# `write_todos` comes from langchain's `TodoListMiddleware`, which takes a
+# `tool_description` deepagents never passes on. Excluding that middleware and
+# supplying a configured one does not work either: the profile's exclusion is
+# applied to the caller's middleware as well, so both copies are stripped and
+# the tool disappears entirely (verified against 0.6.12). So this one stays in
+# `FrameworkSurface`, and upstream's text -- which closes by insisting the
+# answer belongs in the final message -- would otherwise contradict this
+# agent's whole contract.
+PROFILE_BLIND = ("write_todos",)
 
 # Framework prompt sections that describe those tools, or say the answer is the
 # final message. Imported, so an upstream rewording fails a test (15.5.3).
@@ -164,36 +185,66 @@ def research_tools(pool, workdir: Path, research_dir: str,
             for func in (tavily_search, think_tool, research_status)]
 
 
-class ToolSurface(AgentMiddleware):
-    """Fit the framework's tools and prompt to this agent, on every model call.
+def register_surface(values: dict) -> None:
+    """Declare this agent's tool surface, as a harness profile.
 
-    `create_deep_agent` injects its tool suite and its prompt sections per call,
-    so this is where they can be edited: drop `EXCLUDED_TOOLS`, describe every
-    tool from `tool_descriptions/`, and cut `PRUNED_SECTIONS` out of the system prompt.
-    Tools are copied rather than changed, because the graph shares them.
+    Dropping `EXCLUDED_TOOLS` and describing the framework's tools from
+    `tool_descriptions/` used to be middleware rewriting `request.tools` on
+    every model call. Both are `HarnessProfileConfig` fields, which is the
+    library's own route and reaches sub-agents without being handed to each one
+    ([the deepagents skill](../../.claude/skills/deepagents/SKILL.md)).
+
+    Keyed per agent rather than per pool: a per-agent profile *merges* with the
+    shared one, so `file_tools.py`'s `read_file` default survives underneath.
+    Without `pool.keyed` on the model this resolves to nothing and the
+    framework's own surface comes back -- `test_the_profile_key_matches_the_live_model`
+    is what makes that a CI failure rather than a quiet one.
+
+    `base_system_prompt` is deliberately *not* used to cut `BASE_AGENT_PROMPT`.
+    deepagents applies that field to declarative sub-agents too, with their own
+    `system_prompt` as the base, so setting it here would blank the
+    researcher's prompt. The cutting stays in `FrameworkSurface`.
+    """
+    from deepagents import HarnessProfileConfig, register_harness_profile
+
+    register_harness_profile(PROFILE_KEY, HarnessProfileConfig(
+        excluded_tools=frozenset(EXCLUDED_TOOLS),
+        tool_description_overrides=descriptions(values),
+    ))
+
+
+class FrameworkSurface(AgentMiddleware):
+    """What the framework injects that the harness profile cannot reach.
+
+    Two jobs, both narrow, and both here only because the profile stops short:
+
+    - **the prompt sections.** `PRUNED_SECTIONS` are appended per call and no
+      field suppresses them. `FilesystemMiddleware` and `SubAgentMiddleware` are
+      in `_REQUIRED_MIDDLEWARE`, so `excluded_middleware` refuses to drop them,
+      and excluding a middleware would take its tools with it anyway. The
+      sections are imported rather than quoted, so an upstream reword fails a
+      test instead of silently leaving the text in (15.5.3).
+    - **`PROFILE_BLIND` descriptions.** One tool, `write_todos`.
+
+    Everything else about the tool surface is `register_surface`.
     """
 
     def __init__(self, described: dict) -> None:
         super().__init__()
-        self.described = described
+        self.described = {name: described[name] for name in PROFILE_BLIND
+                          if name in described}
 
     def _apply(self, request):
-        tools = []
-        for tool in request.tools:
-            name = getattr(tool, "name", "")
-            if name in EXCLUDED_TOOLS:
-                continue
-            if name in self.described:
-                tool = tool.model_copy(
-                    update={"description": self.described[name]})
-            tools.append(tool)
+        tools = [tool.model_copy(update={"description": self.described[tool.name]})
+                 if getattr(tool, "name", "") in self.described else tool
+                 for tool in request.tools]
 
         system = request.system_message
         if system is not None:
             text = system.text
             for section in PRUNED_SECTIONS:
                 text = text.replace(section, "")
-            system = SystemMessage(re.sub(r"\n{3,}", "\n\n", text).strip())
+            system = SystemMessage(re.sub(NL3, NL2, text).strip())
         return request.override(tools=tools, system_message=system)
 
     def wrap_model_call(self, request, handler: Callable):
@@ -208,7 +259,8 @@ class ToolSurface(AgentMiddleware):
 def subagents(tools: list, values: dict, described: dict) -> list:
     """The two agents the orchestrator can delegate to.
 
-    Each gets this surface and its own search limit. `general-purpose` is not
+    Each gets `FrameworkSurface` and its own search limit; the rest of the tool
+    surface reaches them through the harness profile. `general-purpose` is not
     ours to remove: the framework adds it unless a harness profile keyed on the
     model says otherwise, and every agent here shares one model. So it is
     declared, to hold it to the same surface -- the framework's default would
@@ -223,7 +275,7 @@ def subagents(tools: list, values: dict, described: dict) -> list:
         return [ToolCallLimitMiddleware(tool_name="tavily_search",
                                         run_limit=MAX_SEARCHES_PER_SUBAGENT,
                                         exit_behavior="continue"),
-                ToolSurface(described)]
+                FrameworkSurface(described)]
 
     return [
         {"name": "research-agent",
@@ -240,7 +292,7 @@ def build_agent(workdir: Path, model, pool, *, floor: int = CONTEXT_FLOOR,
     """The research orchestrator over a jailed workdir, the pool and the web."""
     from deepagents import create_deep_agent
 
-    from agent.runtime.backend import JailedFilesystemBackend
+    from agent.utils.backend import JailedFilesystemBackend
 
     workdir = Path(workdir)
     research_dir = research_dir.strip("/") or RESEARCH_DIR
@@ -251,16 +303,22 @@ def build_agent(workdir: Path, model, pool, *, floor: int = CONTEXT_FLOOR,
     described = descriptions(values)
     tools = research_tools(pool, workdir, research_dir, described)
 
+    # Which tools this agent is offered and how they are described: declared
+    # once, applied by the framework to this agent and its sub-agents alike.
+    register_surface(values)
+
     return create_deep_agent(
-        model=model,
+        # Keyed so the profile above is the one that resolves.
+        model=keyed(model, AGENT),
         tools=tools,
         system_prompt=prompt(ORCHESTRATOR_PROMPTS, values),
         # Where read_file, write_file and edit_file read and write: the
         # workdir, jailed. Files only -- it has no `execute`, so none is offered.
         # Sub-agents share it.
         backend=JailedFilesystemBackend(root_dir=str(workdir)),
-        # Caller middleware runs after the framework's, so it sees the tools and prompt sections those inject.
-        middleware=[ToolSurface(described)],
+        # Caller middleware runs after the framework's, so it sees the prompt
+        # sections those inject.
+        middleware=[FrameworkSurface(described)],
         subagents=subagents(tools, values, described),
     )
 
@@ -272,25 +330,18 @@ def run(model, task: str, workdir: Path, pool, config=None,
         research_dir: str = RESEARCH_DIR,
         trace_path: Optional[Path] = None) -> tuple:
     """One exploration. Returns (final_state, run record written or None)."""
-    config = dict(config or {})
+    config = traced(config)
     config.setdefault("recursion_limit", RECURSION_LIMIT)
     workdir = Path(workdir)
-
-    jsonl = tracer_from_env()
-    if jsonl is not None:
-        config["callbacks"] = list(config.get("callbacks") or []) + [jsonl]
 
     agent = build_agent(workdir, model, pool, floor=floor, members=members,
                         research_dir=research_dir)
     with collect_runs() as collected:
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
 
-    written = run_tree.record(collected.traced_runs, trace_path, {
-        "workdir": str(workdir),
-        "harness": "explore",
-        "research_dir": research_dir,
-        "context_floor": floor,
-        "eligible_providers": members,
-        "search_accounts": len(getattr(pool, "accounts", []) or []),
-    })
+    written = run_tree.record(
+        collected.traced_runs, trace_path,
+        run_tree.about(workdir, "explore", floor, members,
+                       research_dir=research_dir,
+                       search_accounts=len(getattr(pool, "accounts", []) or [])))
     return final, written

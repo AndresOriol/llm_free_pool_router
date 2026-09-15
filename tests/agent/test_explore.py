@@ -18,8 +18,8 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
 from agent.explore import agent as explore
-from agent.runtime import web
-from agent.runtime.backend import JailedFilesystemBackend
+from agent.utils import web
+from agent.utils.backend import JailedFilesystemBackend
 
 
 def _flat(text):
@@ -50,6 +50,9 @@ def _tools(workdir, research_dir="research", pool=None):
 def _subagents(workdir):
     values = _values()
     described = explore.descriptions(values)
+    # `build_agent` does this; a test reaching for the specs directly has to do
+    # it too, or the profile the specs rely on is not registered.
+    explore.register_surface(values)
     return explore.subagents(list(_tools(workdir).values()), values, described)
 
 
@@ -273,7 +276,24 @@ def test_the_prompt_no_longer_teaches_keyword_search():
 
 
 class _Recorder(GenericFakeChatModel):
-    """A model that records the tools and the system message it was handed."""
+    """A model that records the tools and the system message it was handed.
+
+    It impersonates the pool well enough for a harness profile to resolve --
+    `routerchatmodel` as the provider (deepagents reads it off the class name)
+    and `for_agent` to carry the identifier. Without that the profile
+    registered by `register_surface` would match nothing and these tests would
+    assert the framework's default surface while looking like they passed.
+    """
+
+    model_name: str = ""
+
+    def _get_ls_params(self, **kwargs):
+        params = super()._get_ls_params(**kwargs)
+        params["ls_provider"] = "routerchatmodel"
+        return params
+
+    def for_agent(self, name):
+        return self.model_copy(update={"model_name": name})
 
     def bind_tools(self, tools, **kwargs):
         _Recorder.seen.append([getattr(t, "name", "") for t in tools])
@@ -317,7 +337,9 @@ def test_the_researcher_sub_agent_gets_the_same_surface(tmp_path):
 
     spec = _subagents(tmp_path)[0]
     create_deep_agent(
-        model=_recorder(), tools=spec["tools"],
+        # Keyed like `build_agent` keys it: the exclusions live in the harness
+        # profile now, and an unkeyed model resolves none of them.
+        model=_recorder().for_agent(explore.AGENT), tools=spec["tools"],
         system_prompt=spec["system_prompt"], middleware=spec["middleware"],
         backend=JailedFilesystemBackend(root_dir=str(tmp_path)),
     ).invoke({"messages": [("user", "research something")]})
@@ -339,7 +361,7 @@ def test_every_subagent_is_held_to_the_same_surface(tmp_path):
     assert [s["name"] for s in specs] == ["research-agent", "general-purpose"]
     for spec in specs:
         assert {type(m) for m in spec["middleware"]} == {
-            explore.ToolSurface, ToolCallLimitMiddleware}
+            explore.FrameworkSurface, ToolCallLimitMiddleware}
 
 
 def test_the_rewritten_descriptions_reach_the_model(tmp_path):
@@ -363,10 +385,13 @@ def test_the_rewritten_descriptions_reach_the_model(tmp_path):
 def test_describing_a_tool_does_not_mutate_the_one_it_was_given():
     """The tool objects are shared with the graph and with any other agent over
     the same backend; rewriting one in place would change a description the
-    coding agent relies on."""
+    coding agent relies on.
+
+    Only `PROFILE_BLIND` still goes through here -- the rest of the surface is
+    the harness profile, and deepagents copies there for the same reason."""
     from langchain_core.tools import StructuredTool
 
-    def read_file(file_path: str) -> str:
+    def write_todos(todos: str) -> str:
         """Original description."""
         return ""
 
@@ -376,14 +401,36 @@ def test_describing_a_tool_does_not_mutate_the_one_it_was_given():
         def override(self, **changes):
             return changes
 
-    original = StructuredTool.from_function(func=read_file, name="read_file",
+    original = StructuredTool.from_function(func=write_todos, name="write_todos",
                                             description="Original description.")
     request = _Request()
     request.tools = [original]
-    applied = explore.ToolSurface({"read_file": "Ours."})._apply(request)
+    applied = explore.FrameworkSurface({"write_todos": "Ours."})._apply(request)
 
     assert applied["tools"][0].description == "Ours."
     assert original.description == "Original description."
+
+
+def test_the_profile_key_matches_the_live_model():
+    """The whole surface hangs off this key resolving.
+
+    `register_surface` registers under `routerchatmodel:explore`; deepagents
+    derives the provider half from the model's *class name* and the identifier
+    half from `model_name`. Rename `RouterChatModel`, or drop `for_agent`, and
+    every exclusion and description in the profile stops applying with nothing
+    raised -- the agent would quietly get `grep` back and upstream's wording.
+    """
+    from deepagents._models import get_model_identifier, get_model_provider
+
+    from agent.utils.chat_model import RouterChatModel
+    from agent.utils.pool import keyed
+
+    model = keyed(RouterChatModel(router=None), explore.AGENT)
+
+    assert get_model_provider(model) == "routerchatmodel"
+    assert get_model_identifier(model) == explore.AGENT
+    assert explore.PROFILE_KEY == (f"{get_model_provider(model)}:"
+                                   f"{get_model_identifier(model)}")
 
 
 # --- the research directory, in place of `ls` -------------------------------
