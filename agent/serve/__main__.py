@@ -44,7 +44,7 @@ import os
 import sys
 from pathlib import Path
 
-from agent.runtime.pool import CONTEXT_FLOOR
+from agent.utils.pool import CONTEXT_FLOOR
 from agent.serve import app
 
 logging.basicConfig(level=logging.INFO,

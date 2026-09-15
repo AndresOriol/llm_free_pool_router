@@ -91,7 +91,7 @@ agent to write at `/`, not at a host path.
 
 **Execution allowlist.** Only `python` and `pytest` (plus `git`, below), named
 bare with no path, `shell=False`, secrets stripped from the child environment,
-and a 300s timeout ([backend.py](../agent/runtime/backend.py)).
+and a 300s timeout ([backend.py](../agent/utils/backend.py)).
 Shell syntax is *refused* rather than passed through as a literal argument —
 accepting it silently once cost a run 900 seconds in heredocs that hung until
 the timeout. The *prompt* names the same programs, from the same constant, so
@@ -238,9 +238,9 @@ exception, so the model reads the reason and corrects itself instead of retrying
 | Ported | Where |
 | --- | --- |
 | System prompt: understand → build → test → verify; match the spec exactly; parallel tool calls; paginated reads; git safety; root-cause debugging; stop after three identical failures | [prompts/system.md](../agent/code/prompts/system.md) |
-| Prompt assembly and its interpolated sections | `template_values` in [agent.py](../agent/code/agent.py), and [agent/runtime/prompts/](../agent/runtime/prompts/) for the sections every agent shares |
+| Prompt assembly and its interpolated sections | `template_values` in [agent.py](../agent/code/agent.py), and [agent/utils/prompts/](../agent/utils/prompts/) for the sections every agent shares |
 | `LocalContextMiddleware` — git branch, status, a depth-limited tree | `project_section` in [agent.py](../agent/code/agent.py) |
-| `ShellAllowListMiddleware` | [agent/runtime/shell.py](../agent/runtime/shell.py) |
+| `ShellAllowListMiddleware` | [agent/utils/shell.py](../agent/utils/shell.py) |
 
 Three parts are **adapted rather than copied**, and each adaptation is a fact
 about this pool rather than a preference:
@@ -281,8 +281,9 @@ reads top to bottom; everything the model reads is Markdown.
 
 | | where it comes from |
 | --- | --- |
-| system prompt | [prompts/system.md](../agent/code/prompts/system.md), its `{placeholders}` filled once, at the start: the sections every agent shares ([agent/runtime/prompts/](../agent/runtime/prompts/) — headless, the pool's identity, the jail's `/`, what `execute` runs), `contradicted_requests.md` and `project_notes.md` unless switched off, the project section, and the agents it may run ([16](16-delegation.md)) |
+| system prompt | [prompts/system.md](../agent/code/prompts/system.md), its `{placeholders}` filled once, at the start: the sections every agent shares ([agent/utils/prompts/](../agent/utils/prompts/) — headless, the pool's identity, the jail's `/`, what `execute` runs), `contradicted_requests.md` and `project_notes.md` unless switched off, the project section, and the agents it may run ([16](16-delegation.md)) |
 | framework sections and tool schemas | deepagents' own, unedited: the file tools, `execute`, `write_todos`, `task` |
+| skills | one line each — name and description — from [skills/](../agent/code/skills/); the body is read on demand ([6.6](#66-skills)) |
 | conversation | the task, then every tool call and its result; the SDK summarizes it when it grows too long |
 | wrap-up | [prompts/wrap_up.md](../agent/code/prompts/wrap_up.md), sent as a message only when the step budget runs out |
 | what outlives it | the repository — the files on disk and the commits |
@@ -293,6 +294,164 @@ out; both are on by default, so each is a configuration an A/B can measure.
 Unlike the explorer's, nothing the framework injects is taken away or
 re-described ([15.5.1](15-explorer.md#1551-the-surface-is-chosen-not-inherited)):
 a coding agent does explore a repository, and does run programs.
+
+## 6.6 Skills
+
+A **skill** is a procedure the agent reads *when it is about to do that kind of
+work*: a directory under [agent/code/skills/](../agent/code/skills/) holding a
+`SKILL.md` with a name, a description, and a body. deepagents'
+`SkillsMiddleware` is what installs them — the same mechanism `deepagents-code`
+points at `.claude/skills`, pointed at a directory of this project's own.
+
+**It costs no tool.** The middleware adds a prompt section listing each skill's
+name and description; the body is an ordinary `read_file` away. That matters
+here for the reason everything does: tool schemas are 91% of what a step spends
+([6.4](#64-why-it-is-shaped-this-way)), and a schema is charged on every step of
+every run whether the skill is ever used or not. A sentence of description is
+not.
+
+### 6.6.1 The description is the gate
+
+Progressive disclosure only works if the model can tell, from the description
+alone, that the body is worth reading. That makes the description the load-bearing
+part: it is the only thing in front of the model on every call, and a body the
+agent never opens is prose that does nothing.
+
+So `delegate`'s description does not describe the skill. It states the trigger —
+*before you run any `python -m agent.*` command, and whenever a task needs work
+you cannot do with your own tools* — names the agents this run can actually
+reach, and says when **not** to open it. What is inside (each command, what it
+leaves on disk, how to write a brief) stays inside.
+
+### 6.6.2 Rendered per run, not committed
+
+Who can be reached is probed at start-up: `explore` is offered only if the
+search pool answers, `scenarios` only if that repository is on disk
+([15.2.1](15-explorer.md#1521-a-capability-is-a-fact-to-probe-not-to-infer)). A
+committed file cannot say that. So `skills/delegate/SKILL.md` is a template with
+`{description}` and `{roster}` in it, and `render_skills()` fills it into a
+temporary directory that lives exactly as long as the agent does.
+
+With no peers reachable, nothing is rendered, nothing is mounted, and the
+middleware is not installed. That is what keeps `AGENT_PEERS=` an arm with *no
+delegation in it* rather than one that reads how to delegate and then fails —
+the baseline prompt is byte-for-byte what it was before skills existed.
+
+### 6.6.3 Why the directory is mounted
+
+The middleware prints a path and the model reads it. The agent's `/` is the
+workspace it was given, which is usually not this repository, so an absolute
+path to `agent/code/skills/` is one it cannot read.
+
+So the backend becomes a `CompositeBackend`: the workspace jail as before, plus
+one route mapping `/skills/` to the rendered directory. `execute` is not
+path-routed — the composite always runs it on the default backend — so what the
+agent may *run*, and where, is untouched. What changed is that four file tools
+can also read one small directory of generated Markdown.
+
+### 6.6.4 What belongs in a skill, and what does not
+
+`prompts/` and `skills/` differ in *when* the model reads them, and that is the
+whole test.
+
+| | read | holds |
+| --- | --- | --- |
+| a prompt section | every call | what is always true |
+| a skill description | every call | when to open the body, and when not to |
+| a skill body | when the agent judges it applies | a procedure most runs never need |
+
+`delegate` splits along that line
+([16.2.2](16-delegation.md#1622-the-roster-and-the-how-to-are-a-skill)): what
+survives in `system.md` is one sentence sending the agent to the skill; the
+roster, the cost, the brief and how to read what comes back are all in the body.
+
+Two things about the framework's own text. Its default skills prompt is ~1,500
+characters explaining progressive disclosure, and it tells the model that some
+sources are shared with other agent tools on the machine, which is not true
+here — so it is replaced by
+[prompts/skills.md](../agent/code/prompts/skills.md), a prompt file like every
+other. And the frontmatter is parsed as YAML: a description full of colons and
+backticks has to be a block scalar, or the skill is dropped from the listing
+without an error.
+
+### 6.6.5 One skill does not pay for itself yet
+
+Measured on the system prompt, with `explore` reachable:
+
+| | no peers | with peers |
+| --- | --- | --- |
+| before | 24,299 | 25,273 |
+| after | 24,300 | 26,337 |
+
+The delegation prose that left `system.md` was ~970 characters; the mechanism
+that replaced it — the framing section, the locations line, and a description
+long enough to be a real gate — costs ~2,000. **This is a bet that there will be
+a second and third skill**, not a saving. It turns over when the bodies kept out
+of the prompt exceed the framing that keeps them out, and `tokens_in` per run is
+what says whether it did ([10. Metrics](10-metrics.md)).
+
+## 6.7 `read_file` reads the whole file
+
+The tool every agent here reads with is
+`read_file(file_path, from_line=None, to_line=None)`, and with neither bound it
+returns the file. deepagents ships it the other way round — 100 lines, with a
+description that teaches scan-then-page — and
+[agent/utils/file_tools.py](../agent/utils/file_tools.py) is where that is
+changed, for all three agents at once.
+
+### 6.7.1 A default sized for the wrong scarce thing
+
+Paginating protects a context window. That is the right instinct when context
+is what you are short of, and it is the wrong one here twice over.
+
+A session routes only to members holding at least 128,000 input tokens
+([pool.py](../agent/utils/pool.py)). Reading a 400-line file in four pages to
+protect a floor we set that high is caution against a limit we already bought
+our way past. And it is not free: what actually runs out on free tiers is
+*requests per day* ([4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent)),
+so three extra reads are three calls that could have been three edits — each one
+re-sending the whole conversation to fetch a hundred lines.
+
+The ceiling did not go away, it moved. The middleware still caps one tool result
+at 20,000 tokens and appends a truncation notice, and the jail still refuses
+files over 10 MB. What changed is that truncation is now the *exception* a large
+file hits, instead of the rule every file hits.
+
+### 6.7.2 The arguments are the numbers on the screen
+
+`offset`/`limit` is a 0-indexed start plus a count, in front of a tool whose
+output is `cat -n` — 1-indexed. A model that reads `  148  def run(` and wants
+to start there has to ask for `offset=147`. That subtraction is a step it can
+get wrong, and getting it wrong does not look like an error: it looks like a
+confident answer about the line above the one you meant.
+
+`from_line`/`to_line` are inclusive and are the numbers the tool just printed.
+There is no arithmetic left to get wrong.
+
+A reversed or zero bound comes back as an error *message* rather than an
+exception, for the same reason a refused command does
+([6.2](#62-the-blast-radius)): langgraph re-raises a `ValueError` out of the tool
+node, so a model that swapped two arguments would end the session instead of
+correcting itself on the next step.
+
+### 6.7.3 Where this breaks
+
+deepagents exposes no setting for any of it — `FilesystemMiddleware.__init__`
+takes no read-length argument and no per-tool override — so this is a rebind of
+three private names at import: the tool factory, wrapped; and the two pieces of
+prose that would otherwise describe a tool that no longer exists.
+
+That is three seams an upgrade can break, and two of the three break *silently*:
+the model would simply be told again that it reads 100 lines and takes an
+`offset`. So the description patch is anchored to deepagents' exact wording, a
+miss logs a warning rather than crashing a run, and
+[tests/agent/test_read_file.py](../tests/agent/test_read_file.py) asserts every
+seam still holds — including that the anchor still appears in the *installed*
+package. An upgrade fails in CI instead of quietly halving what the agent reads.
+
+**Unmeasured.** The argument above is arithmetic about requests, not a result.
+The number that would settle it is calls-per-run at equal pass rate
+([10. Metrics](10-metrics.md)); nothing has been run across this change yet.
 
 ---
 

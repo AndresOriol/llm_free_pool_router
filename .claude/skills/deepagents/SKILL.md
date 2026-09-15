@@ -1,6 +1,6 @@
 ---
 name: deepagents
-description: Design, build or change an agent in this repo using LangChain's deepagents library - which extension point to reach for, what the library already ships, and how to verify the API before writing code. Use whenever touching agent/code, agent/explore, agent/improve, agent/runtime, anything calling create_deep_agent, or when adding a tool, prompt, skill, subagent, middleware or backend to an agent.
+description: Design, build or change an agent in this repo using LangChain's deepagents library - which extension point to reach for, what the library already ships, and how to verify the API before writing code. Use whenever touching agent/code, agent/explore, agent/improve, agent/utils, anything calling create_deep_agent, or when adding a tool, prompt, skill, subagent, middleware or backend to an agent.
 ---
 
 # Building agents with deepagents
@@ -187,10 +187,10 @@ under `"router"` (its `_llm_type`) silently matches nothing: deepagents logs a
 warning and uses defaults. Get the key from the class, never from a guess:
 
 ```bash
-python -c "from agent.runtime.chat_model import RouterChatModel as R; print(R(router=None)._get_ls_params()['ls_provider'])"
+python -c "from agent.utils.chat_model import RouterChatModel as R; print(R(router=None)._get_ls_params()['ls_provider'])"
 ```
 
-`agent/runtime/file_tools.py` does this, and a test pins the key to the live
+`agent/utils/file_tools.py` does this, and a test pins the key to the live
 class so renaming `RouterChatModel` fails CI instead of quietly dropping the
 override.
 
@@ -225,7 +225,7 @@ is not a way to keep a tool and drop its prompt section.
 
 ## Anti-patterns, with the repo's own examples
 
-**Rebinding private names at import.** `agent/runtime/file_tools.py` used to
+**Rebinding private names at import.** `agent/utils/file_tools.py` used to
 wrap `FilesystemMiddleware._create_read_file_tool` and rewrite
 `READ_FILE_TOOL_DESCRIPTION` by anchored string surgery, to change one default —
 240 lines across three private seams. It is now ~40 lines: a harness profile for
@@ -234,7 +234,7 @@ worked example. When a patch is genuinely the only route it must be one
 function, in one module, with a test asserting the seam — and an issue filed
 upstream, because a patch with no upstream request is a permanent fork.
 
-**Reimplementing the tool suite.** `agent/runtime/tools.py` hand-wrote `ls`,
+**Reimplementing the tool suite.** `agent/utils/tools.py` hand-wrote `ls`,
 `glob`, `grep`, `read_file`, `edit_file`, `write_file` and `execute` — all of
 which `FilesystemMiddleware` ships, better. It was dead code left by the deleted
 narrow-role harness, and it has been removed. `agent/improve/tools.py` is the
@@ -251,7 +251,7 @@ is a `.py` file rather than a `.md` file, stop and re-read the ladder above.
 ## Writing it
 
 Model construction stays the pool's job — `connect(floor)` from
-`agent/runtime/pool.py` returns a `RouterChatModel`, and it is passed as
+`agent/utils/pool.py` returns a `RouterChatModel`, and it is passed as
 `model=`. Never hardcode a provider string in an agent.
 
 Keep the shape the existing agents use, because it is the one that works:
@@ -269,7 +269,7 @@ python -m pytest tests/agent -q
 ## When the library is genuinely missing something
 
 Then, in this order: (1) confirm against the installed source that it is really
-absent, (2) write the smallest adapter in `agent/runtime/`, (3) document the
+absent, (2) write the smallest adapter in `agent/utils/`, (3) document the
 seam and the upgrade risk in its module docstring, (4) add a test that fails
 when the upstream API moves, (5) open the upstream issue. A local workaround
 without (5) is a fork nobody decided to maintain.

@@ -275,8 +275,8 @@ def cmd_probes(args) -> int:
 
     # Building the model is deferred to here so `--list` and `--push` cost no
     # provider calls and need no keys.
-    from agent.runtime.pool import CONTEXT_FLOOR, check_floor
-    from agent.runtime.chat_model import RouterChatModel
+    from agent.utils.pool import CONTEXT_FLOOR, check_floor
+    from agent.utils.chat_model import RouterChatModel
     from llm_router import AutonomousLLMRouter, load_providers_from_config
 
     providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG") or None)

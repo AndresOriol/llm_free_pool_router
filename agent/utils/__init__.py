@@ -1,4 +1,4 @@
-"""The substrate an agent runs on: the model, the jail, the tools, the trace.
+"""What every agent needs and none of them owns: the model, the jail, the trace.
 
 Nothing here knows what a session is. `RouterChatModel` fronts the pool,
 `RestrictedShellBackend` is the filesystem/exec jail an agent is confined to
@@ -10,9 +10,9 @@ did. `agent/code`, `agent/explore` and `agent/improve` are its consumers; the
 router's own smoke test is another.
 """
 
-from agent.runtime.backend import RestrictedShellBackend
-from agent.runtime.chat_model import RouterChatModel
-from agent.runtime.trace import JsonlTracer, tracer_from_env
+from agent.utils.backend import RestrictedShellBackend
+from agent.utils.chat_model import RouterChatModel
+from agent.utils.trace import JsonlTracer, tracer_from_env
 
 __all__ = ["RestrictedShellBackend", "RouterChatModel",
            "JsonlTracer", "tracer_from_env"]

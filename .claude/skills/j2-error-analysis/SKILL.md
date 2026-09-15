@@ -145,7 +145,7 @@ Cluster the notes into named categories and count them. Rules:
 - Each category must name **what would fix it**, and the levers are
   `agent/code/prompts/`, the project section, the shell allowlist, and the
   knobs in `agent/code/agent.py` (`RECURSION_LIMIT`, the middleware and
-  subagent lists) and `agent/runtime/pool.py` (`CONTEXT_FLOOR`). A category whose fix is "be smarter" is not a category.
+  subagent lists) and `agent/utils/pool.py` (`CONTEXT_FLOOR`). A category whose fix is "be smarter" is not a category.
 
 ## 4. Compute the verdict mechanically
 

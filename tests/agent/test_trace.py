@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from agent.runtime.trace import JsonlTracer, tracer_from_env
+from agent.utils.trace import JsonlTracer, tracer_from_env
 
 
 class _Generation:
@@ -93,7 +93,7 @@ def _run():
         # tail is what makes a `Sources:` block and a `file_path` survive, and
         # it is bounded here against the constants so it cannot drift upwards
         # unnoticed.
-        from agent.runtime.trace import _MAX_FIELD, _TAIL_FIELD
+        from agent.utils.trace import _MAX_FIELD, _TAIL_FIELD
 
         tracer.on_tool_start({"name": "read_file"}, "x", run_id="t2")
         tracer.on_tool_end("y" * 50_000, run_id="t2")
@@ -138,7 +138,7 @@ if __name__ == "__main__":
 
 
 def test_a_clipped_field_keeps_its_tail():
-    from agent.runtime.trace import _clip
+    from agent.utils.trace import _clip
 
     text = "{'content': '" + "x" * 40_000 + "', 'file_path': '/research/a.md'}"
     clipped = _clip(text)
@@ -150,13 +150,13 @@ def test_a_clipped_field_keeps_its_tail():
 
 
 def test_a_short_field_is_untouched():
-    from agent.runtime.trace import _clip
+    from agent.utils.trace import _clip
 
     assert _clip("Sources: none returned") == "Sources: none returned"
 
 
 def test_a_search_result_keeps_its_sources_block():
-    from agent.runtime.trace import _clip
+    from agent.utils.trace import _clip
 
     body = "an answer " * 1_000 + "\n\nSources:\n[1] swebench.com - https://x"
     assert "Sources:" in _clip(body)

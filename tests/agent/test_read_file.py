@@ -7,7 +7,7 @@ by one of them will paginate.
 These tests also guard the seams. The description rides deepagents' own
 `HarnessProfile`, which is supported but keyed on a provider name; the default
 rides `ReadFileSchema`'s field, which is public but not a documented setting
-([agent/runtime/file_tools.py](../../agent/runtime/file_tools.py)). An upgrade
+([agent/utils/file_tools.py](../../agent/utils/file_tools.py)). An upgrade
 that moves either stops the change applying -- silently, at runtime. Here it
 fails loudly instead.
 """
@@ -20,7 +20,7 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from agent.code.agent import build_agent
-from agent.runtime import file_tools
+from agent.utils import file_tools
 
 
 class _Router(GenericFakeChatModel):
@@ -133,7 +133,7 @@ def test_the_schema_field_the_default_rides_still_exists():
     back to 100 lines with nothing raised."""
     assert "limit" in fs.ReadFileSchema.model_fields, (
         "deepagents moved read_file's limit out of ReadFileSchema; update "
-        "agent/runtime/file_tools.py")
+        "agent/utils/file_tools.py")
     assert fs.ReadFileSchema.model_fields["limit"].default == file_tools.WHOLE_FILE
     assert fs.ReadFileSchema(file_path="/x").limit == file_tools.WHOLE_FILE
 
@@ -155,7 +155,7 @@ def test_the_router_key_is_the_models_own_provider_name():
     LangChain derives `ls_provider` from the class name, so renaming
     `RouterChatModel` silently unregisters the override. This is the test that
     turns that into a failure."""
-    from agent.runtime.chat_model import RouterChatModel
+    from agent.utils.chat_model import RouterChatModel
 
     provider = RouterChatModel(router=None)._get_ls_params()["ls_provider"]
     assert provider == file_tools.ROUTER_PROVIDER

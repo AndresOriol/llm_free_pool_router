@@ -102,7 +102,7 @@ One rule: **a workspace is a direct child of `WORKSPACES_DIR`, named, never a
 path.**
 
 On the CLI the workdir is `sys.argv[1]` and the operator owns it. Over HTTP it
-is a string from a request, and the jail ([backend.py](../agent/runtime/backend.py))
+is a string from a request, and the jail ([backend.py](../agent/utils/backend.py))
 constrains the agent only *after* it has been pointed somewhere — it has
 nothing to say about which root it was handed. So the binding is the boundary,
 and it refuses the separator outright rather than normalizing a path and
@@ -239,7 +239,7 @@ of what this particular service is.
 
 **Start from what the token buys.** A caller holding `SERVE_TOKEN` can ask the
 coding agent to write a Python file and run it. That is the agent's whole
-purpose ([backend.py](../agent/runtime/backend.py) allows `python`, `pytest`
+purpose ([backend.py](../agent/utils/backend.py) allows `python`, `pytest`
 and `git`), and it means the token is not "access to an app" — it is
 **execution on that host**, inside a container. With `HARNESS_SHELL=1` it is
 execution without even the allowlist. Every decision below follows from that

@@ -9,5 +9,5 @@
 - `__main__.py` runs it: `python -m agent.code <workdir> --task "..."`.
 - `prompts/` is everything it is told: `system.md`, the two sections a run can
   switch off, and the wrap-up. What every agent here is told about where it
-  runs is in `agent/runtime/prompts/`.
+  runs is in `agent/utils/prompts/`.
 """

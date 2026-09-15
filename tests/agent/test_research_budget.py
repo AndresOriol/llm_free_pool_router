@@ -3,8 +3,8 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
 from agent.explore import agent as explore
-from agent.runtime import web
-from agent.runtime.backend import JailedFilesystemBackend
+from agent.utils import web
+from agent.utils.backend import JailedFilesystemBackend
 
 
 def test_search_budget_blocks_overflow_but_allows_notes_and_resets_per_run(

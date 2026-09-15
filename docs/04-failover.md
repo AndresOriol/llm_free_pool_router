@@ -23,7 +23,7 @@ raise "all providers exhausted"
 ```
 
 Selection lives in [router.py](../llm_router/router.py); the loop lives in
-[chat_model.py](../agent/runtime/chat_model.py). The split is deliberate:
+[chat_model.py](../agent/utils/chat_model.py). The split is deliberate:
 the router only *chooses*, and has no `.generate()` of its own — giving it one
 would force `llm_router` to import `agent` and invert the layering.
 
@@ -155,7 +155,7 @@ Rows 4 and 6 above are correct about *retrying* and were wrong about *stopping*.
 Neither of the failures below is transient — no amount of waiting fixes either —
 but neither is a bug in the caller, so ending the run on them throws away a pool
 that is still mostly working. Both are checked in
-[chat_model.py](../agent/runtime/chat_model.py) **before** the "non-transient →
+[chat_model.py](../agent/utils/chat_model.py) **before** the "non-transient →
 re-raise" branch, and both drop members instead of cooling them down, because a
 cooldown is a wait and there is nothing to wait for.
 

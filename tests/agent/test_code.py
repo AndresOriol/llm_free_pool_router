@@ -8,10 +8,10 @@ agent then does good work is the scenarios' question, not this file's.
 import re
 from pathlib import Path
 
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 
 from agent.code import agent as code
-from agent.runtime.shell import ShellAllowListMiddleware
+from agent.utils.shell import ShellAllowListMiddleware
 
 
 class _Request:
@@ -197,3 +197,91 @@ def test_tree_truncates_rather_than_flooding_context(tmp_path: Path):
     listing = code.tree(tmp_path, max_entries=10)
     assert "listing stopped at 10 entries" in listing
     assert len(listing.splitlines()) == 11
+
+
+# --- skills -------------------------------------------------------------------
+#
+# A skill costs one line of prompt -- its name and description -- until the
+# agent decides it applies. Which makes two things load-bearing: the
+# description has to say when it applies, and the body has to be somewhere
+# `read_file` can actually reach.
+
+
+def _rendered(peers=("explore",), workdir=Path(".")):
+    return code.render_skills(list(peers), workdir)
+
+
+def test_no_peers_renders_nothing_to_mount():
+    """`AGENT_PEERS=` is the baseline arm. It must not get a skill explaining
+    how to delegate to agents it cannot reach."""
+    assert code.render_skills([], Path(".")) is None
+
+
+def test_a_rendered_skill_parses_and_carries_a_description():
+    """The middleware parses the frontmatter as YAML and silently drops a skill
+    it cannot read. The description is prose with colons, backticks and `*` in
+    it, so the template quotes it as a block scalar -- read it back through the
+    middleware's own loader, not a hand-rolled split."""
+    from deepagents.backends.filesystem import FilesystemBackend
+    from deepagents.middleware.skills import _list_skills
+
+    rendered = _rendered()  # held: the directory dies with this object
+    listed = _list_skills(FilesystemBackend(root_dir=rendered.name,
+                                            virtual_mode=True), "/")
+    assert [skill["name"] for skill in listed] == ["delegate"]
+    assert "python -m agent.*" in listed[0]["description"]
+
+    body = (Path(rendered.name) / "delegate" / "SKILL.md").read_text(encoding="utf-8")
+    assert not re.findall(r"\{[a-z_]+\}", body), "an unfilled placeholder"
+
+
+def test_the_roster_is_rendered_per_run_not_committed():
+    """Who can be reached is probed at startup, so it cannot be a committed
+    file -- a skill that advertises an agent this run cannot run costs a step
+    to disprove."""
+    committed = (code.SKILLS_DIR / "delegate" / "SKILL.md").read_text(encoding="utf-8")
+    assert "{roster}" in committed and "{description}" in committed
+
+    rendered = _rendered(["code"])
+    body = (Path(rendered.name) / "delegate" / "SKILL.md").read_text(encoding="utf-8")
+    assert "python -m agent.code" in body
+    assert "agent.explore" not in body, "it was not offered to this run"
+
+
+def test_a_skill_is_readable_from_a_workspace_that_is_not_this_repository(tmp_path):
+    """The whole reason the directory is mounted rather than named by an
+    absolute path: the middleware prints `/skills/...`, and a run jailed to
+    `tmp_path` has to be able to read it with its own `read_file`."""
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    class _ReadsTheSkill(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+    path = code.SKILLS_ROOT + "delegate/SKILL.md"
+    model = _ReadsTheSkill(messages=iter([
+        AIMessage(content="", tool_calls=[
+            {"name": "read_file", "args": {"file_path": path}, "id": "c1"}]),
+        AIMessage(content="read it"),
+    ]))
+    built = code.build_agent(tmp_path, model, peers=["explore"])
+    messages = built.invoke({"messages": [HumanMessage("hi")]},
+                            {"recursion_limit": 10})["messages"]
+
+    read = next(m for m in messages if isinstance(m, ToolMessage))
+    assert "Delegating work to another agent" in str(read.content), read.content
+
+
+def test_skills_cost_no_tool():
+    """Progressive disclosure is a prompt section and `read_file`. If a skill
+    ever arrived as a tool it would be charged on every step of every run
+    ([6.4](../../docs/06-agent.md#64-why-it-is-shaped-this-way))."""
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
+    built = code.build_agent(".", FakeListChatModel(responses=["x"]),
+                             peers=["explore"])
+    node = built.nodes["tools"]
+    names = set(getattr(node, "bound", node).tools_by_name)
+    assert names == {"ls", "read_file", "write_file", "edit_file", "glob",
+                     "grep", "execute", "write_todos", "task"}

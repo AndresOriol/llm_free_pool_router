@@ -26,7 +26,7 @@ in is the *diagnostic* one.
 
 | Phase | State | What it covers |
 | --- | --- | --- |
-| **P0** trace capture | **done** | `EVAL_TRACE_FILE` makes the agent append one JSON object per LLM/tool event ([trace.py](../agent/runtime/trace.py)). Every automatic metric is a sum over that file. The agent also fetches its LangSmith run tree and writes that down beside it ([7.6](07-observability.md#76-the-record-one-run-tree)). |
+| **P0** trace capture | **done** | `EVAL_TRACE_FILE` makes the agent append one JSON object per LLM/tool event ([trace.py](../agent/utils/trace.py)). Every automatic metric is a sum over that file. The agent also fetches its LangSmith run tree and writes that down beside it ([7.6](07-observability.md#76-the-record-one-run-tree)). |
 | **P1** runner | **done** | [evals/](../evals/): materialize → run → verify → integrity → record, plus `validate` and `show`. Metrics automatic, including the failure taxonomy. |
 | **P2** judge | not started | `claude -p` with a pinned rubric and diff-hash cache. Quality scoring is manual until then. |
 | **P3** compare/report | not started | Leaderboard and written comparisons. `show` covers the basics today. |

@@ -64,7 +64,7 @@ The agent that diagnoses is not the agent that changes the code.
 
 [`ReadOnlyMiddleware`](../agent/improve/agent.py) refuses `write_file`, `edit_file`
 and their kin as a `ToolMessage` — the shape
-[`ShellAllowListMiddleware`](../agent/runtime/shell.py) uses, so the model can read
+[`ShellAllowListMiddleware`](../agent/utils/shell.py) uses, so the model can read
 the refusal and correct from it in one step rather than losing the run to an
 exception. The only program it may run is `git`, for reading history; it gets no
 `python` and no `pytest`, which would otherwise be a way round every boundary
@@ -300,7 +300,7 @@ why the false account had to be caught by hand.
 ## 19.11 What is deliberately not built
 
 - **No pull request.** The coding agent commits on a branch and never pushes
-  ([backend](../agent/runtime/backend.py) refuses `merge` and `push`). Opening a
+  ([backend](../agent/utils/backend.py) refuses `merge` and `push`). Opening a
   PR is a remote operation and this project has decided the agent does not do
   those; the branch and the ledger entry are what a human reviews.
 - **No severity model, no scoring, no dashboard.** The ledger is a directory of

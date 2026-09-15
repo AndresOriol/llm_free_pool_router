@@ -42,11 +42,11 @@ Four properties of it shape every review you will write:
   is routinely served by four or five members (`stderr.log` narrates each choice).
   Nothing the model "knows" outside the conversation survives a reroute — which is
   why the prompt states a context *floor* rather than a model identity
-  (`agent/runtime/prompts/model_identity.md`).
+  (`agent/utils/prompts/model_identity.md`).
 - **The blast radius is a jail.** `/` is the workdir; only `python`, `pytest` and
   `git` run, by subcommand, `shell=False`. A run that spent its turns fighting a
   refused command is a tooling failure, not a reasoning one
-  (`agent/runtime/shell.py`, `agent/runtime/backend.py`).
+  (`agent/utils/shell.py`, `agent/utils/backend.py`).
 
 **The open question about it is cost.** The conversational loop lost the last
 comparison 226,854 input tokens to 5,756, and the arm that won was retired
@@ -175,7 +175,7 @@ least four unrelated causes that look identical in `run.json`:
 | --- | --- | --- |
 | The loop never settled | `GraphRecursionError` in `stderr.log`; calls approaching 120 | `RECURSION_LIMIT`, or the stopping condition in the prompt |
 | It worked steadily and ran out of clock | Many `Routing to` lines, spread evenly to the end | The scenario's `timeout_s`, or genuinely slow progress |
-| **One provider call hung** | A long silence between the last `Routing to` and the timeout | Not the agent at all — a request timeout, or `agent/runtime/awake.py` |
+| **One provider call hung** | A long silence between the last `Routing to` and the timeout | Not the agent at all — a request timeout, or `agent/utils/awake.py` |
 | The pool starved | `waiting …s for the next account`, or the floor check refusing | `CONTEXT_FLOOR`, `llm_router/config.yaml` |
 
 The third is real and current: one recorded run made **2 provider calls in 2722
@@ -224,13 +224,13 @@ prior finding, an exit code.
 
 One or two changes, each naming the mechanism:
 
-- the system prompt (`agent/code/prompts/`, and `agent/runtime/prompts/` for
+- the system prompt (`agent/code/prompts/`, and `agent/utils/prompts/` for
   the sections every agent shares),
 - what the project section states, or how far it lists (`agent/code/agent.py`),
-- the execution allowlist or the jail (`agent/runtime/shell.py`,
-  `agent/runtime/backend.py`),
+- the execution allowlist or the jail (`agent/utils/shell.py`,
+  `agent/utils/backend.py`),
 - a loop knob — `RECURSION_LIMIT`, the middleware list, the subagent list
-  (`agent/code/agent.py`), or `CONTEXT_FLOOR` (`agent/runtime/pool.py`),
+  (`agent/code/agent.py`), or `CONTEXT_FLOOR` (`agent/utils/pool.py`),
 - summarization's own settings, which are the SDK's defaults today and have never
   been tuned here — say so plainly if that is your answer,
 - the pool the run drew from (`llm_router/config.yaml`, the floor),

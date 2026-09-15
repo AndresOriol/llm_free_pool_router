@@ -62,7 +62,7 @@ from pathlib import Path
 from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.backends.protocol import ExecuteResponse, SandboxBackendProtocol
 
-from agent.runtime import file_tools  # noqa: F401 - read_file reads whole files
+from agent.utils import file_tools  # noqa: F401 - read_file reads whole files
 
 DEFAULT_ALLOWED = ("python", "python3", "py", "pytest")
 

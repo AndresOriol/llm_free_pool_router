@@ -52,7 +52,7 @@ _NOTE = re.compile(r"/research/.+\.md$", re.IGNORECASE)
 _NOTE_IN_TEXT = re.compile(r"/research/[\w./-]+\.md", re.IGNORECASE)
 # The marker `_render` appends when a grounded call came back with nothing to
 # cite (agent/explore/search.py). Reading it needs the trace to keep a tail,
-# which is why `_clip` keeps one (agent/runtime/trace.py).
+# which is why `_clip` keeps one (agent/utils/trace.py).
 _NO_SOURCES = "Sources: none returned"
 
 
@@ -91,7 +91,7 @@ def _note_path(event: dict) -> Optional[str]:
     whole file in `content`, the tracer clips a field it cannot afford to store
     whole, and `content` sorts before `file_path` -- so on a long note the path
     is simply not in the record. That is why the tracer now keeps a tail
-    (agent/runtime/trace.py), and why this reads what old traces actually have.
+    (agent/utils/trace.py), and why this reads what old traces actually have.
     """
     path = _args(event).get("file_path")
     if path and _NOTE.search(str(path)):

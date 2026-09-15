@@ -76,7 +76,7 @@ Event shape:
 ```
 
 Two producers write to one file: a LangChain callback handler
-([trace.py](../agent/runtime/trace.py)) for LLM start/end and tool start/end, and the
+([trace.py](../agent/utils/trace.py)) for LLM start/end and tool start/end, and the
 router's own logging for routing and failover lines as structured records
 rather than prose.
 
@@ -140,7 +140,7 @@ lands on disk whether or not LangSmith is reachable. What it does not do is
 is what gets counted, the tree below is what gets read.
 
 So that arm records the tree instead, at
-[agent/runtime/run_tree.py](../agent/runtime/run_tree.py): one nested JSON object per run,
+[agent/utils/run_tree.py](../agent/utils/run_tree.py): one nested JSON object per run,
 built from the tree LangSmith already assembled and then condensed down to the
 turns, the tool calls and what each one cost ([7.7](#77-what-goes-to-disk-the-condensed-run)).
 

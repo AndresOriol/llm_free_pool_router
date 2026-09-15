@@ -11,7 +11,7 @@ at all, and what has to change before any of them can.*
 maintainer that works a project unattended for hours
 ([long-run-harness](design/long-run-harness.md)). The obvious next thought is to
 host it somewhere, so that a run does not depend on one laptop staying awake —
-[awake.py](../agent/runtime/awake.py) exists only because it does.
+[awake.py](../agent/utils/awake.py) exists only because it does.
 
 Most of the obvious answers are wrong, and they are all wrong for the same
 reason: they host a *web backend*, and this is not one. This page records the
@@ -23,9 +23,9 @@ Four properties. Measured 2026-09-02 on this repo, not estimated.
 
 | Property | Evidence |
 | --- | --- |
-| **A run lasts hours** | [awake.py](../agent/runtime/awake.py) exists because a session "runs for hours with long gaps between provider calls" |
+| **A run lasts hours** | [awake.py](../agent/utils/awake.py) exists because a session "runs for hours with long gaps between provider calls" |
 | **Memory floor ~186 MB, before any conversation** | RSS after importing `llm_router` (153 MB) plus `RouterChatModel` and both sessions. Cold imports take 6.2 s. Add the message history: a session only routes to members holding ≥128,000 input tokens |
-| **It spawns child processes** | [backend.py](../agent/runtime/backend.py) allows `python`/`pytest`/`git`. They share the container memory limit. A target project test suite can peak far above the agent itself — closet_ai's ONNX segmentation suite measured 440–517 MB |
+| **It spawns child processes** | [backend.py](../agent/utils/backend.py) allows `python`/`pytest`/`git`. They share the container memory limit. A target project test suite can peak far above the agent itself — closet_ai's ONNX segmentation suite measured 440–517 MB |
 | **Nothing calls it while it works** | The entry point is `python -m agent.code [workdir] < brief.md`. There is an HTTP server now ([18](18-serving.md)), and it does not change this: a caller submits a task and polls, so the hours in between still carry no inbound traffic |
 
 CPU is the one thing it barely needs. The agent is I/O-bound on provider calls;

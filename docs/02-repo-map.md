@@ -29,19 +29,19 @@ Selection and state. Never makes an API call itself.
 
 ## 2.3 `agent/` — the coding agent
 
-`agent/runtime/` is the substrate anything agentic runs on. Nothing in it knows
+`agent/utils/` is what every agent needs and none of them owns. Nothing in it knows
 what a session is.
 
 | File | The question it answers |
 | --- | --- |
-| [chat_model.py](../agent/runtime/chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
-| [backend.py](../agent/runtime/backend.py) | *What is the agent allowed to execute?* — a filesystem jail (`JailedFilesystemBackend`, the explorer's, which runs nothing) plus an `execute` allowlist of `python`/`pytest`/`git` (`RestrictedShellBackend`, the coding agent's) |
-| [web.py](../agent/runtime/web.py) | *How does an agent reach the web?* — Tavily finds URLs, httpx fetches each page, markdownify converts it, so the **page** reaches the model; and the check that refuses a run with no search account |
-| [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
-| [run_tree.py](../agent/runtime/run_tree.py) | *What happened during a run, readably?* — the LangSmith run tree, fetched after the run and written down condensed ([7.6](07-observability.md#76-the-record-one-run-tree)) |
-| [pool.py](../agent/runtime/pool.py) | *Which model does an agent run on?* — the pool as one `RouterChatModel` that routes only to members holding the context floor, and refuses before the run when none does |
-| [prompts.py](../agent/runtime/prompts.py) + [prompts/](../agent/runtime/prompts/) | *What is every agent told about where it runs?* — headless, the pool's identity, the jail's `/`, what `execute` runs; and `fill`, the one way any prompt file is filled |
-| [shell.py](../agent/runtime/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
+| [chat_model.py](../agent/utils/chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
+| [backend.py](../agent/utils/backend.py) | *What is the agent allowed to execute?* — a filesystem jail (`JailedFilesystemBackend`, the explorer's, which runs nothing) plus an `execute` allowlist of `python`/`pytest`/`git` (`RestrictedShellBackend`, the coding agent's) |
+| [web.py](../agent/utils/web.py) | *How does an agent reach the web?* — Tavily finds URLs, httpx fetches each page, markdownify converts it, so the **page** reaches the model; and the check that refuses a run with no search account |
+| [trace.py](../agent/utils/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
+| [run_tree.py](../agent/utils/run_tree.py) | *What happened during a run, readably?* — the LangSmith run tree, fetched after the run and written down condensed ([7.6](07-observability.md#76-the-record-one-run-tree)) |
+| [pool.py](../agent/utils/pool.py) | *Which model does an agent run on?* — the pool as one `RouterChatModel` that routes only to members holding the context floor, and refuses before the run when none does |
+| [prompts.py](../agent/utils/prompts.py) + [prompts/](../agent/utils/prompts/) | *What is every agent told about where it runs?* — headless, the pool's identity, the jail's `/`, what `execute` runs; and `fill`, the one way any prompt file is filled |
+| [shell.py](../agent/utils/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
 
 `agent/code/` is the **coding agent**: `create_deep_agent` over that backend,
 configured the way `deepagents-code` configures one. See
@@ -89,8 +89,8 @@ and the coding agent already has `execute`. See [16. Delegation](16-delegation.m
 | File | The question it answers |
 | --- | --- |
 | [agent/delegation.py](../agent/delegation.py) | *Which agents may this one run, and how is it told?* — the one module that knows about all of them: the prompt paragraph naming each command, the probe that offers `explore` only if the pool can really search, and the `subprocess.run` `delegate_fix` uses |
-| [agent/runtime/cli.py](../agent/runtime/cli.py) | *How does a command take its task?* — workdir plus `--task` or stdin, shared by all three, because `execute` has no stdin to pipe a brief into |
-| [agent/runtime/gitstate.py](../agent/runtime/gitstate.py) | *Did the delegate actually do anything?* — what git says moved, rendered verdict-first, above whatever the session said about itself |
+| [agent/utils/cli.py](../agent/utils/cli.py) | *How does a command take its task?* — workdir plus `--task` or stdin, shared by all three, because `execute` has no stdin to pipe a brief into |
+| [agent/utils/gitstate.py](../agent/utils/gitstate.py) | *Did the delegate actually do anything?* — what git says moved, rendered verdict-first, above whatever the session said about itself |
 
 ## 2.4 `evals/` — the measurement harness
 

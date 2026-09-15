@@ -15,7 +15,7 @@ stripping it does not open the jail.
 import tempfile
 from pathlib import Path
 
-from agent.runtime.backend import RestrictedShellBackend, _unprefixed
+from agent.utils.backend import RestrictedShellBackend, _unprefixed
 
 
 def test_the_extended_length_prefix_is_stripped():

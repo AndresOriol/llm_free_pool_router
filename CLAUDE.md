@@ -35,7 +35,7 @@ its model. Its behaviour lives in Markdown, not Python.
 | --- | --- |
 | [llm_router](llm_router/) | One provider per account×model; picks the highest-priority one that is available and large enough. Selection only — it never makes a call. Config: [config.yaml](llm_router/config.yaml) |
 | [llm_router/quota](llm_router/quota/) | How much free tier is left, read from the usage ledger. Advisory: it can skip a spent member, never stall a run ([14](docs/14-quota-panel.md)) |
-| [agent/runtime](agent/runtime/) | The substrate: the failover loop as a `BaseChatModel`, the filesystem/exec jail, the pool's context floor, shared prompts, and the trace |
+| [agent/utils](agent/utils/) | What every agent needs and none of them owns: the failover loop as a `BaseChatModel`, the filesystem/exec jail, the pool's context floor, shared prompts, and the trace |
 | [agent/code](agent/code/) | The coding agent ([6](docs/06-agent.md)) |
 | [agent/explore](agent/explore/) | The web researcher; hands off by writing `/research/*.md` ([15](docs/15-explorer.md)) |
 | [agent/improve](agent/improve/) | Reads recorded runs, names recurring failures as issues, delegates the fix. Cannot edit a file ([19](docs/19-improvement-agent.md)) |

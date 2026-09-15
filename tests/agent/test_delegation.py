@@ -25,8 +25,8 @@ import subprocess
 from pathlib import Path
 
 from agent import delegation
-from agent.runtime import gitstate
-from agent.runtime.backend import RestrictedShellBackend, _child_env, _is_agent
+from agent.utils import gitstate
+from agent.utils.backend import RestrictedShellBackend, _child_env, _is_agent
 
 
 # --- what is offered --------------------------------------------------------
@@ -37,7 +37,7 @@ def test_no_peers_means_no_section_and_no_tool(monkeypatch):
     monkeypatch.setenv(delegation.PEERS_ENV, "")
     assert delegation.requested() == ()
     assert delegation.available() == []
-    assert delegation.prompt_section([], Path(".")) == ""
+    assert delegation.prompt_section([]) == ""
 
 
 def test_the_default_is_on_so_it_gets_exercised(monkeypatch):
@@ -61,10 +61,30 @@ def test_scenarios_is_not_offered_without_the_repository(monkeypatch, tmp_path):
     assert delegation.available(("scenarios",)) == ["scenarios"]
 
 
-def test_the_section_names_the_command_the_agent_must_run():
-    section = delegation.prompt_section(["explore"], Path("."))
-    assert "python -m agent.explore . --task" in section
-    assert "/research" in section, "it says where the answer will be"
+def test_the_prompt_section_holds_the_pointer_and_nothing_else():
+    """What is on every call is a sentence sending the agent to the skill. The
+    roster and the how-to are read only when it decides it needs them."""
+    section = delegation.prompt_section(["explore"])
+    assert "`delegate` skill" in section
+    assert "python -m agent.explore" not in section
+    assert len(section) < 250, "this is charged on every step of every run"
+
+
+def test_the_skill_names_the_command_the_agent_must_run():
+    values = delegation.skill_values(["explore"], Path("."))
+    assert "python -m agent.explore . --task" in values["roster"]
+    assert "/research" in values["roster"], "it says where the answer will be"
+
+
+def test_the_skill_description_says_when_to_open_it():
+    """The description is the gate: it is all the model sees until it decides
+    to read the body, so a description that does not state the trigger is a
+    skill that is never read."""
+    description = delegation.skill_values(["explore"], Path("."))["description"]
+    assert "explore" in description, "it names who this run can actually reach"
+    assert "python -m agent.*" in description, "the command that should stop it"
+    assert "do it yourself" in description, "and when not to open it"
+    assert len(description) <= 1024, "the Agent Skills limit on a description"
 
 
 def test_the_coding_agent_gains_no_tool_at_all():

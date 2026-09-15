@@ -82,7 +82,7 @@ class _Router:
 
 
 def _model_with(providers):
-    from agent.runtime.chat_model import RouterChatModel
+    from agent.utils.chat_model import RouterChatModel
     return RouterChatModel(router=_Router(providers))
 
 

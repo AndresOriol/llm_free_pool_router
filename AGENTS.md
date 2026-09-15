@@ -58,7 +58,7 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   refusal — advisory, and never able to stall a run
   ([4.2.1](docs/04-failover.md#421-skipping-a-member-whose-day-is-spent),
   [14. Quota panel](docs/14-quota-panel.md)).
-- [agent/runtime](agent/runtime/) — the substrate: `RouterChatModel` (the
+- [agent/utils](agent/utils/) — what every agent needs and none of them owns: `RouterChatModel` (the
   failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
   `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
   nothing about sessions.

@@ -42,7 +42,7 @@ Four properties of it shape every review you will write:\r
 - **The blast radius is a jail.** `/` is the workdir; only `python`, `pytest` and\r
   `git` run, by subcommand, `shell=False`. A run that spent its turns fighting a\r
   refused command is a tooling failure, not a reasoning one\r
-  (`agent/code/shell.py`, `agent/runtime/backend.py`).\r
+  (`agent/code/shell.py`, `agent/utils/backend.py`).\r
 \r
 **The open question about it is cost.** The conversational loop lost the last\r
 comparison 226,854 input tokens to 5,756, and the arm that won was retired\r
@@ -171,7 +171,7 @@ least four unrelated causes that look identical in `run.json`:\r
 | --- | --- | --- |\r
 | The loop never settled | `GraphRecursionError` in `stderr.log`; calls approaching 120 | `RECURSION_LIMIT`, or the stopping condition in the prompt |\r
 | It worked steadily and ran out of clock | Many `Routing to` lines, spread evenly to the end | The scenario's `timeout_s`, or genuinely slow progress |\r
-| **One provider call hung** | A long silence between the last `Routing to` and the timeout | Not the agent at all — a request timeout, or `agent/runtime/awake.py` |\r
+| **One provider call hung** | A long silence between the last `Routing to` and the timeout | Not the agent at all — a request timeout, or `agent/utils/awake.py` |\r
 | The pool starved | `waiting …s for the next account`, or the floor check refusing | `CONTEXT_FLOOR`, `llm_router/config.yaml` |\r
 \r
 The third is real and current: one recorded run made **2 provider calls in 2722\r
@@ -223,7 +223,7 @@ One or two changes, each naming the mechanism:\r
 - the system prompt (`agent/code/system_prompt.md`, `prompt.py`),\r
 - what the project section states, or how far it lists (`agent/code/context.py`),\r
 - the execution allowlist or the jail (`agent/code/shell.py`,\r
-  `agent/runtime/backend.py`),\r
+  `agent/utils/backend.py`),\r
 - a loop knob — `CONTEXT_FLOOR`, `RECURSION_LIMIT`, the middleware list, the\r
   subagent list (`agent/code/session.py`),\r
 - summarization's own settings, which are the SDK's defaults today and have never\r

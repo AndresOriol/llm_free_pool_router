@@ -101,12 +101,55 @@ and **no tool at all** — asserted in
 [tests/agent/test_delegation.py](../tests/agent/test_delegation.py), because
 that is the property that makes `AGENT_PEERS=` a valid A/B arm.
 
+### 16.2.2 The roster and the how-to are a skill
+
+The prompt section above did two jobs at two different rates. Which agents can
+be reached, and where each one runs, is decided when the run starts and differs
+between runs. How to delegate well — whether it is worth an hour of the pool at
+all, how to write a brief for someone who cannot see your conversation, why the
+closing summary is not the deliverable — is the same prose every time, and
+**most runs never delegate**.
+
+Both moved into `delegate`, a skill ([6.6](06-agent.md#66-skills)). The roster
+goes with them: it is rendered into the skill per run rather than committed, so
+it still names only what was probed and found reachable. What is left in
+`system.md` is one sentence:
+
+```
+### Delegating
+
+Some work belongs to another agent rather than to you. Before you decide it
+does, and before you run any `python -m agent.*` command, read the `delegate`
+skill.
+```
+
+Everything else — each command, what it leaves on disk, the good and bad brief —
+is read when the agent decides it applies, and not before.
+
+This does not change the property the A/B depends on. A skill is a prompt
+section and `read_file`; it is still **no tool**. And `AGENT_PEERS=` now removes
+more than it did: no roster, no skill, and no skills middleware at all, so the
+baseline prompt is byte-for-byte what it was
+([6.6.2](06-agent.md#662-rendered-per-run-not-committed)).
+
+**What this cost.** The prose that left the prompt was ~970 characters; the
+mechanism costs ~2,000, so the delegating arm's system prompt grew by about a
+thousand characters rather than shrinking. The saving arrives with the second
+and third skill ([6.6.5](06-agent.md#665-one-skill-does-not-pay-for-itself-yet)).
+
+**A bug this surfaced.** `AGENT_PEERS` was documented on `python -m agent.code`
+and read by nothing: the CLI called `run()` without `peers`, so every coding run
+started from the command line was alone regardless of the setting. Only
+`agent/improve` and `agent/serve` ever probed. The CLI now calls
+`delegation.available()` like they do — which means the numbers above are also
+the first ones measured on a CLI run that actually had peers.
+
 ## 16.3 What the jail has to bend, and how far
 
 The child is a real process launched from inside the filesystem jail, so three
 of the jail's defaults would each stop it dead. `python -m agent.<name>` is the
 only command they bend for, and
-[`_is_agent`](../agent/runtime/backend.py) is the one place that decides which.
+[`_is_agent`](../agent/utils/backend.py) is the one place that decides which.
 
 | Default | Why it exists | Why a delegation is different |
 | --- | --- | --- |
@@ -162,7 +205,7 @@ reads a token count without knowing delegation was available.
 
 A coding session's deliverable is a commit, so what a caller reads back leads
 with what the repository says and only then quotes what the session said about
-itself ([gitstate.py](../agent/runtime/gitstate.py)):
+itself ([gitstate.py](../agent/utils/gitstate.py)):
 
 ```
 **Nothing changed.** On `master`, no commit was made and the working tree is
@@ -253,8 +296,8 @@ the transport that produced them.
 | Where | What | Fix |
 | --- | --- | --- |
 | the delegation handler | **Every delegated event was traced twice.** The handler added a tracer to the child config; the child already inherited the caller's handlers. The caller's own tools appeared once each and the delegate's `web_search` twenty times for ten searches. | The child got no callbacks of its own. Moot now — a subprocess cannot inherit them, and it appends to the same file instead. |
-| `deepagents` filesystem jail | `Path.resolve()` on Windows returns the `\?\` extended-length form when another process holds the file open, and the root was resolved once without it — so a write **inside** the jail is refused as an escape. Three files into a directory, the fourth was refused, and it killed the session. | `RestrictedShellBackend._resolve_path` normalizes both sides ([agent/runtime/backend.py](../agent/runtime/backend.py)). |
-| `agent/runtime/backend.py` | The git allowlist denied `--delete` and `-D` and **not `-d`** — and the agent used `-d`. A list that claims to forbid deletion while permitting the spelling an agent reaches for first is worse than no list. | `-d` denied. |
+| `deepagents` filesystem jail | `Path.resolve()` on Windows returns the `\?\` extended-length form when another process holds the file open, and the root was resolved once without it — so a write **inside** the jail is refused as an escape. Three files into a directory, the fourth was refused, and it killed the session. | `RestrictedShellBackend._resolve_path` normalizes both sides ([agent/utils/backend.py](../agent/utils/backend.py)). |
+| `agent/utils/backend.py` | The git allowlist denied `--delete` and `-D` and **not `-d`** — and the agent used `-d`. A list that claims to forbid deletion while permitting the spelling an agent reaches for first is worse than no list. | `-d` denied. |
 
 The first is the one worth dwelling on: it inflated `tokens_in`, the single
 number the whole comparison rests on ([10. Metrics](10-metrics.md)), and it did

@@ -151,7 +151,7 @@ def _web_reachable() -> bool:
     try:
         from llm_router import TavilyPoolRouter
 
-        from agent.runtime.web import NoSearchPool, check_pool
+        from agent.utils.web import NoSearchPool, check_pool
     except ImportError as exc:
         logger.warning(f"Not offering the `explore` agent: {exc}")
         return False
@@ -177,8 +177,8 @@ def where(name: str, workdir) -> Path:
     return Path(workdir)
 
 
-def prompt_section(names: Sequence[str], workdir) -> str:
-    """The commands as a prompt section, or '' when nothing is reachable.
+def prompt_section(names: Sequence[str]) -> str:
+    """The one line about delegation that is on every call, or '' when alone.
 
     **This is the whole client half of delegation.** No tool and no schema: the
     agent already has `execute`, and what it was missing was the knowledge that
@@ -187,24 +187,54 @@ def prompt_section(names: Sequence[str], workdir) -> str:
     ([6.4](../docs/06-agent.md#64-why-it-is-shaped-this-way)), and a `delegate`
     tool was charged on *every* step of *every* run to describe a directory
     that changes once at startup.
+
+    The same argument applies to the prose. Which agents exist, what each one
+    delivers, how to brief one and how to read what comes back were a paragraph
+    on every call of every run, and most runs never delegate. All of it is in
+    the `delegate` skill now; what is left here is the sentence that sends the
+    agent there ([16.2.2](../docs/16-delegation.md#1622-the-roster-and-the-how-to-are-a-skill)).
     """
     if not names:
         return ""
+    return ("### Delegating\n\nSome work belongs to another agent "
+            "rather than to you. Before you decide it does, and before you "
+            "run any `python -m agent.*` command, read the `delegate` skill.")
 
-    lines = ["### Other agents you can run", "",
-             "Each is a command. Running one starts a full agent session that "
-             "spends the same free-tier pool your own turns do and can take an "
-             "hour, so ask once, ask specifically, and read the files it "
-             "leaves behind rather than asking again. The command blocks until "
-             "that session ends and then prints a summary; the deliverable is "
-             "on disk, not in the summary.", "",
-             "Write the brief for someone who cannot see your conversation: "
-             "state the question, what the answer is for, and what would make "
-             "it useless.", ""]
+
+def skill_values(names: Sequence[str], workdir) -> dict:
+    """What fills `skills/delegate/SKILL.md` for this run.
+
+    The body is fixed prose, but *who* can be reached is probed at startup, so
+    the roster is rendered per run rather than committed. So is the
+    `description`: it is the only part of the skill the model sees until it
+    decides to read the body, which makes it the gate. A gate that does not say
+    when it applies is a skill that never opens
+    ([6.6.1](../docs/06-agent.md#661-the-description-is-the-gate)).
+    """
+    return {"description": _skill_description(names),
+            "roster": _skill_roster(names, workdir)}
+
+
+def _skill_description(names: Sequence[str]) -> str:
+    """One paragraph, and the only one always in front of the model."""
+    return (
+        "Read this BEFORE running any `python -m agent.*` command, and whenever "
+        "a task needs work you cannot do with your own tools: research on the "
+        "open web, a change in a repository your `/` is not bound to, or a "
+        f"scenario built somewhere else. This run can reach: {', '.join(names)}. "
+        "The skill names each agent, the exact command, what it leaves on disk, "
+        "and how to write a brief for an agent that cannot see your "
+        "conversation. If the task needs none of that, do it yourself -- a "
+        "delegation spends a whole session of the shared pool.")
+
+
+def _skill_roster(names: Sequence[str], workdir) -> str:
+    """One entry per reachable agent: what it is, what it leaves, how to run it."""
+    lines = []
     for name in names:
         module, description, delivers = AGENTS[name]
         at = where(name, workdir) if name == "scenarios" else "."
-        lines += [f"**{name}** — {description}",
+        lines += [f"**{name}** -- {description}",
                   f"- delivers: {delivers}",
                   f"- run it: `python -m {module} {at} --task \"<your brief>\"`",
                   ""]

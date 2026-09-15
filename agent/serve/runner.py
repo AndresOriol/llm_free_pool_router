@@ -176,7 +176,7 @@ class Runner:
         Linux container this costs nothing and protects a developer running the
         server on the machine it was written on.
         """
-        from agent.runtime.awake import keep_awake
+        from agent.utils.awake import keep_awake
 
         with keep_awake():
             while True:
@@ -232,7 +232,7 @@ class Runner:
 def _check_pool(floor: int) -> tuple:
     """(providers, members wide enough). Raises SystemExit if it cannot serve."""
     from llm_router import AutonomousLLMRouter, load_providers_from_config
-    from agent.runtime.pool import check_floor
+    from agent.utils.pool import check_floor
 
     providers = load_providers_from_config(os.environ.get("ROUTER_CONFIG")
                                            or None)

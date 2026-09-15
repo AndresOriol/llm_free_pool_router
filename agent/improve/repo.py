@@ -4,7 +4,7 @@ Three facts make unattended self-improvement different from an agent working
 someone else's project, and all three are about *this* repository:
 
 1. **The agent is modifying the harness it is running on.** A change that breaks
-   `llm_router` or `agent/runtime` does not fail a test somewhere; it stops the
+   `llm_router` or `agent/utils` does not fail a test somewhere; it stops the
    next pass from being able to run at all. That is the one failure mode with no
    recovery from inside the loop.
 2. **A delegated coding session commits wherever it finds itself.** The first
@@ -19,7 +19,7 @@ started on, and the pass puts the tree back where it found it before it ends.
 branch — not the checkout everything else uses.
 
 **Nothing here merges.** The backend already refuses `merge` and `push` for the
-coding agent ([agent/runtime/backend.py](../runtime/backend.py)), and this keeps
+coding agent ([agent/utils/backend.py](../runtime/backend.py)), and this keeps
 the same line for the same reason: a branch plus a ledger entry is what a human
 reviews, and an unattended loop that could merge its own work would have no
 reviewer at all ([19.3](../../docs/19-improvement-agent.md#193-it-cannot-change-the-harness-and-that-is-the-point)).

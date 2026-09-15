@@ -46,8 +46,8 @@ from collections import Counter
 from pathlib import Path
 
 from agent import delegation
-from agent.runtime import gitstate
-from agent.runtime.prompts import fill
+from agent.utils import gitstate
+from agent.utils.prompts import fill
 from agent.improve import issues as issues_mod
 from agent.improve import records as records_mod
 from agent.improve import repo
