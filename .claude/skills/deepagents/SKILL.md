@@ -1,0 +1,197 @@
+---
+name: deepagents
+description: Design, build or change an agent in this repo using LangChain's deepagents library - which extension point to reach for, what the library already ships, and how to verify the API before writing code. Use whenever touching agent/code, agent/explore, agent/improve, agent/runtime, anything calling create_deep_agent, or when adding a tool, prompt, skill, subagent, middleware or backend to an agent.
+---
+
+# Building agents with deepagents
+
+The rule this skill exists to enforce: **the library is the harness; this repo
+supplies only what the pool makes different.** Every line of agent scaffolding
+here is a line that has to survive a `deepagents` upgrade, so the default answer
+to "how do I change how the agent behaves" is *configuration or prose*, never a
+new module.
+
+Before you write anything, you owe two checks.
+
+## 1. Check the version, always
+
+`deepagents` moves fast and your training data is behind it. **The installed
+package is ground truth. The docs site is not** — `docs.langchain.com` currently
+claims a user middleware "matched by `.name` replaces built-ins"; in 0.6.12 that
+raises `AssertionError: Please remove duplicate middleware instances.` Verified
+by running it.
+
+Start every task here:
+
+```bash
+python -c "import deepagents; print(deepagents.__version__, deepagents.__file__)"
+```
+
+Then read the actual signature and the actual assembly order rather than
+recalling them:
+
+```bash
+SP=$(python -c "import deepagents,os;print(os.path.dirname(deepagents.__file__))")
+sed -n '/^def create_deep_agent/,/^    r\?"""/p' "$SP/graph.py"
+grep -n "Middleware(\|middleware.append\|middleware.extend" "$SP/graph.py"
+cat "$SP/__init__.py"
+```
+
+If a claim in this file disagrees with the installed source, **the source wins
+and you fix this file** in the same change.
+
+## 2. Check whether the library already does it
+
+Before adding code, search the package for the thing you are about to build:
+
+```bash
+grep -rn "<the concept>" "$SP" --include=*.py | head
+```
+
+As of 0.6.12 the library already ships all of this, and none of it should be
+reimplemented here:
+
+| You want | It already exists as |
+| --- | --- |
+| file tools (`ls`/`read_file`/`write_file`/`edit_file`/`glob`/`grep`) | `FilesystemMiddleware` — automatic |
+| shell (`execute`) | any backend satisfying `SandboxBackendProtocol` |
+| a todo list | `TodoListMiddleware` — automatic |
+| subagent delegation (`task`) | `SubAgentMiddleware`, via `subagents=` |
+| context compaction | `SummarizationMiddleware` — automatic |
+| on-demand procedures | `SkillsMiddleware`, via `skills=["/skills/"]` |
+| persistent `AGENTS.md` notes | `MemoryMiddleware`, via `memory=[...]` |
+| path jailing / disk / store / routing | `FilesystemBackend`, `StoreBackend`, `CompositeBackend` |
+| per-tool approval gates | `interrupt_on=` / `permissions=` |
+| self-grading against criteria | `RubricMiddleware` |
+| dropping a built-in tool | `HarnessProfile(excluded_tools=...)` |
+| rewording a built-in tool | `HarnessProfile(tool_description_overrides=...)` |
+
+## Pick the lightest extension point that works
+
+Ordered cheapest-first. Do not skip a row without a reason you can write down.
+
+1. **Prose** — a `prompts/*.md` edit. Always true, on every call. This is the
+   first thing to try and usually the last thing needed.
+2. **A skill** — `skills/<name>/SKILL.md`, reached by `skills=`. A *procedure*
+   most runs never need. Only the name and description are charged per call; the
+   body is read with `read_file` if the model decides it applies. The
+   description is the gate — write the trigger, not a summary.
+3. **A harness profile** — `register_harness_profile(model_id, HarnessProfileConfig(...))`
+   for tool descriptions, excluded tools, a prompt suffix, extra middleware.
+   Declarative, public, upgrade-safe.
+4. **A tool** — a plain function passed to `tools=`. Additive only: it can never
+   remove a built-in. Reach for this when the agent needs a capability nothing
+   else provides (a search API, a ledger read).
+5. **A subagent** — `subagents=[SubAgent(...)]`. For work that deserves its own
+   context window and returns one report. Costs a whole conversation.
+6. **A backend** — subclass `FilesystemBackend` / implement `SandboxBackendProtocol`.
+   Justified only when *where files live or what may run* is genuinely different
+   here. This repo has one legitimate case: the jail.
+7. **Middleware** — `middleware=[...]`, appended after the base stack. For
+   cross-cutting concerns (logging, refusal messages). Keep state in graph
+   state, never on the instance.
+8. **Monkeypatching a private name** — `_underscore` attributes of the package.
+   This is not an extension point. See below.
+
+## The verified facts
+
+**`create_deep_agent` parameters** (0.6.12): `model`, `tools`, `system_prompt`,
+`middleware`, `subagents`, `skills`, `memory`, `permissions`, `backend`,
+`interrupt_on`, `response_format`, `state_schema`, `context_schema`,
+`checkpointer`, `store`, `debug`, `name`, `cache`.
+
+**Prompt assembly**, in order: your `system_prompt=` → the SDK's
+`BASE_AGENT_PROMPT` (or a profile's `base_system_prompt`) → profile
+`system_prompt_suffix` → middleware-contributed sections (filesystem, subagent,
+skills catalog) → memory. Your text always goes *first*; nothing you pass
+removes the SDK's own sections.
+
+**Middleware order**: `TodoListMiddleware` → `SkillsMiddleware` (if `skills`) →
+`FilesystemMiddleware` → `SubAgentMiddleware` (if subagents) →
+`SummarizationMiddleware` → `PatchToolCallsMiddleware` → **your `middleware=`** →
+profile `extra_middleware` → tool exclusion → prompt caching → `MemoryMiddleware`
+→ `HumanInTheLoopMiddleware`.
+
+**`task` only exists if a synchronous subagent does.** With none passed, no
+`SubAgentMiddleware` is installed. Pass `GENERAL_PURPOSE_SUBAGENT` to get the
+default one back.
+
+**Rewording a built-in tool has a supported route.** Verified:
+
+```python
+from deepagents import HarnessProfileConfig, register_harness_profile
+
+register_harness_profile("anthropic:claude-sonnet-4-5", HarnessProfileConfig(
+    tool_description_overrides={"read_file": "Read the whole file by default."},
+))
+```
+
+This reaches the built-in filesystem tools through
+`FilesystemMiddleware(custom_tool_descriptions=...)`.
+
+**Keying it for this pool has one trap.** A profile is looked up by model spec
+string; for a *pre-built* model instance there is no spec, so deepagents falls
+back to the provider from `model._get_ls_params()["ls_provider"]` — which
+LangChain derives from **the class name**, not from `_llm_type`. The pool passes
+a `RouterChatModel` instance, so the key is `"routerchatmodel"`. Registering
+under `"router"` (its `_llm_type`) silently matches nothing: deepagents logs a
+warning and uses defaults. Get the key from the class, never from a guess:
+
+```bash
+python -c "from agent.runtime.chat_model import RouterChatModel as R; print(R(router=None)._get_ls_params()['ls_provider'])"
+```
+
+`agent/runtime/file_tools.py` does this, and a test pins the key to the live
+class so renaming `RouterChatModel` fails CI instead of quietly dropping the
+override.
+
+## Anti-patterns, with the repo's own examples
+
+**Rebinding private names at import.** `agent/runtime/file_tools.py` used to
+wrap `FilesystemMiddleware._create_read_file_tool` and rewrite
+`READ_FILE_TOOL_DESCRIPTION` by anchored string surgery, to change one default —
+240 lines across three private seams. It is now ~40 lines: a harness profile for
+the description, and one public field default for the limit. Read it as the
+worked example. When a patch is genuinely the only route it must be one
+function, in one module, with a test asserting the seam — and an issue filed
+upstream, because a patch with no upstream request is a permanent fork.
+
+**Reimplementing the tool suite.** `agent/runtime/tools.py` hand-wrote `ls`,
+`glob`, `grep`, `read_file`, `edit_file`, `write_file` and `execute` — all of
+which `FilesystemMiddleware` ships, better. It was dead code left by the deleted
+narrow-role harness, and it has been removed. `agent/improve/tools.py` is the
+same shape and still live: do not grow it.
+
+**Re-describing what the framework already says.** Prompt text explaining tools
+the SDK has already documented in their schemas is paid for on every call and
+can contradict the real behaviour after an upgrade. Say what is *different*
+here.
+
+**A new module for a behaviour change.** If the diff for "the agent should do X"
+is a `.py` file rather than a `.md` file, stop and re-read the ladder above.
+
+## Writing it
+
+Model construction stays the pool's job — `connect(floor)` from
+`agent/runtime/pool.py` returns a `RouterChatModel`, and it is passed as
+`model=`. Never hardcode a provider string in an agent.
+
+Keep the shape the existing agents use, because it is the one that works:
+`agent/<name>/agent.py` builds and runs, `prompts/*.md` is everything the model
+reads on every call, `skills/*/SKILL.md` is everything it reads on demand,
+`__main__.py` is the command. A new agent that needs a new Python module to
+express its behaviour is a design that has not been reduced yet.
+
+After any change touching the library surface, run the seam tests:
+
+```bash
+python -m pytest tests/agent -q
+```
+
+## When the library is genuinely missing something
+
+Then, in this order: (1) confirm against the installed source that it is really
+absent, (2) write the smallest adapter in `agent/runtime/`, (3) document the
+seam and the upgrade risk in its module docstring, (4) add a test that fails
+when the upstream API moves, (5) open the upstream issue. A local workaround
+without (5) is a fork nobody decided to maintain.
