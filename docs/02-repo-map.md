@@ -36,7 +36,6 @@ what a session is.
 | --- | --- |
 | [chat_model.py](../agent/runtime/chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
 | [backend.py](../agent/runtime/backend.py) | *What is the agent allowed to execute?* — a filesystem jail (`JailedFilesystemBackend`, the explorer's, which runs nothing) plus an `execute` allowlist of `python`/`pytest`/`git` (`RestrictedShellBackend`, the coding agent's) |
-| [tools.py](../agent/runtime/tools.py) | *What can a node actually do?* — narrow tools over `RestrictedShellBackend`, one small schema each |
 | [web.py](../agent/runtime/web.py) | *How does an agent reach the web?* — Tavily finds URLs, httpx fetches each page, markdownify converts it, so the **page** reaches the model; and the check that refuses a run with no search account |
 | [trace.py](../agent/runtime/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
 | [run_tree.py](../agent/runtime/run_tree.py) | *What happened during a run, readably?* — the LangSmith run tree, fetched after the run and written down condensed ([7.6](07-observability.md#76-the-record-one-run-tree)) |

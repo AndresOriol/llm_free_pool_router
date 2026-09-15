@@ -206,7 +206,7 @@ against a per-day request budget:
   on every command. An always-refused tool can only ever cost a step to learn
   what the schema could have said — this project's own measured lesson, that a
   description advertising a capability the backend does not have causes failed
-  calls ([agent/runtime/tools.py](../agent/runtime/tools.py)). The backend is
+  calls, learned from the narrow-role tool suite since deleted. The backend is
   now the jail without the shell, and the framework offers `execute` only on a
   backend that can execute, so there is nothing left to hide.
 
