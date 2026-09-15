@@ -158,23 +158,27 @@ same failure unable to recur silently after a fix ships.
 
 ## 19.6 The rule that decides whether a fix worked
 
-**An issue closes when the runs recorded *after* its fix stop matching, and at
-no earlier moment.** Not when the coding agent says it is done, and not when the
-improvement agent finds the diagnosis convincing.
+An issue defaults its boundary to when the fix was delegated, which is the only
+boundary that answers whether it stopped happening.
 
-`check_issue` defaults its boundary to when the fix was delegated, which is the
-only date that answers "did it stop happening". Three outcomes:
+The third is the one worth defending. An issue closes when the signature stops
+matching AND the combined solved count over the train and holdout splits has
+not regressed, with at least one post-fix run on each split.
 
-| What the runs after the fix show | Status |
+The two real issues (`invariant-guard-over-declines-explicit-doc-updates` and
+`recursion-limit-crash-on-long-running-sessions`) were diagnosed from exactly two
+runs of one scenario each, proving the old gate was too weak.
+
+| After the fix | Result |
 | --- | --- |
-| Nothing matches, and there was at least one run | **closed** |
-| Something matches, and the issue was closed | **reopened** |
-| There were no runs at all | unchanged, and it says so |
+| The signature still matches | not fixed; reopen if it was closed (unchanged) |
+| Nothing matches, but no run on the holdout split | status unchanged, unverified on the holdout and names the `run_evals` call |
+| Nothing matches, both splits have runs, combined solved count below baseline | status unchanged, reported as a regression, naming which split lost |
+| Nothing matches, both splits have runs, combined solved count holds or improves | **closed** |
 
-The third is the one worth defending. An issue that closed because nobody looked
-is worse than one still open: it is a silent claim that a failure was fixed,
-resting on no measurement. So a check with nothing to check leaves the status
-alone and reports the fix as unverified.
+A pass count at these sample sizes is weak evidence and the gate is a floor,
+rather than a proof (see [6.4.2](06-agent.md#642-the-pass-column-is-noise)).
+
 
 ## 19.7 Making new evidence costs real quota
 
@@ -183,7 +187,9 @@ serially, against the free-tier pool, for up to an hour per call
 (`IMPROVE_EVAL_TIMEOUT`). It is the only agent here that starts other agents as
 subprocesses rather than in-process, because the eval runner materialises a
 pinned worktree per configuration and that is the point of it
-([8.4](08-evaluation-method.md#84-what-a-configuration-is)).
+([8.4](08-evaluation-method.md#84-what-a-configuration-is)). Re-running the
+holdout costs roughly a day of free-tier quota (~20 provider calls a run, ~9 runs
+a day on the flash tier), which is payable once per fix.
 
 Two guards, both on the tool rather than in the prompt: it refuses a batch with
 no scenario or topic named, and it caps reps at three. A whole-suite batch is a
