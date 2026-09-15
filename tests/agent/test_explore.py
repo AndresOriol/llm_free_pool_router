@@ -18,8 +18,8 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
 from agent.explore import agent as explore
-from agent.utils import web
 from agent.utils.backend import JailedFilesystemBackend
+from llm_router.tavily_router import NoSearchPool, TavilyPoolRouter
 
 
 def _flat(text):
@@ -40,11 +40,11 @@ def _researcher():
     return explore.prompt(explore.RESEARCHER_PROMPTS, _values())
 
 
-def _tools(workdir, research_dir="research", pool=None):
+def _tools(workdir, research_dir="research"):
     """The three tools this agent adds, by name."""
     described = explore.descriptions(_values(research_dir))
     return {t.name: t for t in explore.research_tools(
-        pool, Path(workdir), research_dir, described)}
+        Path(workdir), research_dir, described)}
 
 
 def _subagents(workdir):
@@ -86,12 +86,13 @@ def test_every_tool_description_is_a_file_rather_than_a_string_in_code():
 # -- Whether it can search at all ------------------------------------------
 
 def test_a_run_with_no_tavily_account_is_refused_before_it_starts():
-    class _EmptyPool:
-        accounts = []
+    """`connect()` asks for the pool at start-up precisely so this lands here
+    and not on the first search, an hour of quota later."""
+    pool = TavilyPoolRouter(accounts=[])
 
     try:
-        web.check_pool(_EmptyPool())
-    except web.NoSearchPool as exc:
+        pool.check()
+    except NoSearchPool as exc:
         assert "TAVILY_API_KEY_1" in str(exc)
     else:
         raise AssertionError("a run with no way to search must refuse up front")
@@ -100,10 +101,7 @@ def test_a_run_with_no_tavily_account_is_refused_before_it_starts():
 def test_one_tavily_account_works_and_is_warned_about():
     """It searches; it has nothing to fail over to. That is worth saying once,
     because the failure mode is every search dying at the monthly wall."""
-    class _OnePool:
-        accounts = [object()]
-
-    assert web.check_pool(_OnePool()) == 1
+    assert TavilyPoolRouter(accounts=[object()]).check() == 1
 
 
 # -- What it is allowed to do ------------------------------------------------
@@ -313,7 +311,7 @@ def _recorder():
 
 def _invoke(tmp_path, **kwargs):
     """Build the agent over the recorder and run it one step."""
-    explore.build_agent(tmp_path, _recorder(), pool=None, members=3,
+    explore.build_agent(tmp_path, _recorder(), members=3,
                         **kwargs).invoke(
         {"messages": [("user", "research something")]})
 

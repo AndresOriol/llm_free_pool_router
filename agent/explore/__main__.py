@@ -55,7 +55,7 @@ def main() -> None:
         raise SystemExit("No task given.")
 
     floor = int(os.environ.get("AGENT_CONTEXT_FLOOR") or CONTEXT_FLOOR)
-    model, members, search_pool = connect(floor)
+    model, members = connect(floor)
 
     trace_file = os.environ.get("AGENT_TRACE_FILE")
     if not trace_file and os.environ.get("EVAL_TRACE_FILE"):
@@ -70,8 +70,7 @@ def main() -> None:
     # 43 minutes on a socket that had died while it slept.
     with keep_awake():
         final, written = run(
-            model, task, workdir, search_pool, floor=floor, members=members,
-            research_dir=research_dir,
+            model, task, workdir, floor=floor, members=members, research_dir=research_dir,
             trace_path=Path(trace_file) if trace_file else None)
 
     _summary(final, written, workdir, before, research_dir)

@@ -48,7 +48,8 @@ Search is [Tavily](https://tavily.com): a search API built for agents, whose fre
 tier is **1,000 credits a month** on a key you get by signing up. One
 `tavily_search` spends one credit for the URL discovery; fetching the pages costs
 nothing but the HTTP round trips, because the tool does that itself
-([agent/utils/web.py](../agent/utils/web.py)).
+([TavilyPoolRouter.search](../llm_router/tavily_router.py), reached through
+[agent/explore/tools.py](../agent/explore/tools.py)).
 
 Held against everything else here, that budget is comfortable and genuinely
 scarce at the same time. Comfortable next to the *model* pool — twenty requests
@@ -65,7 +66,8 @@ touching config.
 
 **Today the pool holds one account**, which means failover has nowhere to go. A
 run says so once at startup rather than letting you find out at the wall
-([check_pool](../agent/utils/web.py)).
+([TavilyPoolRouter.check](../llm_router/tavily_router.py), which
+[`connect()`](../agent/explore/agent.py) calls before the run).
 
 ### 15.2.1 A capability is a fact to probe, not to infer
 

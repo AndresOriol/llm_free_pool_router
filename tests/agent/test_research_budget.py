@@ -3,7 +3,7 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
 from agent.explore import agent as explore
-from agent.utils import web
+from agent.explore import tools as explore_tools
 from agent.utils.backend import JailedFilesystemBackend
 
 
@@ -17,11 +17,15 @@ def test_search_budget_blocks_overflow_but_allows_notes_and_resets_per_run(
         calls = 0
 
         def search(self, query, **kwargs):
+            # The router formats and fetches now, so a stub returns the block
+            # `tavily_search` would have handed back.
             self.calls += 1
-            return {"results": [{"title": "Source", "url": "https://example.com"}]}
+            return "## Source\n**URL:** https://example.com\n\nevidence"
 
     pool = Pool()
-    monkeypatch.setattr(web, "fetch_page", lambda url: "evidence")
+    # The pool is the tool module's own, so the seam is the accessor rather
+    # than an argument threaded in from the caller.
+    monkeypatch.setattr(explore_tools, "search_pool", lambda: pool)
     replies = []
     for run in range(2):
         calls = [{"name": "tavily_search", "args": {"query": f"question {i}"},
@@ -33,7 +37,7 @@ def test_search_budget_blocks_overflow_but_allows_notes_and_resets_per_run(
                         AIMessage(content="Saved the available evidence.")])
     values = explore.template_values()
     described = explore.descriptions(values)
-    tools = explore.research_tools(pool, tmp_path, explore.RESEARCH_DIR, described)
+    tools = explore.research_tools(tmp_path, explore.RESEARCH_DIR, described)
     spec = explore.subagents(tools, values, described)[0]
     agent = create_deep_agent(
         model=Model(messages=iter(replies)), tools=spec["tools"],

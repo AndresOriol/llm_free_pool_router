@@ -35,13 +35,17 @@ what a session is.
 | File | The question it answers |
 | --- | --- |
 | [chat_model.py](../agent/utils/chat_model.py) | *What actually happens on a call, including retry?* — the failover loop, as a LangChain `BaseChatModel` |
-| [backend.py](../agent/utils/backend.py) | *What is the agent allowed to execute?* — a filesystem jail (`JailedFilesystemBackend`, the explorer's, which runs nothing) plus an `execute` allowlist of `python`/`pytest`/`git` (`RestrictedShellBackend`, the coding agent's) |
-| [web.py](../agent/utils/web.py) | *How does an agent reach the web?* — Tavily finds URLs, httpx fetches each page, markdownify converts it, so the **page** reaches the model; and the check that refuses a run with no search account |
 | [trace.py](../agent/utils/trace.py) | *What happened during a run, durably?* — the `EVAL_TRACE_FILE` JSONL callback handler |
 | [run_tree.py](../agent/utils/run_tree.py) | *What happened during a run, readably?* — the LangSmith run tree, fetched after the run and written down condensed ([7.6](07-observability.md#76-the-record-one-run-tree)) |
 | [pool.py](../agent/utils/pool.py) | *Which model does an agent run on?* — the pool as one `RouterChatModel` that routes only to members holding the context floor, and refuses before the run when none does |
+| [backend.py](../agent/utils/backend.py) | *What is the agent allowed to execute?* — a filesystem jail (`JailedFilesystemBackend`, the explorer's, which runs nothing) plus an `execute` allowlist of `python`/`pytest`/`git` (`RestrictedShellBackend`, the coding agent's) |
 | [prompts.py](../agent/utils/prompts.py) + [prompts/](../agent/utils/prompts/) | *What is every agent told about where it runs?* — headless, the pool's identity, the jail's `/`, what `execute` runs; and `fill`, the one way any prompt file is filled |
 | [shell.py](../agent/utils/shell.py) | *How is a refused command explained?* — the allowlist as a readable tool message, not an exception |
+
+Web search is not here either: the account pool and the failover between
+accounts are [llm_router/tavily_router.py](../llm_router/tavily_router.py), and
+the tool over it is [agent/explore/tools.py](../agent/explore/tools.py) — the
+one agent that searches owns it.
 
 `agent/code/` is the **coding agent**: `create_deep_agent` over that backend,
 configured the way `deepagents-code` configures one. See

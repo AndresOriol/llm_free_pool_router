@@ -54,7 +54,7 @@ from agent.utils import run_tree
 from agent.utils.pool import CONTEXT_FLOOR, connect as connect_model, keyed
 from agent.utils.prompts import fill, shared_values
 from agent.utils.trace import traced
-from agent.utils.web import check_pool, search
+from agent.explore.tools import research_tools, search_pool
 
 logger = logging.getLogger("harness.explore")
 
@@ -75,8 +75,6 @@ RECURSION_LIMIT = 400
 MAX_CONCURRENT_RESEARCH_UNITS = 3
 MAX_RESEARCHER_ITERATIONS = 3
 MAX_SEARCHES_PER_SUBAGENT = 5
-# Pages fetched per search. Upstream fetches one; one bad page is a dead end.
-PAGES_PER_SEARCH = 2
 
 # The system prompt of each agent, as the files it is joined from.
 ORCHESTRATOR_PROMPTS = ("system.md", "workflow.md", "delegation.md")
@@ -144,45 +142,17 @@ def descriptions(values: dict) -> dict:
 # --- 3. Model and search pool ---------------------------------------------------
 
 def connect(floor: int = CONTEXT_FLOOR):
-    """(model, eligible member count, search pool). Refuses before the run.
+    """(model, eligible member count). Refuses before the run.
 
-    Two unrelated pools: models serve the conversation, Tavily accounts serve the
-    searching. Search is checked first, because an explorer that cannot reach
-    the web can never do this job.
+    Two unrelated pools: models serve the conversation, Tavily accounts serve
+    the searching. The search pool is built and checked first, because an
+    explorer that cannot reach the web can never do this job -- and finding
+    that out on the first `tavily_search` means a session has already spent
+    its start-up. The pool itself is owned by [tools.py](tools.py); this only
+    forces it into existence early.
     """
-    from llm_router import TavilyPoolRouter
-
-    search_pool = TavilyPoolRouter.from_env()
-    check_pool(search_pool)
-    model, members = connect_model(floor)
-    return model, members, search_pool
-
-
-# --- 4. Tools -------------------------------------------------------------------
-
-def research_tools(pool, workdir: Path, research_dir: str,
-                   described: dict) -> list:
-    """`tavily_search`, `think_tool` and `research_status`, described by `tool_descriptions/`."""
-    from langchain_core.tools import StructuredTool
-
-    def tavily_search(query: str) -> str:
-        return search(pool, query, max_results=PAGES_PER_SEARCH)
-
-    def think_tool(reflection: str) -> str:
-        return f"Reflection recorded: {reflection}"
-
-    def research_status() -> str:
-        notes = sorted((workdir / research_dir).rglob("*.md"))
-        if not notes:
-            return (f"/{research_dir}/ is empty -- nothing has been written yet. "
-                    f"The files you write there are this run's only deliverable.")
-        return f"Files in /{research_dir}/:\n\n" + "\n".join(
-            f"/{note.relative_to(workdir).as_posix()} "
-            f"({note.stat().st_size:,} bytes)" for note in notes)
-
-    return [StructuredTool.from_function(func=func, name=func.__name__,
-                                         description=described[func.__name__])
-            for func in (tavily_search, think_tool, research_status)]
+    search_pool()
+    return connect_model(floor)
 
 
 def register_surface(values: dict) -> None:
@@ -287,7 +257,7 @@ def subagents(tools: list, values: dict, described: dict) -> list:
     ]
 
 
-def build_agent(workdir: Path, model, pool, *, floor: int = CONTEXT_FLOOR,
+def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
                 members: int = 0, research_dir: str = RESEARCH_DIR):
     """The research orchestrator over a jailed workdir, the pool and the web."""
     from deepagents import create_deep_agent
@@ -301,7 +271,7 @@ def build_agent(workdir: Path, model, pool, *, floor: int = CONTEXT_FLOOR,
 
     values = template_values(floor, members, research_dir)
     described = descriptions(values)
-    tools = research_tools(pool, workdir, research_dir, described)
+    tools = research_tools(workdir, research_dir, described)
 
     # Which tools this agent is offered and how they are described: declared
     # once, applied by the framework to this agent and its sub-agents alike.
@@ -325,7 +295,7 @@ def build_agent(workdir: Path, model, pool, *, floor: int = CONTEXT_FLOOR,
 
 # --- 6. A run -------------------------------------------------------------------
 
-def run(model, task: str, workdir: Path, pool, config=None,
+def run(model, task: str, workdir: Path, config=None,
         floor: int = CONTEXT_FLOOR, members: int = 0,
         research_dir: str = RESEARCH_DIR,
         trace_path: Optional[Path] = None) -> tuple:
@@ -334,14 +304,13 @@ def run(model, task: str, workdir: Path, pool, config=None,
     config.setdefault("recursion_limit", RECURSION_LIMIT)
     workdir = Path(workdir)
 
-    agent = build_agent(workdir, model, pool, floor=floor, members=members,
+    agent = build_agent(workdir, model, floor=floor, members=members,
                         research_dir=research_dir)
     with collect_runs() as collected:
         final = agent.invoke({"messages": [HumanMessage(task)]}, config)
 
     written = run_tree.record(
         collected.traced_runs, trace_path,
-        run_tree.about(workdir, "explore", floor, members,
-                       research_dir=research_dir,
-                       search_accounts=len(getattr(pool, "accounts", []) or [])))
+        run_tree.about(workdir, "explore", floor, members, research_dir=research_dir)
+    )
     return final, written
