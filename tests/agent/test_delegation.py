@@ -62,6 +62,17 @@ def test_scenarios_is_not_offered_without_the_repository(monkeypatch, tmp_path):
     assert delegation.available(("scenarios",)) == ["scenarios"]
 
 
+def test_web_reachable_imports_exist():
+    """_web_reachable depends on NoSearchPool and search_pool; assert they exist
+    where imported so a rename doesn't silently disable the explore peer."""
+    from llm_router.tavily_router import NoSearchPool
+
+    from agent.explore.tools import search_pool
+
+    assert issubclass(NoSearchPool, SystemExit)
+    assert callable(search_pool)
+
+
 def test_the_prompt_section_holds_the_pointer_and_nothing_else():
     """What is on every call is a sentence sending the agent to the skill. The
     roster and the how-to are read only when it decides it needs them."""

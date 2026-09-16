@@ -274,7 +274,11 @@ def _system_prompt_of_a_run(workdir) -> str:
             seen.append(messages)
             return super()._generate(messages, *args, **kwargs)
 
-    model = _Capture(messages=iter([AIMessage(content="done")]))
+    def _gen():
+        while True:
+            yield AIMessage(content="done")
+
+    model = _Capture(messages=_gen())
     code.build_agent(workdir, model).invoke({"messages": [HumanMessage("hi")]},
                                             {"recursion_limit": 10})
     return str(seen[0][0].content)

@@ -267,6 +267,34 @@ are ever wanted, the cheap move is a small shim exposing the router as
 scenarios test the *agent loop*, and neither needs bespoke wiring. Don't build
 it until a specific harness is actually wanted; noted so it isn't re-derived.
 
----
+## 8.11 The train and holdout split
 
+To prevent overfitting harness changes to the few scenarios they were diagnosed
+from, the eval set is split into train and holdout splits, keyed by topic in
+`/evals/splits.yaml`.
+
+A run is `(config x scenario x task x rep)` rather than a draw from a population.
+A random split of runs puts the same scenario on both sides, which would
+re-measure what train already measured. Scenarios are therefore held out by
+topic. Furthermore, a topic branch in `agent_evals` is one codebase; splitting a
+topic across the two sides would put the holdout's codebase in train.
+
+The rule that makes the holdout meaningful is that it is the half no issue has
+ever been diagnosed from. A newly authored topic joins holdout by default; a
+topic moves to train the moment an issue cites a run from it, with the move
+recorded in the file; and a topic never moves from train to holdout.
+
+Counted across 12 scenarios, 11 topic branches, 19 tasks, and 105 recorded runs,
+train covers 5 topics, 6 scenarios, 9 tasks, and 85 recorded runs, while holdout
+covers 6 topics, 6 scenarios, 10 tasks, and 20 recorded runs. Both sides carry a
+trap and a refactor, but holdout carries the set's only generative, tests, and
+ambiguous tasks, and skews L2 while carrying no L3. Re-running the holdout costs
+roughly a day of free-tier quota (~20 provider calls a run, ~9 runs a day on the
+flash tier), which is payable once per fix.
+
+A pass count at these sample sizes is weak evidence; the improvement agent's
+gate is a floor, not a proof (see [6.4.2](06-agent.md#642-the-pass-column-is-noise)).
+
+---
 **Previous:** [← 7. Observability](07-observability.md) · **Next:** [9. Scenarios →](09-scenarios.md)
+

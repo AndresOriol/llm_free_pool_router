@@ -7,5 +7,7 @@ the behaviour to change, the file or knob to change it in, what evidence
 says so, and what must keep working. It commits on its own branch; the
 report names the branch and the files that moved.
 
+A per-split baseline is recorded here automatically, and `check_issue` will compare against it.
+
 You do not edit the harness yourself. The diff is reviewable against the
 diagnosis only if a different agent wrote it.

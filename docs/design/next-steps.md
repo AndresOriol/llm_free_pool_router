@@ -22,16 +22,15 @@ than treating as a matter of taste.
 outer agent edits an inner agent's surfaces, and **a change is kept only if the
 combined pass count on a *train* and a *holdout* split improves**.
 
-We have no holdout. `check_issue` replays an issue's signature against whatever
-runs exist, and `delegate_fix` gates on staleness rather than on a score. That
-is how a harness change overfits the handful of scenarios it was diagnosed from
-— and we already know the pass column is noise at these sample sizes
-([6.4.2](../06-agent.md#642-the-pass-column-is-noise)), so the risk is not
-theoretical. This is the most valuable thing in the examples for us.
+We have no holdout. `check_issue` replays an issue's signature against
+whatever runs exist, and `delegate_fix` gates on staleness rather than on a
+score. That is how a harness change overfits the handful of scenarios it was
+diagnosed from — and we already know the pass column is noise at these sample
+sizes ([6.4.2](../06-agent.md#642-the-pass-column-is-noise)), so the risk is
+not theoretical. This is the most valuable thing in the examples for us.
 
-Worth deciding first: whether a holdout is affordable at our sample sizes at
-all, or whether the honest version is to hold out *scenarios* rather than runs
-and accept that a pass is a weak signal either way.
+*Decision implemented:* Hold out scenarios by topic, not runs. Declared in `/evals/splits.yaml`. See the new section in `/docs/08-evaluation-method.md`. A pass count at these sample sizes is weak evidence and the gate is a floor, not a proof.
+
 
 ### Declare the editable surfaces
 
