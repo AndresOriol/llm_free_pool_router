@@ -314,6 +314,62 @@ def is_transient(exc: Exception) -> Tuple[bool, Optional[int]]:
     return False, None  # unknown error with no status -> surface it
 
 
+_QUOTA_FIELD = re.compile(
+    r"[\"']?(quotaMetric|quotaId|quotaValue)[\"']?\s*[:=]\s*[\"']([^\"']+)",
+    re.I,
+)
+_PROVIDER_STATUS = re.compile(
+    r"\b(RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED|NOT_FOUND|"
+    r"UNAUTHENTICATED|PERMISSION_DENIED|INVALID_ARGUMENT)\b",
+    re.I,
+)
+
+
+def failure_diagnostics(exc: Exception) -> dict:
+    """Small, non-sensitive facts that make a failed ledger row actionable.
+
+    Raw exception text is deliberately excluded: tool failures can contain the
+    model's generated output, and provider messages may echo request material.
+    Gemini leaves its quota metric and quota id only in that text, so retain
+    those named fields along with the SDK exception/status and our verdict.
+    """
+    message = str(getattr(exc, "message", "") or exc)
+    lowered = message.lower()
+    transient, _ = is_transient(exc)
+
+    if is_decommissioned(exc):
+        kind = "model_retired"
+    elif is_unauthorized(exc):
+        kind = "unauthorized"
+    elif is_rate_limited(exc):
+        kind = "rate_limit"
+    elif "tool_use_failed" in lowered or "tool call validation failed" in lowered:
+        kind = "tool_use_failed"
+    elif "timeout" in type(exc).__name__.lower():
+        kind = "timeout"
+    elif "connection" in type(exc).__name__.lower():
+        kind = "connection"
+    elif transient:
+        kind = "server_error"
+    elif isinstance(_status_of(exc), int) and 400 <= _status_of(exc) < 500:
+        kind = "client_error"
+    else:
+        kind = "unknown"
+
+    details = {"error_type": type(exc).__name__, "error_kind": kind}
+    status = _status_of(exc)
+    if status is not None:
+        details["status_code"] = status
+    provider_status = _PROVIDER_STATUS.search(message)
+    if provider_status:
+        details["provider_status"] = provider_status.group(1).upper()
+    for field, value in _QUOTA_FIELD.findall(message):
+        details[{"quotametric": "quota_metric",
+                 "quotaid": "quota_id",
+                 "quotavalue": "quota_value"}[field.lower()]] = value
+    return details
+
+
 class LLMProvider(ABC):
     """One free-tier account/model in the pool.
 

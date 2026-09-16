@@ -12,7 +12,7 @@ from pathlib import Path
 # `python tests/llm_router/test_is_transient.py`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from llm_router.base_provider import (LLMProvider, is_decommissioned,
+from llm_router.base_provider import (LLMProvider, failure_diagnostics, is_decommissioned,
                                       is_transient)
 
 
@@ -69,6 +69,18 @@ def _run():
                   "current quota. Please retry in 37.677718404s.', 'details': "
                   "[{'@type': '...RetryInfo', 'retryDelay': '37s'}]}}")
     assert is_transient(gemini) == (True, 38), is_transient(gemini)
+    quota = _Exc("429 RESOURCE_EXHAUSTED: {'quotaMetric': "
+                 "'generativelanguage.googleapis.com/input_token_count', "
+                 "'quotaId': 'InputTokensPerModelPerMinute-FreeTier', "
+                 "'quotaValue': '250000'}")
+    assert failure_diagnostics(quota) == {
+        "error_type": "_Exc",
+        "error_kind": "rate_limit",
+        "provider_status": "RESOURCE_EXHAUSTED",
+        "quota_metric": "generativelanguage.googleapis.com/input_token_count",
+        "quota_id": "InputTokensPerModelPerMinute-FreeTier",
+        "quota_value": "250000",
+    }
 
     # Groq says it in prose only.
     groq = _Exc("rate_limit_exceeded: Limit 8000, Used 6180, Requested 6247. "

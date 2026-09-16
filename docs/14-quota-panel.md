@@ -46,7 +46,7 @@ Gitignored; `LLM_ROUTER_USAGE_DIR` moves the directory.
 
 | File | Written by | Holds |
 | --- | --- | --- |
-| `ledger.jsonl` | [usage.py](../llm_router/usage.py), one line per attempt | `{ts, provider, account, platform, model, tokens_in, tokens_out, outcome, retry_after}` |
+| `ledger.jsonl` | [usage.py](../llm_router/usage.py), one line per attempt | Routing identity and outcome; token counts or retry hint; failover correlation; structured failure diagnostics |
 | `pool.json` | [loader.py](../llm_router/loader.py), on every pool build | the pool as configured, with each model's declared `limits` |
 
 They move on different clocks, which is why they are not one file. The ledger
@@ -62,6 +62,15 @@ Recording happens at the one place that knows which account served a call: the
 failover loop in [`RouterChatModel`](../agent/utils/chat_model.py). Token counts
 are the provider's own numbers, never `estimate_tokens` — a panel reporting a
 chars/4 guess as consumption would be worse than reporting nothing.
+
+`request_id` groups every provider attempt made for one logical model call and
+`attempt` puts them in order. `estimated_tokens` records the request size known
+before the call, including on a refusal where the provider reports no token
+usage. A failed row also records `error_type`, the router's `error_kind`, HTTP
+or provider status when available, and Gemini's named `quota_metric`, `quota_id`
+and `quota_value`. These are fields extracted from the exception, not its raw
+message: malformed tool output and echoed request material do not belong in a
+persistent usage ledger.
 
 Writing to either file can never fail a run. The writers swallow their own
 errors and log at debug: an unattended agent losing an afternoon's work to a full

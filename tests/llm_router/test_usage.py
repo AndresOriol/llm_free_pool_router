@@ -111,7 +111,11 @@ def _run():
         ledger = Path(tmp) / "ledger.jsonl"
 
         usage.record(_Provider(), tokens_in=812, tokens_out=96)
-        usage.record(_Provider(), outcome="rate_limited", retry_after=33)
+        usage.record(_Provider(), outcome="rate_limited", retry_after=33,
+                     request_id="request-1", attempt=2, estimated_tokens=7000,
+                     diagnostics={"error_type": "QuotaError",
+                                  "error_kind": "rate_limit",
+                                  "quota_metric": "input_tokens_per_minute"})
 
         served, refused = _lines(ledger)
         assert served["provider"] == "GptOss120b_groq_1", served
@@ -127,6 +131,12 @@ def _run():
         # The provider's own answer to "when can I come back", kept verbatim --
         # the panel would otherwise have to infer it (llm_router/quota).
         assert refused["retry_after"] == 33, refused
+        assert refused["request_id"] == "request-1", refused
+        assert refused["attempt"] == 2, refused
+        assert refused["estimated_tokens"] == 7000, refused
+        assert refused["error_type"] == "QuotaError", refused
+        assert refused["error_kind"] == "rate_limit", refused
+        assert refused["quota_metric"] == "input_tokens_per_minute", refused
 
         # Token counts come from the provider's own numbers, wherever the
         # LangChain wrapper put them.
