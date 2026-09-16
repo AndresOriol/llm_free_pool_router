@@ -237,8 +237,10 @@ def check(issue: Issue, found: list, since: str = "") -> dict:
       `closed`, it **reopens**, which is the case the ledger exists to catch.
     - Nothing matched, and there was at least one post-fix run on each split,
       and no regression against baseline (when recorded) → **closed**.
-    - Nothing matched, but no post-fix run on the holdout split → status unchanged, unverified on the holdout.
-    - Nothing matched, both splits have runs, but combined solved count is below baseline → status unchanged, reported as a regression.
+    - Nothing matched, but no post-fix run on one of the splits →
+      unchanged, and unverified on the split that did not run.
+    - Nothing matched and both splits ran, but the combined solved count is
+      below baseline → unchanged, and reported as a regression.
     - Nothing matched and nothing ran → unchanged, and the report says so. An
       issue must never close because nobody looked.
     - Nothing matched, but the signature has never matched any run (evidence is
