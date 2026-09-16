@@ -21,6 +21,7 @@ from typing import List, Optional
 from .. import usage
 from .format import ago, compact, duration, percent, scaled, stamp
 from .html import render_panel
+from .diagnostics import build_diagnostics
 from .ledger import read_ledger, read_pool
 from .report import (Report, _fold_models, _fold_platforms, build_report,
                      declared_limits)
@@ -159,9 +160,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m llm_router.quota",
         description="What the pool has spent, and how close each account is to its wall.")
-    parser.add_argument("command", nargs="?", default="status", choices=("status", "panel"),
+    parser.add_argument("command", nargs="?", default="status",
+                        choices=("status", "panel", "diagnose"),
                         help="status: the table (add --json for data). "
-                             "panel: write the HTML snapshot and print its path.")
+                             "panel: write HTML. diagnose: explain failures/failover.")
     parser.add_argument("--json", action="store_true",
                         help="status only: print the report as JSON")
     parser.add_argument("--account", help="report only this account, member by "
@@ -173,7 +175,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     directory = Path(args.dir) if args.dir else usage.usage_dir()
-    report = build_report(read_ledger(directory), read_pool(directory))
+    calls, pool = read_ledger(directory), read_pool(directory)
+    if args.command == "diagnose":
+        diagnosis = build_diagnostics(calls, pool, __import__("time").time())
+        print(json.dumps(diagnosis, indent=2, default=str))
+        return 0
+    report = build_report(calls, pool)
     if args.account:
         report = _only(report, args.account)
 

@@ -77,6 +77,7 @@ def load_providers_from_config(config_path=None) -> List[LLMProvider]:
                 max_input_tokens=conf.get("max_input_tokens"),
                 platform=platform,
                 account=account["name"],
+                limits=conf.get("limits") or {},
             ))
             pool.append({
                 "provider": provider_name,

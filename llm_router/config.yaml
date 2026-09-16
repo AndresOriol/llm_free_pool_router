@@ -143,18 +143,18 @@ models:
     max_input_tokens: 250000
     limits: {rpm: 10, tpm: 250000, rpd: 20}
 
-  # -- Last resort: only when everything above is in cooldown. Gemma has
-  # unlimited TPM, so its ceiling is the model's context window.
+  # -- Last resort: only when everything above is in cooldown. Gemma's 16k TPM
+  # is the request ceiling even though the model context window is larger.
   - name: Gemma4_31b
     platform: gemini
     model: gemma-4-31b-it
     priority: 31
-    max_input_tokens: 128000
-    limits: {rpm: 15, rpd: 1500}
+    max_input_tokens: 16000
+    limits: {rpm: 30, tpm: 16000, rpd: 14400}
 
   - name: Gemma4_26b
     platform: gemini
     model: gemma-4-26b-a4b-it
     priority: 32
-    max_input_tokens: 128000
-    limits: {rpm: 15, rpd: 1500}
+    max_input_tokens: 16000
+    limits: {rpm: 30, tpm: 16000, rpd: 14400}
