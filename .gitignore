@@ -41,3 +41,7 @@ ui/dist/
 # writes it, the next run rewrites it, and it is only ever read on disk -- the
 # repository carries what an agent is *told*, never what one produced.
 /research/
+
+# Tool call overflow output written during runs, regenerated every run and
+# never read from the repository.
+large_tool_results/
