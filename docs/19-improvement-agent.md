@@ -171,13 +171,14 @@ only date that answers whether it stopped happening.
 | The signature still matches | not fixed; reopen if it was closed (unchanged) |
 | Nothing matches, but no run on the holdout split | status unchanged, unverified on the holdout and names the `run_evals` call |
 | Nothing matches, both splits have runs, combined solved count below baseline | status unchanged, reported as a regression, naming which split lost |
+| Nothing matches, both splits have runs, but no baseline was recorded | status unchanged; the comparison could not be made |
 | Nothing matches, both splits have runs, combined solved count holds or improves | **closed** |
 
 An issue that closed because nobody looked — or because only the half it was
 diagnosed from was looked at — is worse than one still open, because it is a
 silent claim of a fix resting on no measurement. So a check with nothing to
-check, or with nothing on the holdout, leaves the status alone and reports the
-fix as unverified.
+check, with nothing on the holdout, or with no baseline to compare against,
+leaves the status alone and reports the fix as unverified.
 
 The two real issues (`invariant-guard-over-declines-explicit-doc-updates` and
 `recursion-limit-crash-on-long-running-sessions`) were diagnosed from exactly two

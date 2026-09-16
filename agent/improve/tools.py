@@ -287,7 +287,6 @@ def make_tools(workdir: Path, peers=None) -> dict:
             branch = ""
 
         # Record baseline
-        from evals import splits
         records_list = _records()
         baseline = splits.score(records_list)
         issue.baseline = {
@@ -547,6 +546,12 @@ def make_tools(workdir: Path, peers=None) -> dict:
             return (f"`{issue.id}` is still **{issue.status}**. The signature stops matching, "
                     f"but the combined solved count regressed below baseline ({comb_s}/{comb_r} "
                     f"vs baseline {issue.baseline.get('combined', {}).get('solved', 0)}). "
+                    f"Score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout {caveat}.{undeclared_note}")
+
+        if not report.get("has_baseline"):
+            return (f"`{issue.id}` is still **{issue.status}**. The signature stops matching and both splits have runs, "
+                    f"but no baseline was recorded, so the regression comparison cannot be made. "
+                    f"A baseline is recorded by `delegate_fix`. "
                     f"Score: solved {train_s}/{train_r} train, {hold_s}/{hold_r} holdout {caveat}.{undeclared_note}")
 
         matching = ", ".join(f"`{r}`" for r in report["matching_runs"]) or "none"

@@ -92,6 +92,9 @@ class TestCheck:
         _record(tmp_path, "20260902T000000Z_after_holdout",
                 {"failure_class": "", "scenario": "stock-export", "verified": True})
         issue = self._issue()
+        issue.baseline = {"train": {"solved": 0, "runs": 0},
+                          "holdout": {"solved": 0, "runs": 0},
+                          "combined": {"solved": 0, "runs": 0}}
 
         report = issues.check(issue, _records(tmp_path), since="2026-06-01")
 
