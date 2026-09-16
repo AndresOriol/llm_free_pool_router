@@ -66,7 +66,8 @@ chars/4 guess as consumption would be worse than reporting nothing.
 `request_id` groups every provider attempt made for one logical model call and
 `attempt` puts them in order. `estimated_tokens` records the request size known
 before the call, including on a refusal where the provider reports no token
-usage. A failed row also records `error_type`, the router's `error_kind`, HTTP
+usage; `duration_ms` records how long the answer or failure took on a monotonic
+clock. A failed row also records `error_type`, the router's `error_kind`, HTTP
 or provider status when available, and Gemini's named `quota_metric`, `quota_id`
 and `quota_value`. These are fields extracted from the exception, not its raw
 message: malformed tool output and echoed request material do not belong in a

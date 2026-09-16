@@ -137,6 +137,7 @@ class RouterChatModel(BaseChatModel):
                 # every path out of this block reports it: the served call
                 # below, and the refusal or error in _handle_failure.
                 issued = time.time()
+                began = time.monotonic()
                 # No explicit config: the provider call inherits the ambient run
                 # context, so each attempt is traced under the current agent step
                 # (showing which model served it, and any failed attempts before
@@ -147,11 +148,13 @@ class RouterChatModel(BaseChatModel):
                 provider.consecutive_failures = 0
                 usage.record_call(provider, message, started=issued,
                                   request_id=request_id, attempt=attempt,
-                                  estimated_tokens=estimated)
+                                  estimated_tokens=estimated,
+                                  duration_ms=(time.monotonic() - began) * 1000)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
                 if not self._handle_failure(provider, exc, run_manager, issued,
-                                            request_id, attempt, estimated):
+                                            request_id, attempt, estimated,
+                                            (time.monotonic() - began) * 1000):
                     raise
                 last_exc = exc
 
@@ -175,7 +178,8 @@ class RouterChatModel(BaseChatModel):
                         started: Optional[float] = None,
                         request_id: Optional[str] = None,
                         attempt: Optional[int] = None,
-                        estimated_tokens: Optional[int] = None) -> bool:
+                        estimated_tokens: Optional[int] = None,
+                        duration_ms: Optional[float] = None) -> bool:
         """Cooldown + reroute on transient errors; return False to re-raise.
 
         A model retired upstream is dropped from the pool permanently rather
@@ -206,6 +210,7 @@ class RouterChatModel(BaseChatModel):
                      reached=reached_provider(exc),
                      started=started, request_id=request_id, attempt=attempt,
                      estimated_tokens=estimated_tokens,
+                     duration_ms=duration_ms,
                      diagnostics=failure_diagnostics(exc))
 
         # Checked before the `not transient` branch below, which would call this

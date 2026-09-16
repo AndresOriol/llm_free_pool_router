@@ -22,7 +22,8 @@ A ledger line:
      "provider": "GptOss120b_groq_1", "account": "groq_1",
      "platform": "groq", "model": "openai/gpt-oss-120b",
      "tokens_in": 812, "tokens_out": 96, "outcome": "ok",
-     "request_id": "...", "attempt": 1, "estimated_tokens": 790}
+     "request_id": "...", "attempt": 1, "estimated_tokens": 790,
+     "duration_ms": 438.2}
 
 `ts` is **when the request was issued**, which is the instant the vendor meters
 it against; `at` is the same instant in local time, for reading the file by eye.
@@ -51,7 +52,8 @@ sent one. `reached: false` marks an attempt that never got an answer at all,
 which spent nothing and is left out of the panel's request counts.
 
 Every routed call also carries a random `request_id`, its one-based `attempt`
-within that failover chain, and the pre-call `estimated_tokens`. Failed rows add
+within that failover chain, the pre-call `estimated_tokens`, and `duration_ms`
+measured on a monotonic clock. Failed rows add
 only structured, non-sensitive diagnostics: exception/error kind, numeric or
 provider status, and any named quota metric, id and value. Raw exception text is
 not persisted because tool failures may contain generated output and provider
@@ -127,6 +129,7 @@ def record(provider: Any, tokens_in: Optional[int] = None,
            retry_after: Optional[int] = None, reached: bool = True,
            started: Optional[float] = None, request_id: Optional[str] = None,
            attempt: Optional[int] = None, estimated_tokens: Optional[int] = None,
+           duration_ms: Optional[float] = None,
            diagnostics: Optional[dict] = None) -> None:
     """Append one attempt against `provider` to the ledger.
 
@@ -174,6 +177,8 @@ def record(provider: Any, tokens_in: Optional[int] = None,
         entry["attempt"] = int(attempt)
     if estimated_tokens is not None:
         entry["estimated_tokens"] = int(estimated_tokens)
+    if duration_ms is not None:
+        entry["duration_ms"] = round(float(duration_ms), 1)
     if diagnostics:
         entry.update(diagnostics)
     _append(entry)
