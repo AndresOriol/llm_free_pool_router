@@ -69,9 +69,12 @@ before the call, including on a refusal where the provider reports no token
 usage; `duration_ms` records how long the answer or failure took on a monotonic
 clock. A failed row also records `error_type`, the router's `error_kind`, HTTP
 or provider status when available, and Gemini's named `quota_metric`, `quota_id`
-and `quota_value`. These are fields extracted from the exception, not its raw
-message: malformed tool output and echoed request material do not belong in a
-persistent usage ledger.
+and `quota_value`, its dimensions, and the normalized `quota_window` when one
+can be proved. The Google SDK's structured `details` are preferred through the
+LangChain exception chain; display-text parsing is only a fallback. Some 429s
+contain only `RetryInfo`, so these fields are deliberately optional. Raw error
+messages are never persisted: malformed tool output and echoed request material
+do not belong in a usage ledger.
 
 Writing to either file can never fail a run. The writers swallow their own
 errors and log at debug: an unattended agent losing an afternoon's work to a full
@@ -196,6 +199,11 @@ like requests are not:
 A 429 or Groq's 413 does count, because both are answers: the vendor read the
 request and said no.
 
+That statement describes the **report**. The preventive RPD filter is stricter:
+it counts accepted/reached attempts, but a refused attempt can bench a member
+for the day only when `quota_window: rpd` was extracted from an explicit quota
+id. Unknown refusals remain visible without being mistaken for daily spend.
+
 The asymmetry matters because the two numbers answer different questions. Thirty
 requests where ten were refused is the same RPD as thirty that all worked, and a
 completely different situation: the first is an account fighting its ceiling, the
@@ -304,9 +312,15 @@ Gemini's twenty-a-day that is a fresh refusal every time round the loop until
 midnight. Paying once to learn it, instead of all afternoon, is worth one
 advisory read of a file we already write.
 
-**Still off the table:** routing on tokens, on the per-minute windows, or on a
-projection of what a run will cost. Those clear on their own, which is what a
-cooldown already is.
+The router also performs one bounded token check: accepted input tokens in the
+current clock minute plus the next request's estimate must stay under 90% of a
+declared TPM. A full member sleeps only until the minute boundary. This is not a
+long-run cost projection; it prevents a refusal the ledger already has enough
+information to predict.
+
+For post-mortems, `python -m llm_router.quota diagnose` emits JSON grouped by
+account and model, including quota ids, failover chains, first refusals, tokens
+accepted before typed TPM refusals, and model-wide versus account-wide patterns.
 
 ---
 

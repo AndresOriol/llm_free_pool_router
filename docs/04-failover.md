@@ -42,10 +42,13 @@ priority sort:
 2. Drop any provider whose ceiling the request would overflow (with a `0.9`
    safety margin — the estimate is rough, and on Groq the model's own output
    shares the same tokens-per-minute budget).
-3. Among what's left, prefer the ones with **requests-per-day left**
+3. Drop a provider when accepted input in the current minute plus the request
+   estimate would exceed 90% of its declared TPM. If every fitting member is
+   full, cool them until the minute turns and wait.
+4. Among what's left, prefer the ones with **requests-per-day left**
    ([4.2.1](#421-skipping-a-member-whose-day-is-spent)).
-4. Return the lowest `priority` among those.
-5. If **nothing** fits, fall back to the largest available window and attempt
+5. Return the lowest `priority` among those.
+6. If **nothing** fits structurally, fall back to the largest available window and attempt
    the call anyway.
 
 A provider with no declared ceiling is never filtered out.
@@ -101,12 +104,16 @@ spends its afternoon rediscovering a fact it recorded the first time.
 
 So selection reads it back. `RpdBudget`
 ([quota/budget.py](../llm_router/quota/budget.py)) folds the usage ledger into
-one set — the members whose `rpd` in [config.yaml](../llm_router/config.yaml) is
-already spent since the vendor's own midnight
+one set — the members whose accepted calls have spent their declared `rpd`, or
+whose refusal explicitly names an RPD `quota_id`, since the vendor's own midnight
 ([14.5](14-quota-panel.md#145-windows-and-when-they-reset)) — and step 3 passes
 over them silently. It is
 one reading of a file the router already writes, reused for 30 seconds, so a
 daily number is not re-parsed in front of every model call.
+
+An unclassified 429 does **not** count toward preventive RPD exhaustion: Gemini
+may be reporting RPM, TPM, shared capacity, or another condition. It remains in
+the report, but only typed evidence can turn a refusal into a day-long bench.
 
 **It is advisory, and the design is what makes that true rather than a promise.**
 The count is only what *this* router spent ([14.4](14-quota-panel.md#144-one-source-and-what-it-misses)),

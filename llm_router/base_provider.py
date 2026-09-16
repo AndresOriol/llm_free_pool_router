@@ -333,7 +333,12 @@ def failure_diagnostics(exc: Exception) -> dict:
     Gemini leaves its quota metric and quota id only in that text, so retain
     those named fields along with the SDK exception/status and our verdict.
     """
-    message = str(getattr(exc, "message", "") or exc)
+    chain = []
+    current = exc
+    while current is not None and current not in chain:
+        chain.append(current)
+        current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+    message = "\n".join(str(getattr(item, "message", "") or item) for item in chain)
     lowered = message.lower()
     transient, _ = is_transient(exc)
 
@@ -367,6 +372,38 @@ def failure_diagnostics(exc: Exception) -> dict:
         details[{"quotametric": "quota_metric",
                  "quotaid": "quota_id",
                  "quotavalue": "quota_value"}[field.lower()]] = value
+
+    # google-genai keeps the decoded ErrorInfo array on APIError.details. The
+    # LangChain adapter raises its own exception `from` that APIError, hence
+    # the chain walk above. Prefer these typed fields to parsing display text;
+    # not every 429 includes a QuotaFailure, so absence remains meaningful.
+    def visit(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                normalized = key.lower().replace("_", "")
+                mapped = {"quotametric": "quota_metric", "quotaid": "quota_id",
+                          "quotavalue": "quota_value",
+                          "quotadimensions": "quota_dimensions"}.get(normalized)
+                if mapped and mapped not in details:
+                    details[mapped] = item
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    for item in chain:
+        visit(getattr(item, "details", None))
+
+    quota_text = " ".join(str(details.get(key, "")) for key in
+                          ("quota_id", "quota_metric")).lower()
+    if "perday" in quota_text or "per_day" in quota_text:
+        details["quota_window"] = "rpd"
+    elif "token" in quota_text and ("perminute" in quota_text or
+                                     "per_minute" in quota_text):
+        details["quota_window"] = "tpm"
+    elif "request" in quota_text and ("perminute" in quota_text or
+                                       "per_minute" in quota_text):
+        details["quota_window"] = "rpm"
     return details
 
 
@@ -381,7 +418,7 @@ class LLMProvider(ABC):
     def __init__(self, name: str, url: str, model: str, api_key: str,
                  priority: int, temperature: float = 0.2,
                  max_input_tokens: Optional[int] = None,
-                 platform: str = "", account: str = ""):
+                 platform: str = "", account: str = "", limits: Optional[dict] = None):
         self.name = name
         self.url = url
         self.model = model
@@ -398,6 +435,7 @@ class LLMProvider(ABC):
         # Per-request token ceiling (min of the model's TPM and context window).
         # None means "unknown, never filter it out" -- see get_best_provider.
         self.max_input_tokens = max_input_tokens
+        self.limits = limits or {}
 
         self.is_available = True
         self.cooldown_until = 0.0

@@ -80,7 +80,30 @@ def _run():
         "quota_metric": "generativelanguage.googleapis.com/input_token_count",
         "quota_id": "InputTokensPerModelPerMinute-FreeTier",
         "quota_value": "250000",
+        "quota_window": "tpm",
     }
+
+    # The Google SDK preserves typed details, and LangChain preserves the SDK
+    # exception as the cause. Read that structure without relying on repr text.
+    sdk = _Exc("quota exceeded", code=429)
+    sdk.details = [{"violations": [{
+        "quotaMetric": "generativelanguage.googleapis.com/request_count",
+        "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+        "quotaDimensions": {"model": "gemini-2.5-flash", "location": "global"},
+        "quotaValue": "20",
+    }]}]
+    try:
+        raise RuntimeError("Error calling model") from sdk
+    except RuntimeError as wrapped:
+        structured = failure_diagnostics(wrapped)
+    assert structured["quota_window"] == "rpd"
+    assert structured["quota_dimensions"]["model"] == "gemini-2.5-flash"
+
+    # Some real Gemini 429s only carry RetryInfo. Do not manufacture a quota id.
+    no_quota = _Exc("429 RESOURCE_EXHAUSTED", code=429)
+    no_quota.details = [{"@type": "type.googleapis.com/google.rpc.RetryInfo",
+                         "retryDelay": "37s"}]
+    assert "quota_id" not in failure_diagnostics(no_quota)
 
     # Groq says it in prose only.
     groq = _Exc("rate_limit_exceeded: Limit 8000, Used 6180, Requested 6247. "

@@ -1,9 +1,11 @@
 import time
 import logging
+import math
 from typing import List, Optional
 
 from .base_provider import LLMProvider
 from .quota.budget import RpdBudget
+from .quota.windows import resets_in
 
 logger = logging.getLogger("LLMRouter")
 
@@ -105,7 +107,17 @@ class AutonomousLLMRouter:
                 if p.max_input_tokens is None
                 or p.max_input_tokens * _FIT_SAFETY >= estimated_tokens]
         if fits:
-            return self._cheapest(fits, attempted)
+            tpm_fits = getattr(self.quota, "tpm_fits", lambda _p, _n: True)
+            within_tpm = [p for p in fits if tpm_fits(p, estimated_tokens)]
+            if within_tpm:
+                return self._cheapest(within_tpm, attempted)
+            # Every otherwise-valid member is locally known to overflow its
+            # minute token bucket. Put them to sleep until that fixed window
+            # rolls so the caller waits instead of deliberately buying 429s.
+            for provider in fits:
+                provider.trigger_cooldown(math.ceil(
+                    resets_in("tpm", getattr(provider, "platform", ""), time.time())))
+            return None
         # Nothing fits, so the largest window is the only thing that might: it
         # is offered whatever the ledger says about its budget, because a member
         # too small for the request is not an alternative to one that is spent.

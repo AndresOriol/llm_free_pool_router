@@ -38,7 +38,7 @@ from typing import Optional, Set
 
 from .. import usage
 from .ledger import read_ledger, read_pool
-from .report import build_report
+from .windows import day_start, minute_start, tokens_metered
 
 logger = logging.getLogger("LLMRouter")
 
@@ -68,10 +68,31 @@ def exhausted_rpd(directory=None, now: Optional[float] = None) -> Set[str]:
     it is the layer that turns a failure into "available".
     """
     directory = Path(directory) if directory else usage.usage_dir()
-    report = build_report(read_ledger(directory), read_pool(directory), now)
-    return {row.provider for row in report.rows
-            for gauge in row.gauges
-            if gauge.name == "rpd" and gauge.limit and gauge.used >= gauge.limit}
+    now = time.time() if now is None else now
+    snapshot = read_pool(directory) or {}
+    calls = read_ledger(directory)
+    exhausted = set()
+    for member in snapshot.get("pool", []):
+        limit = (member.get("limits") or {}).get("rpd")
+        if not limit:
+            continue
+        provider = member.get("provider")
+        start = day_start(member.get("platform", ""), now)
+        current = [call for call in calls
+                   if call.get("provider") == provider
+                   and start <= call.get("ts", 0)
+                   and call.get("reached", True)]
+        # A generic 429 may be RPM, TPM, capacity, or another provider-side
+        # condition. It must not consume our inferred daily allowance. An
+        # explicit RPD QuotaFailure is authoritative and benches immediately.
+        if any(call.get("outcome") == "rate_limited"
+               and call.get("quota_window") == "rpd" for call in current):
+            exhausted.add(provider)
+            continue
+        spent = sum(call.get("outcome") != "rate_limited" for call in current)
+        if spent >= limit:
+            exhausted.add(provider)
+    return exhausted
 
 
 class RpdBudget:
@@ -113,3 +134,28 @@ class RpdBudget:
     def has_budget(self, provider) -> bool:
         """Is this member worth asking? True whenever we cannot say otherwise."""
         return getattr(provider, "name", None) not in self.exhausted()
+
+    def tpm_fits(self, provider, estimated_tokens: Optional[int]) -> bool:
+        """Whether accepted input plus this estimate fits the current minute.
+
+        This is deliberately a hard, local guard only when the member declares
+        a TPM ceiling. Failure to read the ledger means available, as with RPD.
+        """
+        limit = (getattr(provider, "limits", None) or {}).get("tpm")
+        if not limit or estimated_tokens is None:
+            return True
+        try:
+            now = time.time()
+            directory = Path(self.directory) if self.directory else usage.usage_dir()
+            start = minute_start(now)
+            meter = tokens_metered(getattr(provider, "platform", ""))
+            used = sum((call.get("tokens_in", 0) or 0)
+                       + ((call.get("tokens_out", 0) or 0) if meter == "both" else 0)
+                       for call in read_ledger(directory)
+                       if call.get("provider") == getattr(provider, "name", None)
+                       and call.get("outcome") == "ok"
+                       and start <= call.get("ts", 0) <= now)
+            return used + estimated_tokens <= limit * 0.9
+        except Exception as exc:  # noqa: BLE001 - advisory data must not stall
+            logger.debug(f"Could not read the usage ledger for TPM budget: {exc!r}")
+            return True
