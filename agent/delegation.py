@@ -149,14 +149,14 @@ def _web_reachable() -> bool:
     """Can the explorer actually search? Not fatal when it cannot -- the coding
     agent works fine without a researcher; it just must not be told it has one."""
     try:
-        from llm_router import TavilyPoolRouter
+        from llm_router.tavily_router import NoSearchPool
 
-        from agent.explore.tools import NoSearchPool, check_pool
+        from agent.explore.tools import search_pool
     except ImportError as exc:
         logger.warning(f"Not offering the `explore` agent: {exc}")
         return False
     try:
-        check_pool(TavilyPoolRouter.from_env())
+        search_pool()
     # NoSearchPool subclasses SystemExit -- a BaseException -- so `except
     # Exception` does not catch it, and letting it through would end the run
     # that was only asking whether an optional peer exists.
