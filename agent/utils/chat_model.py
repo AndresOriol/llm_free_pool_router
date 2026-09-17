@@ -9,7 +9,9 @@ account/model.
 """
 
 import logging
+import math
 import time
+import uuid
 from typing import Any, List, Optional, Sequence
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -19,9 +21,11 @@ from pydantic import ConfigDict
 
 from llm_router import usage
 from llm_router.base_provider import (estimate_tokens, is_decommissioned,
+                                      failure_diagnostics,
                                       is_rate_limited, is_transient,
                                       is_unauthorized,
                                       provider_error_detail, reached_provider)
+from llm_router.quota.windows import resets_in
 
 logger = logging.getLogger("LLMRouter")
 
@@ -115,7 +119,8 @@ class RouterChatModel(BaseChatModel):
         # Size the request once so routing can skip models it would overflow.
         estimated = estimate_tokens(messages, self.bound_tools)
         attempted: set[str] = set()
-        for _ in range(self.max_retries):
+        request_id = uuid.uuid4().hex
+        for attempt in range(1, self.max_retries + 1):
             provider = self.router.get_best_provider(estimated, self.min_context,
                                                      self.strict_context,
                                                      attempted=attempted)
@@ -134,6 +139,7 @@ class RouterChatModel(BaseChatModel):
                 # every path out of this block reports it: the served call
                 # below, and the refusal or error in _handle_failure.
                 issued = time.time()
+                began = time.monotonic()
                 # No explicit config: the provider call inherits the ambient run
                 # context, so each attempt is traced under the current agent step
                 # (showing which model served it, and any failed attempts before
@@ -142,10 +148,15 @@ class RouterChatModel(BaseChatModel):
                 message = self._underlying(provider).invoke(
                     messages, config=self.provider_config, stop=stop, **kwargs)
                 provider.consecutive_failures = 0
-                usage.record_call(provider, message, started=issued)
+                usage.record_call(provider, message, started=issued,
+                                  request_id=request_id, attempt=attempt,
+                                  estimated_tokens=estimated,
+                                  duration_ms=(time.monotonic() - began) * 1000)
                 return self._result(message)
             except Exception as exc:  # noqa: BLE001 - classified below
-                if not self._handle_failure(provider, exc, run_manager, issued):
+                if not self._handle_failure(provider, exc, run_manager, issued,
+                                            request_id, attempt, estimated,
+                                            (time.monotonic() - began) * 1000):
                     raise
                 last_exc = exc
 
@@ -166,7 +177,11 @@ class RouterChatModel(BaseChatModel):
                      account or provider.name, len(kin or [provider]))
 
     def _handle_failure(self, provider, exc: Exception, run_manager=None,
-                        started: Optional[float] = None) -> bool:
+                        started: Optional[float] = None,
+                        request_id: Optional[str] = None,
+                        attempt: Optional[int] = None,
+                        estimated_tokens: Optional[int] = None,
+                        duration_ms: Optional[float] = None) -> bool:
         """Cooldown + reroute on transient errors; return False to re-raise.
 
         A model retired upstream is dropped from the pool permanently rather
@@ -191,11 +206,15 @@ class RouterChatModel(BaseChatModel):
         # Recorded before the retirement check below, so attempts burned on a
         # model that has gone away still show up as spend rather than as free.
         rate_limited = is_rate_limited(exc)
+        diagnostics = failure_diagnostics(exc)
         usage.record(provider,
                      outcome="rate_limited" if rate_limited else "error",
                      retry_after=retry_after if rate_limited else None,
                      reached=reached_provider(exc),
-                     started=started)
+                     started=started, request_id=request_id, attempt=attempt,
+                     estimated_tokens=estimated_tokens,
+                     duration_ms=duration_ms,
+                     diagnostics=diagnostics)
 
         # Checked before the `not transient` branch below, which would call this
         # a fatal 4xx and kill the run. The model is gone, so the pool stops
@@ -224,6 +243,15 @@ class RouterChatModel(BaseChatModel):
         if detail and run_manager is not None:
             run_manager.on_text(f"\n[router] {provider.name} failed ({provider.model}): "
                                 f"{detail}\n")
+        window = diagnostics.get("quota_window")
+        if window in {"rpm", "tpm", "rpd"}:
+            reset_wait = math.ceil(
+                resets_in(window, getattr(provider, "platform", ""), time.time()))
+            # A daily refusal is definitive until the vendor day turns even if
+            # an accompanying generic RetryInfo suggests trying sooner. For a
+            # minute bucket, RetryInfo is the provider's more precise answer.
+            retry_after = (max(retry_after or 0, reset_wait) if window == "rpd"
+                           else retry_after or reset_wait)
         provider.trigger_cooldown(retry_after)
         return True
 

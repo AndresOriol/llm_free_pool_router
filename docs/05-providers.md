@@ -180,8 +180,8 @@ on the account**, so these do not add up to three independent pools. See
 | `gemini-3.1-flash-lite` | 15 | 250K | 500 |
 | `gemini-3-flash-preview` | 5 | 250K | 20 |
 | `gemini-2.5-flash-lite` | 10 | 250K | 20 |
-| `gemma-4-31b-it` | 15 | unlimited | 1.5K |
-| `gemma-4-26b-a4b-it` | 15 | unlimited | 1.5K |
+| `gemma-4-31b-it` | 30 | 16K | 14.4K |
+| `gemma-4-26b-a4b-it` | 30 | 16K | 14.4K |
 
 Note the shape difference that drives the whole design: Groq gives you many
 requests with tiny token budgets; Gemini gives you huge token budgets with very

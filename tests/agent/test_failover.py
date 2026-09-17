@@ -139,6 +139,26 @@ def test_a_rate_limited_member_still_gets_a_cooldown():
     check("and it has a time to come back at", busy.cooldown_until > 0)
 
 
+def test_an_explicit_rpd_refusal_cools_until_vendor_midnight(monkeypatch):
+    """A generic short RetryInfo must not resurrect a daily-spent member."""
+    import math
+    import time
+    from llm_router import usage
+    from llm_router.quota.windows import resets_in
+
+    now = time.time()
+    monkeypatch.setattr(usage, "record", lambda *a, **kw: None)
+    daily = _Exc("429 RESOURCE_EXHAUSTED {'quotaId': "
+                 "'GenerateRequestsPerDayPerProjectPerModel-FreeTier'}")
+    busy = _Provider("busy_gemini", priority=1, chat=_Chat(raises=daily))
+    busy.platform = "gemini"
+    alive = _Provider("live_gemini", priority=2, chat=_Chat(answer="served"))
+
+    assert _model(busy, alive).invoke("hello").content == "served"
+    expected = math.ceil(resets_in("rpd", "gemini", now))
+    assert abs((busy.cooldown_until - now) - expected) < 2
+
+
 def test_a_real_bug_still_surfaces():
     """A pool that swallows everything hides the caller's own mistakes."""
     broken = _Provider("groq", priority=1, chat=_Chat(raises=ValueError("bug")))

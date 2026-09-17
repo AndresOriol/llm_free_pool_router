@@ -11,6 +11,7 @@ No framework: `python -m tests.llm_router.test_rpd_filter` (or run the file).
 import json
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -51,10 +52,12 @@ POOL = {
 }
 
 
-def call(provider, ts=NOW - 10, outcome="ok"):
+def call(provider, ts=NOW - 10, outcome="ok", quota_window=None):
     entry = {"ts": ts, "provider": provider, "outcome": outcome}
     if outcome != "rate_limited":
         entry["tokens_in"], entry["tokens_out"] = 1000, 200
+    if quota_window:
+        entry["quota_window"] = quota_window
     return entry
 
 
@@ -71,14 +74,22 @@ def usage_dir(calls, pool=POOL):
 class _FakeProvider:
     """Minimal stand-in exposing what get_best_provider() reads."""
 
-    def __init__(self, name, priority, max_input_tokens, available=True):
+    def __init__(self, name, priority, max_input_tokens, available=True,
+                 limits=None, platform="gemini"):
         self.name = name
         self.priority = priority
         self.max_input_tokens = max_input_tokens
         self._available = available
+        self.limits = limits or {}
+        self.platform = platform
+        self.cooldowns = []
 
     def check_availability(self):
         return self._available
+
+    def trigger_cooldown(self, seconds=None):
+        self.cooldowns.append(seconds)
+        self._available = False
 
 
 def _check_exhaustion():
@@ -96,12 +107,15 @@ def _check_exhaustion():
                      + [call("GptOss_groq_1") for _ in range(50)])
     assert exhausted_rpd(both, NOW) == {"Flash_gemini_1"}
 
-    # A refusal spent a request even though it spent no tokens, so it counts
-    # toward the daily ceiling like any other attempt (14.6).
+    # An unclassified refusal might be RPM/TPM/capacity and must not poison the
+    # daily estimate. An explicit RPD refusal is authoritative immediately.
     refused = usage_dir([call("Flash_gemini_1") for _ in range(18)]
                         + [call("Flash_gemini_1", outcome="rate_limited"),
                            call("Flash_gemini_1", outcome="rate_limited")])
-    assert exhausted_rpd(refused, NOW) == {"Flash_gemini_1"}
+    assert exhausted_rpd(refused, NOW) == set()
+    explicit = usage_dir([call("Flash_gemini_1", outcome="rate_limited",
+                               quota_window="rpd")])
+    assert exhausted_rpd(explicit, NOW) == {"Flash_gemini_1"}
 
     # An attempt that never reached the provider spent nothing at all.
     unanswered = [dict(call("Flash_gemini_1"), reached=False) for _ in range(20)]
@@ -146,7 +160,8 @@ def _check_exhaustion():
 
 def _check_budget():
     """The object the router holds: caching, the off switch, and failure."""
-    directory = usage_dir([call("Flash_gemini_1") for _ in range(20)])
+    current = time.time() - 10
+    directory = usage_dir([call("Flash_gemini_1", ts=current) for _ in range(20)])
     spent = _FakeProvider("Flash_gemini_1", priority=2, max_input_tokens=250000)
     fresh = _FakeProvider("Flash_gemini_2", priority=2, max_input_tokens=250000)
 
@@ -158,7 +173,7 @@ def _check_budget():
     # has not. Overspending here is deliberate -- it lands on the retry path.
     with (directory / "ledger.jsonl").open("a", encoding="utf-8") as fh:
         for _ in range(20):
-            fh.write(json.dumps(call("Flash_gemini_2")) + "\n")
+            fh.write(json.dumps(call("Flash_gemini_2", ts=current)) + "\n")
     assert quota.has_budget(fresh), "a cached reading should not be re-read"
 
     # A budget that never caches sees the same file differently.
@@ -169,17 +184,17 @@ def _check_budget():
 
     # If the ledger cannot be read at all, every member is available.
     broken = RpdBudget(directory=directory, ttl=0)
-    original = budget.build_report
+    original = budget.read_ledger
 
     def _raise(*args, **kwargs):
         raise ValueError("torn ledger")
 
-    budget.build_report = _raise
+    budget.read_ledger = _raise
     try:
         assert broken.has_budget(spent)
         assert broken.exhausted() == set()
     finally:
-        budget.build_report = original
+        budget.read_ledger = original
 
     # A provider object with no name at all is not something to skip.
     assert quota.has_budget(object())
@@ -247,10 +262,31 @@ def _check_routing():
     print("  routing: ok")
 
 
+def _check_tpm():
+    """Accepted tokens, not refusals, prevent a predictable TPM overflow."""
+    current = time.time() - 2
+    directory = usage_dir([
+        {**call("full", ts=current), "tokens_in": 8_000},
+        call("full", ts=current, outcome="rate_limited"),
+    ])
+    full = _FakeProvider("full", 1, 100_000, limits={"tpm": 10_000})
+    fresh = _FakeProvider("fresh", 2, 100_000, limits={"tpm": 10_000})
+    router = AutonomousLLMRouter([full, fresh],
+                                 quota=RpdBudget(directory=directory, ttl=0))
+    assert router.get_best_provider(2_000) is fresh
+
+    with (directory / "ledger.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({**call("fresh", ts=current), "tokens_in": 8_000}) + "\n")
+    assert router.get_best_provider(2_000) is None
+    assert full.cooldowns and fresh.cooldowns
+    print("  tpm: ok")
+
+
 def _check_integration():
     """A real budget over a real usage directory, behind a real router."""
-    directory = usage_dir([call("Flash_gemini_1") for _ in range(20)]
-                          + [call("Flash_gemini_2") for _ in range(2)])
+    current = time.time() - 10
+    directory = usage_dir([call("Flash_gemini_1", ts=current) for _ in range(20)]
+                          + [call("Flash_gemini_2", ts=current) for _ in range(2)])
     first = _FakeProvider("Flash_gemini_1", priority=2, max_input_tokens=250000)
     second = _FakeProvider("Flash_gemini_2", priority=2, max_input_tokens=250000)
     groq = _FakeProvider("GptOss_groq_1", priority=4, max_input_tokens=8000)
@@ -264,7 +300,7 @@ def _check_integration():
     # still has a thousand requests a day.
     with (directory / "ledger.jsonl").open("a", encoding="utf-8") as fh:
         for _ in range(20):
-            fh.write(json.dumps(call("Flash_gemini_2")) + "\n")
+            fh.write(json.dumps(call("Flash_gemini_2", ts=current)) + "\n")
     assert router.get_best_provider() is groq
 
     # A request too large for what is left routes to the largest window there
@@ -278,6 +314,7 @@ def _run():
     _check_exhaustion()
     _check_budget()
     _check_routing()
+    _check_tpm()
     _check_integration()
     print("rpd_filter: all checks passed")
 

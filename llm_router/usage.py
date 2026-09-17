@@ -21,7 +21,9 @@ A ledger line:
     {"ts": 1756..., "at": "2026-08-26T09:46:52+02:00",
      "provider": "GptOss120b_groq_1", "account": "groq_1",
      "platform": "groq", "model": "openai/gpt-oss-120b",
-     "tokens_in": 812, "tokens_out": 96, "outcome": "ok"}
+     "tokens_in": 812, "tokens_out": 96, "outcome": "ok",
+     "request_id": "...", "attempt": 1, "estimated_tokens": 790,
+     "duration_ms": 438.2}
 
 `ts` is **when the request was issued**, which is the instant the vendor meters
 it against; `at` is the same instant in local time, for reading the file by eye.
@@ -48,6 +50,14 @@ half is still smeared. Days are unaffected either way, which is the only window
 were spent -- and a refusal carries `retry_after` instead when the provider
 sent one. `reached: false` marks an attempt that never got an answer at all,
 which spent nothing and is left out of the panel's request counts.
+
+Every routed call also carries a random `request_id`, its one-based `attempt`
+within that failover chain, the pre-call `estimated_tokens`, and `duration_ms`
+measured on a monotonic clock. Failed rows add
+only structured, non-sensitive diagnostics: exception/error kind, numeric or
+provider status, and any named quota metric, id and value. Raw exception text is
+not persisted because tool failures may contain generated output and provider
+messages may echo request material.
 
 **A provider the router skipped is not here.** Selection filters a member out
 before any call is made -- for size, or because this ledger says its day is
@@ -117,7 +127,10 @@ def _message_tokens(message: Any) -> Tuple[Optional[int], Optional[int]]:
 def record(provider: Any, tokens_in: Optional[int] = None,
            tokens_out: Optional[int] = None, outcome: str = "ok",
            retry_after: Optional[int] = None, reached: bool = True,
-           started: Optional[float] = None) -> None:
+           started: Optional[float] = None, request_id: Optional[str] = None,
+           attempt: Optional[int] = None, estimated_tokens: Optional[int] = None,
+           duration_ms: Optional[float] = None,
+           diagnostics: Optional[dict] = None) -> None:
     """Append one attempt against `provider` to the ledger.
 
     `started` is when the request was *issued*, and becomes the line's `ts`.
@@ -158,18 +171,28 @@ def record(provider: Any, tokens_in: Optional[int] = None,
         entry["retry_after"] = int(retry_after)
     if not reached:
         entry["reached"] = False
+    if request_id:
+        entry["request_id"] = request_id
+    if attempt is not None:
+        entry["attempt"] = int(attempt)
+    if estimated_tokens is not None:
+        entry["estimated_tokens"] = int(estimated_tokens)
+    if duration_ms is not None:
+        entry["duration_ms"] = round(float(duration_ms), 1)
+    if diagnostics:
+        entry.update(diagnostics)
     _append(entry)
 
 
 def record_call(provider: Any, message: Any, outcome: str = "ok",
-                started: Optional[float] = None) -> None:
+                started: Optional[float] = None, **context: Any) -> None:
     """Record a served call, reading the token counts off the reply.
 
     `started` is the moment the request went out; see `record`. A served call is
     the one that most needs it, because it is the one that took time.
     """
     tokens_in, tokens_out = _message_tokens(message)
-    record(provider, tokens_in, tokens_out, outcome, started=started)
+    record(provider, tokens_in, tokens_out, outcome, started=started, **context)
 
 
 def _append(entry: dict) -> None:
