@@ -169,11 +169,6 @@ not read did not pass.
   is actually wrong.
 - If you notice yourself going in circles, stop.
 
-## After Editing
-
-A file may be reformatted on disk after you write it. Re-read a file before
-making a second edit to it — don't assume it still matches what you wrote.
-
 ## Dependencies
 
 Use the project's own package manager. Don't hand-edit `requirements.txt`,
