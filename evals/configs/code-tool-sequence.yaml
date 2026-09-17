@@ -29,10 +29,10 @@
 # Interleaved against `code`, never alone.
 name: code-tool-sequence
 repo: ../..
-# Pinned to the commit that holds changes 1, 4 and 5: the branch goes on to
-# take changes 2 and 3, and a batch launched after that must not measure them
-# under this name.
-ref: bcc854c  # harness/tool-sequence
+# Pinned to the commit that was measured: changes 1, 4 and 5, before the
+# branch took changes 2 and 3 and was rebased into master. The tag keeps that
+# commit reachable, since the rebase rewrote it (it was bcc854c).
+ref: eval/tool-sequence-1-4-5
 env_file: ../../llm_router/.env
 overrides:
   router_config: llm_router/config.yaml
