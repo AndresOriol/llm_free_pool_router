@@ -262,6 +262,41 @@ def test_skills_cost_no_tool():
                      "grep", "execute", "write_todos", "task"}
 
 
+def test_the_todo_list_is_described_as_requirements_not_phases(tmp_path: Path):
+    """Upstream's `write_todos` says when a list is worth keeping, never what an
+    item is. The traced runs filled it with the prompt's own phases and ticked
+    them in one update at the end -- one of them "update documentation", after
+    a read, leaving the doc its hidden test checks unedited.
+
+    Asserted through `task` too: a caller's middleware is not installed on the
+    sub-agent deepagents builds, so without its own copy the sub-agent would
+    read upstream's text."""
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    ours = code.descriptions()["write_todos"]
+    assert "One requirement of the task" in ours
+
+    described = []
+
+    class _Capture(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            described.extend(t.description for t in tools
+                             if getattr(t, "name", "") == "write_todos")
+            return self
+
+    delegate = AIMessage(content="", tool_calls=[{
+        "name": "task", "id": "call_1",
+        "args": {"description": "look around", "subagent_type": "general-purpose"}}])
+    model = _Capture(messages=iter([delegate, AIMessage(content="looked"),
+                                    AIMessage(content="done")]))
+    code.build_agent(tmp_path, model).invoke(
+        {"messages": [HumanMessage("hi")]}, {"recursion_limit": 20})
+
+    assert len(described) >= 3, "the main agent and the sub-agent both bind tools"
+    assert all(text == ours for text in described)
+
+
 # --- The project's own memory file ---------------------------------------------
 
 

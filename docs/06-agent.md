@@ -314,7 +314,7 @@ reads top to bottom; everything the model reads is Markdown.
 | | where it comes from |
 | --- | --- |
 | system prompt | [prompts/system.md](../agent/code/prompts/system.md), its `{placeholders}` filled once, at the start: the sections every agent shares ([agent/utils/prompts/](../agent/utils/prompts/) — headless, the pool's identity, the jail's `/`, what `execute` runs), `contradicted_requests.md` and `project_notes.md` unless switched off, the project section, and the agents it may run ([16](16-delegation.md)) |
-| framework sections and tool schemas | deepagents' own, unedited: the file tools, `execute`, `write_todos`, `task` |
+| framework sections and tool schemas | deepagents' own: the file tools, `execute`, `task`; `write_todos` is described by [tool_descriptions/write_todos.md](../agent/code/tool_descriptions/write_todos.md), on the main agent and the `general-purpose` sub-agent alike |
 | skills | one line each — name and description — from [skills/](../agent/code/skills/); the body is read on demand ([6.6](#66-skills)) |
 | conversation | the task, then every tool call and its result; the SDK summarizes it when it grows too long |
 | wrap-up | [prompts/wrap_up.md](../agent/code/prompts/wrap_up.md), sent as a message only when the step budget runs out |
@@ -323,9 +323,18 @@ reads top to bottom; everything the model reads is Markdown.
 `AGENT_INVARIANT_GUARD=0` and `AGENT_WRITE_ACCOUNT=0` each leave their section
 out; both are on by default, so each is a configuration an A/B can measure.
 
-Unlike the explorer's, nothing the framework injects is taken away or
-re-described ([15.5.1](15-explorer.md#1551-the-surface-is-chosen-not-inherited)):
-a coding agent does explore a repository, and does run programs.
+Unlike the explorer's, no framework tool is taken away
+([15.5.1](15-explorer.md#1551-the-surface-is-chosen-not-inherited)): a coding
+agent does explore a repository, and does run programs. One is re-described.
+Upstream's `write_todos` says when a list is worth keeping and never what an
+item is, and the traced runs filled it with the prompt's own phases — "read and
+understand", "implement the requested changes", "run tests" — then ticked them
+in one update at the end. In one run "update documentation" was ticked after a
+read, and the doc its hidden test checks was never edited. The agent's own
+description says an item is a requirement naming the file it changes, and that
+it is closed only by evidence in the conversation. A harness profile cannot
+reach that tool, so it goes through `FrameworkSurface`
+([surface.py](../agent/utils/surface.py)).
 
 ## 6.6 Skills
 

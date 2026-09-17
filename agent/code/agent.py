@@ -26,8 +26,9 @@ Every call carries:
 - the system prompt: `prompts/system.md`, with the project (branch, status,
   tree) and the agents it may run filled in once, when the run starts;
 - the framework's own prompt sections and tool schemas -- the file tools,
-  `execute`, `write_todos` and `task` -- as deepagents writes them. Nothing is
-  taken away or re-described;
+  `execute`, `write_todos` and `task` -- as deepagents writes them, except
+  `write_todos`, which is described by `tool_descriptions/write_todos.md`
+  because upstream's text says nothing about what a todo is in this job;
 - one line per skill: its name and a sentence saying when it applies. The body
   is a file the model reads with `read_file` if the moment comes, so a long
   procedure costs a line per step instead of its full length;
@@ -99,6 +100,7 @@ from agent import delegation
 from agent.utils import run_tree
 from agent.utils.pool import CONTEXT_FLOOR, connect  # noqa: F401 - section 3
 from agent.utils.prompts import fill, shared_values
+from agent.utils.surface import FrameworkSurface
 from agent.utils.trace import traced
 
 logger = logging.getLogger("harness.code")
@@ -202,6 +204,18 @@ def template_values(floor: int = CONTEXT_FLOOR, members: int = 0,
         "project_section": project,
         "delegation_section": peers,
     }
+
+
+def descriptions() -> dict:
+    """`{tool name: description}`, one per file in `tool_descriptions/`.
+
+    Only `write_todos` has one: it is the framework tool whose use the traced
+    runs got wrong, listing the prompt's phases instead of the task's
+    requirements and ticking them in a batch at the end
+    ([6.5.3](../../docs/06-agent.md#653-what-each-call-carries)).
+    """
+    return {path.stem: fill(path, {})
+            for path in sorted((HERE / "tool_descriptions").glob("*.md"))}
 
 
 def system_prompt(values: dict) -> str:
@@ -375,7 +389,11 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
                              project=project_section(workdir),
                              peers=delegation.prompt_section(peers or []))
 
-    middleware = list(extra_middleware or [])
+    # `write_todos` described by this agent's own file. A harness profile cannot
+    # reach that tool (agent/utils/surface.py), so it is middleware -- and a
+    # caller's middleware is not installed on the sub-agent deepagents builds,
+    # so `task` gets its own copy below.
+    middleware = [*(extra_middleware or []), FrameworkSurface(descriptions())]
 
     # Where the file tools and `execute` work. `virtual_mode=True` roots the
     # file tools at the workspace, which is what `prompts/working_dir.md`
@@ -430,8 +448,10 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
         backend=backend,
         middleware=middleware,
         # dcode ships this one so that `task` exists at all: with no subagent
-        # the SDK does not install SubAgentMiddleware.
-        subagents=[GENERAL_PURPOSE_SUBAGENT],
+        # the SDK does not install SubAgentMiddleware. Declared with the
+        # surface, or the sub-agent reads upstream's `write_todos`.
+        subagents=[{**GENERAL_PURPOSE_SUBAGENT,
+                    "middleware": [FrameworkSurface(descriptions())]}],
     )
     # The rendered skills must outlive this function and die with the agent.
     built._skills = skills
