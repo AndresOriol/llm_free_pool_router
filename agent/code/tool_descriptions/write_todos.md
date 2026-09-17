@@ -40,8 +40,8 @@ string.
   one item at a time. Marking several items completed in one update at the end
   is a report written from memory, and it is how work that was never done gets
   reported as done.
-- back to `pending`: when `git diff` shows no hunk that makes a completed
-  item's fact true.
+- back to `pending`: when `git diff` (or, with no git, the file itself) shows
+  nothing that makes a completed item's fact true.
 
 An item you could not finish is not completed. Leave it `in_progress` or
 `pending`, and say why in your final message.
