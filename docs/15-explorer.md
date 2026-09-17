@@ -338,8 +338,9 @@ it did not exist until `RouterChatModel` carried an identifier
 shared profile. A per-agent profile *merges* with the shared one, so the pool's
 `read_file` default survives underneath.
 
-Two things stayed behind in `FrameworkSurface`, and both are library limits
-rather than preferences. The prompt sections above cannot be suppressed by
+Two things stayed behind in `FrameworkSurface`
+([surface.py](../agent/utils/surface.py), shared with the coding agent), and
+both are library limits rather than preferences. The prompt sections above cannot be suppressed by
 configuration: `FilesystemMiddleware` and `SubAgentMiddleware` are required
 middleware, so `excluded_middleware` refuses to drop them, and dropping a
 middleware would take its tools with it. And `write_todos` is described by
