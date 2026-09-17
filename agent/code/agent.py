@@ -28,7 +28,9 @@ Every call carries:
 - the framework's own prompt sections and tool schemas -- the file tools,
   `execute`, `write_todos` and `task` -- as deepagents writes them, except
   `write_todos`, which is described by `tool_descriptions/write_todos.md`
-  because upstream's text says nothing about what a todo is in this job;
+  because upstream's text says nothing about what a todo is in this job. Two
+  framework sections are cut (`PRUNED_SECTIONS`): the base agent prompt and the
+  todo list's, which contradict `prompts/system.md`;
 - one line per skill: its name and a sentence saying when it applies. The body
   is a file the model reads with `read_file` if the moment comes, so a long
   procedure costs a line per step instead of its full length;
@@ -92,6 +94,8 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Sequence
 
+from deepagents.graph import BASE_AGENT_PROMPT
+from langchain.agents.middleware.todo import WRITE_TODOS_SYSTEM_PROMPT
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tracers.context import collect_runs
 from langgraph.errors import GraphRecursionError
@@ -148,6 +152,17 @@ MEMORY_FILES = ("CLAUDE.md", "AGENTS.md")
 INVARIANT_GUARD_ENV = "AGENT_INVARIANT_GUARD"  # prompts/contradicted_requests.md
 WRITE_ACCOUNT_ENV = "AGENT_WRITE_ACCOUNT"      # prompts/project_notes.md
 _OFF = {"0", "", "off", "false", "no"}
+
+# Framework prose cut from every call, because it contradicts `prompts/system.md`
+# rather than adding to it. deepagents appends `BASE_AGENT_PROMPT` after our
+# prompt: a second "Doing Tasks" and "Core Behavior", "the user can see your
+# responses in real time", "ask for guidance" when blocked, and progress updates
+# addressed to nobody -- none of it true of a headless run. The todo section
+# says to use the list for "3+ steps" and allows several items in progress,
+# which is what `tool_descriptions/write_todos.md` replaces. The file-tool,
+# `execute` and `task` sections stay: this agent has those tools. Imported, not
+# quoted, so an upstream rewording fails a test instead of leaving the text in.
+PRUNED_SECTIONS = (BASE_AGENT_PROMPT, WRITE_TODOS_SYSTEM_PROMPT)
 
 
 # --- 2. Text --------------------------------------------------------------------
@@ -389,11 +404,12 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
                              project=project_section(workdir),
                              peers=delegation.prompt_section(peers or []))
 
-    # `write_todos` described by this agent's own file. A harness profile cannot
-    # reach that tool (agent/utils/surface.py), so it is middleware -- and a
-    # caller's middleware is not installed on the sub-agent deepagents builds,
-    # so `task` gets its own copy below.
-    middleware = [*(extra_middleware or []), FrameworkSurface(descriptions())]
+    # `write_todos` described by this agent's own file, and `PRUNED_SECTIONS`
+    # cut. A harness profile reaches neither (agent/utils/surface.py), so it is
+    # middleware -- and a caller's middleware is not installed on the sub-agent
+    # deepagents builds, so `task` gets its own copy below.
+    middleware = [*(extra_middleware or []),
+                  FrameworkSurface(descriptions(), PRUNED_SECTIONS)]
 
     # Where the file tools and `execute` work. `virtual_mode=True` roots the
     # file tools at the workspace, which is what `prompts/working_dir.md`
@@ -451,7 +467,8 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
         # the SDK does not install SubAgentMiddleware. Declared with the
         # surface, or the sub-agent reads upstream's `write_todos`.
         subagents=[{**GENERAL_PURPOSE_SUBAGENT,
-                    "middleware": [FrameworkSurface(descriptions())]}],
+                    "middleware": [FrameworkSurface(descriptions(),
+                                                    PRUNED_SECTIONS)]}],
     )
     # The rendered skills must outlive this function and die with the agent.
     built._skills = skills

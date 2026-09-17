@@ -314,7 +314,7 @@ reads top to bottom; everything the model reads is Markdown.
 | | where it comes from |
 | --- | --- |
 | system prompt | [prompts/system.md](../agent/code/prompts/system.md), its `{placeholders}` filled once, at the start: the sections every agent shares ([agent/utils/prompts/](../agent/utils/prompts/) — headless, the pool's identity, the jail's `/`, what `execute` runs), `contradicted_requests.md` and `project_notes.md` unless switched off, the project section, and the agents it may run ([16](16-delegation.md)) |
-| framework sections and tool schemas | deepagents' own: the file tools, `execute`, `task`; `write_todos` is described by [tool_descriptions/write_todos.md](../agent/code/tool_descriptions/write_todos.md), on the main agent and the `general-purpose` sub-agent alike |
+| framework sections and tool schemas | deepagents' own, less its base prompt and todo section: the file tools, `execute`, `task`; `write_todos` is described by [tool_descriptions/write_todos.md](../agent/code/tool_descriptions/write_todos.md), on the main agent and the `general-purpose` sub-agent alike |
 | skills | one line each — name and description — from [skills/](../agent/code/skills/); the body is read on demand ([6.6](#66-skills)) |
 | conversation | the task, then every tool call and its result; the SDK summarizes it when it grows too long |
 | wrap-up | [prompts/wrap_up.md](../agent/code/prompts/wrap_up.md), sent as a message only when the step budget runs out |
@@ -335,6 +335,16 @@ description says an item is a requirement naming the file it changes, and that
 it is closed only by evidence in the conversation. A harness profile cannot
 reach that tool, so it goes through `FrameworkSurface`
 ([surface.py](../agent/utils/surface.py)).
+
+The same middleware cuts two framework sections (`PRUNED_SECTIONS` in
+[agent.py](../agent/code/agent.py)). deepagents appends `BASE_AGENT_PROMPT`
+after the agent's own prompt, so the model was reading two "Doing Tasks"
+sections that disagreed, "the user can see your responses in real time", and
+"ask for guidance" when blocked, none of which is true of a headless run. The
+todo list's section went with the tool description it contradicted. The rule
+is narrower than the explorer's: prose that contradicts this agent's prompt is
+cut, and the sections describing tools it does have — files, `execute`, `task`
+— stay.
 
 ## 6.6 Skills
 

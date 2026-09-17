@@ -9,7 +9,8 @@ That only works if every status on it is true.
 Once, after you have read the files the task concerns and before your first
 edit, when the task asks for more than one thing. A task with one requirement
 needs no list. Change the list when you find a requirement you missed; do not
-rewrite it instead of starting.
+rewrite it instead of starting. Never call it twice in the same response: the
+second call replaces the first.
 
 ## What an item is
 

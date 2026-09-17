@@ -297,6 +297,24 @@ def test_the_todo_list_is_described_as_requirements_not_phases(tmp_path: Path):
     assert all(text == ours for text in described)
 
 
+def test_framework_prose_that_contradicts_the_prompt_is_cut(tmp_path: Path):
+    """deepagents appends its base prompt after ours: a second "Doing Tasks",
+    "the user can see your responses in real time", "ask for guidance". And the
+    todo section says "3+ steps" where our description says what an item is.
+    What the agent's own tools need -- the file-tool, `execute` and `task`
+    sections, and the project's memory -- stays."""
+    (tmp_path / "CLAUDE.md").write_text("Run `pytest -q`.\n", encoding="utf-8")
+    text = _system_prompt_of_a_run(tmp_path)
+
+    for section in code.PRUNED_SECTIONS:
+        assert section not in text, "a framework section survived the pruning"
+    assert text.count("## Doing Tasks") == 1
+    assert "ask for guidance" not in text
+    assert "## Execute Tool" in text
+    assert "Available subagent types" in text
+    assert "Run `pytest -q`." in text
+
+
 # --- The project's own memory file ---------------------------------------------
 
 
