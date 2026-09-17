@@ -142,6 +142,16 @@ def test_the_prompt_does_not_claim_the_shell_is_confined(tmp_path):
     assert "Stay inside the project" in text
 
 
+def test_the_prompt_names_the_shell_execute_runs(monkeypatch):
+    """Left unnamed, the model assumes POSIX on a Windows host and wraps its
+    commands in `python -c` subprocess calls to get around the guess."""
+    monkeypatch.setattr("agent.utils.prompts.os.name", "nt")
+    monkeypatch.setenv("COMSPEC", r"C:\Windows\system32\cmd.exe")
+    assert "hands each command to `cmd.exe` (Windows)" in _prompt()
+
+    monkeypatch.setattr("agent.utils.prompts.os.name", "posix")
+    assert "hands each command to `/bin/sh`" in _prompt()
+
 def test_tree_skips_caches_and_dotfiles(tmp_path: Path):
     (tmp_path / "pkg").mkdir()
     (tmp_path / "pkg" / "mod.py").write_text("x = 1")

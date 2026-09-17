@@ -98,6 +98,12 @@ the two separately instead of claiming `/` is all the agent can reach. A prompt
 that overstates the boundary is worse than one that states none: the model plans
 around a rule the harness will not enforce.
 
+It also names the shell `execute` hands a command to (`shell()` in
+[prompts.py](../agent/utils/prompts.py)): `cmd.exe` on Windows, `/bin/sh`
+elsewhere. Left to guess, the model assumed POSIX on a Windows host, and 30% of
+the `execute` calls in the traced eval runs were Python subprocess wrappers
+working around that guess.
+
 So staying inside the project is a **convention the agent is asked to keep**,
 not a boundary it is held to. The prompt asks; nothing checks.
 
