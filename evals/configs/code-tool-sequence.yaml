@@ -1,0 +1,36 @@
+# `code` with its tool use given an order, from the traced runs' own numbers
+# (2026-09-05 -> 09-08, 36 runs, 885 tool calls).
+#
+# Three prompt changes ship together, each a separate commit on the branch:
+#
+#   1. "Doing Tasks" is four moves with tool moments: orient in one parallel
+#      turn, `write_todos` once with one item per requirement (never a phase,
+#      never "if needed"), close an item only after the edit that shows it, and
+#      verify with `git diff` + tests in one turn, reopening any item with no
+#      hunk. "After working on a file, stop" is gone.
+#   2. "After Editing: re-read a file before a second edit" is gone.
+#   3. `working_dir.md` names the shell `execute` runs.
+#
+# What a run is asking, against these baselines from the traces:
+#
+#   1. Does `solved` hold or rise? model-v3-propagation failed once by ticking
+#      "update documentation" after a read, leaving the doc its hidden test
+#      checks unedited -- item 1 is aimed at exactly that.
+#   2. `tool_calls` and `provider_calls` per run should fall: 7.0 turns before
+#      the first write, 1.24 calls per turn, 17% of reads on an unchanged file.
+#   3. ui-port-to-typescript: the share of `execute` calls that are Python
+#      subprocess wrappers (30% across the traces) should drop.
+#   4. `tokens_in`: a verify turn that reads `git diff` costs context; it must
+#      not buy the rest back with tokens.
+#
+# Both scenarios are train. A win here is a hypothesis until holdout agrees
+# (evals/splits.yaml).
+#
+# Interleaved against `code`, never alone.
+name: code-tool-sequence
+repo: ../..
+ref: harness/tool-sequence
+env_file: ../../llm_router/.env
+overrides:
+  router_config: llm_router/config.yaml
+  env: {}
