@@ -89,9 +89,14 @@ The estimate itself (`estimate_tokens`) is deliberately a chars/3 heuristic
 with no tokenizer and no dependency. It only has to be good enough to keep a
 request off a model it clearly overflows. It counts each message's content, the
 arguments of its tool calls (a tool-calling reply keeps them in `tool_calls`,
-not `content`, and they are resent on every later step), and the tool schemas.
-An agent's context is mostly code and JSON, which Gemini counted at ~2.9 chars
-per token; chars/4 without the tool calls read a 116k-token request as 67k.
+not `content`, and they are resent on every later step), its
+`additional_kwargs`, and the tool schemas. An agent's context is mostly code and
+JSON, which Gemini counted at ~2.9 chars per token; chars/4 without the tool
+calls read a 116k-token request as 67k. `additional_kwargs` is where Gemini keeps
+each call's thought signature, which is resent and billed as input; without it
+the estimate still fell to 1.33x under by the end of a 232-message run. On
+Gemini it also repeats the tool call, so the estimate ends a few percent high,
+which is the safe side for a ceiling.
 
 ### 4.2.1 Skipping a member whose day is spent
 

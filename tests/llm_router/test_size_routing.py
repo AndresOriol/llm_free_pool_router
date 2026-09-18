@@ -42,6 +42,10 @@ def _run():
     call = {"name": "read_file", "args": {"path": "p" * 300}, "id": "1"}
     assert estimate_tokens([AIMessage(content="", tool_calls=[call])]) > 100
     assert estimate_tokens([{"content": "", "tool_calls": [call]}]) > 100
+    # Gemini keeps each call's thought signature in additional_kwargs; it is
+    # resent and billed as input.
+    signed = AIMessage(content="", additional_kwargs={"sig": "s" * 300})
+    assert estimate_tokens([signed]) > 100
 
     small = _FakeProvider("groq_small", priority=1, max_input_tokens=6000)
     mid = _FakeProvider("groq_mid", priority=5, max_input_tokens=30000)

@@ -67,7 +67,8 @@ def _retry_after(exc: Exception) -> Optional[int]:
 
 def estimate_tokens(messages, tools=None) -> int:
     """Rough token estimate for a request: ~3 chars per token over the
-    serialized messages, their tool calls, and the tool schemas.
+    serialized messages, their tool calls and `additional_kwargs`, and the
+    tool schemas.
 
     Deliberately a cheap heuristic -- no per-provider tokenizer, no dependency.
     It only needs to be good enough to keep a request off a model whose window
@@ -78,18 +79,26 @@ def estimate_tokens(messages, tools=None) -> int:
     ~2.9 chars per token; chars/4 undercounted a 116k-token request as 67k. A
     tool-calling reply carries its arguments in `tool_calls`, not `content`,
     and they are resent on every later step -- leaving them out made the
-    undercount grow with the run.
+    undercount grow with the run. `additional_kwargs` is where Gemini keeps
+    each call's thought signature, resent and billed as input; it was the rest
+    of the drift (1.33x at 232 messages, ~0.94x with it). On Gemini it also
+    repeats the tool call, so the estimate errs a few percent high -- the safe
+    side for a ceiling -- rather than naming one vendor's key here.
     """
     chars = 0
     for message in messages or []:
         content = getattr(message, "content", None)
         tool_calls = getattr(message, "tool_calls", None)
+        extra = getattr(message, "additional_kwargs", None)
         if isinstance(message, dict):
             content = message.get("content") if content is None else content
             tool_calls = message.get("tool_calls") if tool_calls is None else tool_calls
+            extra = message.get("additional_kwargs") if extra is None else extra
         chars += len(str(content))
         if tool_calls:
             chars += len(str(tool_calls))
+        if extra:
+            chars += len(str(extra))
     for tool in tools or []:
         chars += len(str(tool))
     return chars // 3
