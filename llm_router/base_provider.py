@@ -221,6 +221,22 @@ def looks_decommissioned(message: str, status: Optional[int] = None) -> bool:
                 and ("not_found" in message or "not found" in message))
 
 
+# How long every account's copy of a model is benched after a 503.
+MODEL_UNAVAILABLE_COOLDOWN = 120
+
+
+def is_model_unavailable(exc: Exception) -> bool:
+    """Is the *model* out of capacity, on every account at once?
+
+    Gemini answers `503 UNAVAILABLE -- This model is currently experiencing
+    high demand` for a model, not for a key. Cooling down only the account that
+    asked sent the next attempt to the same model on the next account: a run on
+    2026-09-18 spent 259s on one step walking six accounts of 3.8 and six of
+    3.7 before 3.6 answered.
+    """
+    return _status_of(exc) == 503
+
+
 def is_unauthorized(exc: Exception) -> bool:
     """Is this member's *key* dead, rather than the model or the quota?
 

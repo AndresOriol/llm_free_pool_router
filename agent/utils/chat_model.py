@@ -20,8 +20,10 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import ConfigDict
 
 from llm_router import usage
-from llm_router.base_provider import (estimate_tokens, is_decommissioned,
+from llm_router.base_provider import (MODEL_UNAVAILABLE_COOLDOWN,
+                                      estimate_tokens, is_decommissioned,
                                       failure_diagnostics,
+                                      is_model_unavailable,
                                       is_rate_limited, is_transient,
                                       is_unauthorized,
                                       provider_error_detail, reached_provider)
@@ -176,6 +178,18 @@ class RouterChatModel(BaseChatModel):
                      "key; the run continues on the rest of the pool.",
                      account or provider.name, len(kin or [provider]))
 
+    def _bench_model(self, provider) -> None:
+        """Cool down every account's copy of a model the vendor says is full."""
+        kin = [p for p in self.router.providers
+               if p.model == provider.model
+               and getattr(p, "platform", "") == getattr(provider, "platform", "")
+               and not getattr(p, "decommissioned", False)]
+        for member in kin or [provider]:
+            member.trigger_cooldown(MODEL_UNAVAILABLE_COOLDOWN)
+        logger.warning("%s is out of capacity; benched on %d account(s) for %ds.",
+                       provider.model, len(kin or [provider]),
+                       MODEL_UNAVAILABLE_COOLDOWN)
+
     def _handle_failure(self, provider, exc: Exception, run_manager=None,
                         started: Optional[float] = None,
                         request_id: Optional[str] = None,
@@ -243,6 +257,11 @@ class RouterChatModel(BaseChatModel):
         if detail and run_manager is not None:
             run_manager.on_text(f"\n[router] {provider.name} failed ({provider.model}): "
                                 f"{detail}\n")
+        # A 503 is the model's capacity, not this key's: every account would
+        # answer the same, so the next attempt should be a different model.
+        if is_model_unavailable(exc):
+            self._bench_model(provider)
+            return True
         window = diagnostics.get("quota_window")
         if window in {"rpm", "tpm", "rpd"}:
             reset_wait = math.ceil(

@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from agent.utils.chat_model import RouterChatModel
 from langchain_core.messages import AIMessage
-from llm_router.base_provider import LLMProvider
+from llm_router.base_provider import LLMProvider, MODEL_UNAVAILABLE_COOLDOWN
 from llm_router.router import AutonomousLLMRouter
 
 
@@ -189,7 +189,9 @@ def test_slow_failures_do_not_recycle_priority_before_trying_the_pool(monkeypatc
             now[0] += 40
             return super().invoke(messages, **kwargs)
 
-    busy = [_Provider(f"slow{i}", i, SlowChat(raises=_Exc("busy", 503)))
+    # Two different models: two copies of one model would share the 503.
+    busy = [_Provider(f"slow{i}", i, SlowChat(raises=_Exc("busy", 503)),
+                      model=f"m{i}")
             for i in range(2)]
     live = _Provider("live", 3, _Chat(answer="served"))
     router = AutonomousLLMRouter(busy + [live], quota=RpdBudget(enabled=False))
@@ -198,8 +200,32 @@ def test_slow_failures_do_not_recycle_priority_before_trying_the_pool(monkeypatc
     assert [p._stub.calls for p in busy + [live]] == [1, 1, 1]
     # Attempts are local to a request, not a permanent demotion of the member.
     busy[0]._stub.raises = None
+    now[0] += MODEL_UNAVAILABLE_COOLDOWN
     assert model.invoke("next").content == "ok"
     assert busy[0]._stub.calls == 2
+
+
+def test_a_503_benches_the_model_on_every_account(monkeypatch):
+    """2026-09-18: `gemini-3.8-flash` answered 503 "high demand" on all six
+    accounts in turn, then 3.7 did the same, before 3.6 served the step 259s in.
+    The capacity is the model's, so one 503 should move on to the next model."""
+    import time
+    from llm_router import usage
+
+    monkeypatch.setattr(usage, "record", lambda *a, **kw: None)
+    monkeypatch.setattr(usage, "record_call", lambda *a, **kw: None)
+    full = _Exc("503 UNAVAILABLE. This model is currently experiencing high "
+                "demand.", status_code=503)
+    copies = [_Provider(f"flash_{i}", 1, _Chat(raises=full), model="flash")
+              for i in range(3)]
+    other = _Provider("other_model", 2, _Chat(answer="served"), model="other")
+
+    assert _model(*copies, other).invoke("hello").content == "served"
+    assert [p._stub.calls for p in copies] == [1, 0, 0]
+    for member in copies:
+        assert member.is_available is False
+        assert member.cooldown_until - time.time() > MODEL_UNAVAILABLE_COOLDOWN - 5
+    assert other.is_available is True
 
 
 def test_backoff_resets_on_success_not_on_cooldown_expiry(monkeypatch):

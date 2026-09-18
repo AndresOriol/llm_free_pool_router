@@ -215,6 +215,13 @@ keeps failing pushes its own retry window out to hours, effectively removing
 itself from the pool for the rest of the session even after whatever caused the
 failures has cleared.
 
+**A 503 benches the model, not the account.** Gemini's `503 UNAVAILABLE —
+This model is currently experiencing high demand` is the model's capacity, and
+every account would give the same answer. So a 503 cools down every account's
+copy of that model for 120 seconds, and the next attempt goes to a different
+model. Before this, on 2026-09-18, one step spent 259s trying six accounts of
+3.8 and six of 3.7 before 3.6 answered.
+
 ## 4.5 The failover loop
 
 `RouterChatModel` is a LangChain `BaseChatModel`, not a bespoke client class.
