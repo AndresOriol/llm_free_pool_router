@@ -66,23 +66,33 @@ def _retry_after(exc: Exception) -> Optional[int]:
 
 
 def estimate_tokens(messages, tools=None) -> int:
-    """Rough token estimate for a request: ~4 chars per token over the
-    serialized messages and tool schemas.
+    """Rough token estimate for a request: ~3 chars per token over the
+    serialized messages, their tool calls, and the tool schemas.
 
     Deliberately a cheap heuristic -- no per-provider tokenizer, no dependency.
     It only needs to be good enough to keep a request off a model whose window
     it clearly overflows, so the router can pick a higher-capacity provider up
     front instead of walking the whole small-TPM pool on 413s.
+
+    An agent's context is mostly code, JSON and paths, which Gemini counted at
+    ~2.9 chars per token; chars/4 undercounted a 116k-token request as 67k. A
+    tool-calling reply carries its arguments in `tool_calls`, not `content`,
+    and they are resent on every later step -- leaving them out made the
+    undercount grow with the run.
     """
     chars = 0
     for message in messages or []:
         content = getattr(message, "content", None)
-        if content is None and isinstance(message, dict):
-            content = message.get("content")
+        tool_calls = getattr(message, "tool_calls", None)
+        if isinstance(message, dict):
+            content = message.get("content") if content is None else content
+            tool_calls = message.get("tool_calls") if tool_calls is None else tool_calls
         chars += len(str(content))
+        if tool_calls:
+            chars += len(str(tool_calls))
     for tool in tools or []:
         chars += len(str(tool))
-    return chars // 4
+    return chars // 3
 
 
 def provider_error_detail(exc: Exception) -> Optional[str]:

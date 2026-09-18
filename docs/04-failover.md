@@ -85,9 +85,13 @@ Step 5 is a judgement call: a best-effort attempt is better than a stall, and
 the resulting too-large error surfaces through the failure logging in
 [4.7](#47-making-a-reroute-visible) rather than vanishing.
 
-The estimate itself (`estimate_tokens`) is deliberately a chars/4 heuristic
+The estimate itself (`estimate_tokens`) is deliberately a chars/3 heuristic
 with no tokenizer and no dependency. It only has to be good enough to keep a
-request off a model it clearly overflows.
+request off a model it clearly overflows. It counts each message's content, the
+arguments of its tool calls (a tool-calling reply keeps them in `tool_calls`,
+not `content`, and they are resent on every later step), and the tool schemas.
+An agent's context is mostly code and JSON, which Gemini counted at ~2.9 chars
+per token; chars/4 without the tool calls read a 116k-token request as 67k.
 
 ### 4.2.1 Skipping a member whose day is spent
 

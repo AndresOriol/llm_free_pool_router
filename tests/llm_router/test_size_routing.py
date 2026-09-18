@@ -28,14 +28,20 @@ class _FakeProvider:
 
 
 def _run():
-    # estimate_tokens: ~4 chars per token over message content (dict form).
-    assert estimate_tokens([{"role": "user", "content": "x" * 40}]) == 10
+    # estimate_tokens: ~3 chars per token over message content (dict form).
+    assert estimate_tokens([{"role": "user", "content": "x" * 30}]) == 10
     # Tool schemas count toward the estimate too.
-    with_tools = estimate_tokens([{"content": "x" * 40}], tools=["y" * 40])
+    with_tools = estimate_tokens([{"content": "x" * 30}], tools=["y" * 30])
     assert with_tools == 20, with_tools
     # BaseMessage-like objects (content attribute) are handled.
-    msg = type("M", (), {"content": "z" * 20})()
+    msg = type("M", (), {"content": "z" * 15})()
     assert estimate_tokens([msg]) == 5
+    # A tool-calling reply's arguments live in tool_calls, not content, and are
+    # resent on every later step.
+    from langchain_core.messages import AIMessage
+    call = {"name": "read_file", "args": {"path": "p" * 300}, "id": "1"}
+    assert estimate_tokens([AIMessage(content="", tool_calls=[call])]) > 100
+    assert estimate_tokens([{"content": "", "tool_calls": [call]}]) > 100
 
     small = _FakeProvider("groq_small", priority=1, max_input_tokens=6000)
     mid = _FakeProvider("groq_mid", priority=5, max_input_tokens=30000)
