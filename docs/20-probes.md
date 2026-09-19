@@ -88,7 +88,9 @@ positive would have to guess the single right answer instead.
 | `tool_in` | the first tool call is one of these |
 | `not_tool` | this tool is not called in the turn |
 | `args_match` / `args_not_match` | a regex over every call's arguments |
+| `not_tool_with_args` | no call matches both this tool pattern and this argument pattern |
 | `text_matches` | it answered instead of acting, and said this |
+| `text_not_matches` | it did not say this, if it answered |
 | `no_tool` | it answered instead of acting |
 
 `args_*` searches **every** call in the turn, not just the first: a model that
@@ -118,6 +120,31 @@ All of it is optional. With no key the probes still run and still report; what
 is lost is the history and the comparison, not the test
 ([evals/probe_dataset.py](../evals/probe_dataset.py)).
 
+### 20.5.1 Starting mid-run
+
+Some failures only happen deep in a run. A review signs off a claim it should
+have questioned, or a researcher writes a conclusion after five searches that
+missed. A first message cannot reach them. For these a probe carries a
+`history`: the recorded conversation up to the decision, as `{user: ...}` and
+`{ai: ..., calls: [{name, args, result}]}` entries. The agent sees its own past
+turns and is judged only on what it says next.
+
+The `explore` and `explore-researcher` targets work this way
+([evals/probes/explore.yaml](../evals/probes/explore.yaml)). Their histories are
+generated from one run record rather than written by hand, so the model sees
+what the failing run saw. The researcher is taken compiled out of the explorer,
+not rebuilt next to it.
+
+Two more fields exist because of what the first baseline did:
+
+- **`through`**: tools the agent may call and carry on past, such as a
+  reflection or a listing. The judged decision is the first call outside them.
+  Without it, three baseline runs "passed" by calling `think_tool` and never
+  reaching the write under test.
+- **Running out of passes without deciding is a failure.** Doing nothing
+  within the allowance satisfies every negative expectation, and scoring it
+  as a pass is how the same probe turned green without testing anything.
+
 ## 20.6 Running them
 
 ```bash
@@ -126,6 +153,7 @@ python -m evals probes                        # run them, print the table
 python -m evals probes --agent improve        # just one agent's
 python -m evals probes --push                 # sync the dataset, run nothing
 python -m evals probes --experiment           # run through LangSmith
+python -m evals probes --agent explore --dataset free_coding_agent-probes-explore     --experiment --name explore-fix --repetitions 3   # one side of a comparison
 ```
 
 Serial, always — the probes share one free-tier pool, and running them at once

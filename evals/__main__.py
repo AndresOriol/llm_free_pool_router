@@ -266,7 +266,9 @@ def cmd_probes(args) -> int:
     except ValueError as exc:
         sys.exit(str(exc))
     if args.agent:
-        found = [p for p in found if p.agent == args.agent]
+        # `explore` includes `explore-researcher`: an agent and its sub-agents.
+        found = [p for p in found if p.agent == args.agent
+                 or p.agent.startswith(args.agent + "-")]
     if args.id:
         found = [p for p in found if p.id in args.id]
     if not found:
@@ -310,7 +312,9 @@ def cmd_probes(args) -> int:
         try:
             done = probe_dataset.evaluate(found, model, floor=floor,
                                           members=members,
-                                          dataset=args.dataset)
+                                          dataset=args.dataset,
+                                          experiment=args.name or None,
+                                          repetitions=args.repetitions)
         except probe_dataset.NoLangSmith as exc:
             sys.exit(str(exc))
         print(f"Experiment recorded against {done['dataset']!r}: "
@@ -395,7 +399,7 @@ def main() -> int:
 
     probes = sub.add_parser(
         "probes", help="one agent, one situation, one decision")
-    probes.add_argument("--agent", default="", help="code | improve")
+    probes.add_argument("--agent", default="", help="code | improve | explore | explore-researcher")
     probes.add_argument("--id", nargs="*", help="only these probe ids")
     probes.add_argument("--dir", default="", help="where the yaml lives")
     probes.add_argument("--list", action="store_true",
@@ -409,6 +413,11 @@ def main() -> int:
                              "experiment against the dataset")
     probes.add_argument("--dataset", default="",
                         help="dataset name; default free_coding_agent-probes")
+    probes.add_argument("--name", default="",
+                        help="with --experiment, the experiment's name prefix")
+    probes.add_argument("--repetitions", type=int, default=1,
+                        help="with --experiment, runs per probe: one model "
+                             "call is one sample from a pool that changes")
     probes.set_defaults(func=cmd_probes)
 
     args = parser.parse_args()

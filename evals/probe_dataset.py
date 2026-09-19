@@ -61,7 +61,9 @@ def as_example(probe) -> dict:
     """
     return {
         "inputs": {"agent": probe.agent, "prompt": probe.prompt,
-                   "files": probe.files},
+                   "files": probe.files, "history": probe.history,
+                   "research_dir": probe.research_dir,
+                   "through": probe.through},
         "outputs": {"expect": probe.expect},
         "metadata": {"probe_id": probe.id, "why": probe.why.strip()},
     }
@@ -98,7 +100,8 @@ def push(probes: list, dataset: str = DEFAULT_DATASET) -> dict:
 
 def evaluate(probes: list, model, *, floor: int, members: int,
              dataset: str = DEFAULT_DATASET,
-             experiment: Optional[str] = None) -> dict:
+             experiment: Optional[str] = None,
+             repetitions: int = 1) -> dict:
     """Run the probes as a LangSmith experiment. Returns a summary.
 
     The target and the scoring are the same functions the local runner uses
@@ -115,7 +118,10 @@ def evaluate(probes: list, model, *, floor: int, members: int,
             id=inputs.get("probe_id") or "probe",
             agent=inputs.get("agent", "code"),
             prompt=inputs.get("prompt", ""),
-            files=inputs.get("files") or {})
+            files=inputs.get("files") or {},
+            history=inputs.get("history") or [],
+            research_dir=inputs.get("research_dir") or "",
+            through=inputs.get("through") or [])
         return probes_mod.first_decision(probe, model, floor=floor,
                                          members=members)
 
@@ -139,7 +145,8 @@ def evaluate(probes: list, model, *, floor: int, members: int,
     logger.info(f"Running {len(probes)} probe(s) against {dataset!r}")
     results = ls.evaluate(target, data=dataset, evaluators=[decided_correctly],
                           experiment_prefix=experiment or "probes",
-                          max_concurrency=1)
+                          max_concurrency=1,
+                          num_repetitions=max(1, repetitions))
     # Serial, always. The probes share one free-tier pool, and running them at
     # once would make each probe's model mix depend on the others -- the same
     # reason eval runs are serial (evals/run.py).

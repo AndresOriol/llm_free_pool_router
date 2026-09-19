@@ -56,7 +56,7 @@ class TestLoading:
             probes.load(tmp_path)
 
     def test_an_unknown_agent_is_refused(self, tmp_path):
-        _write(tmp_path, [_ok(agent="explore")])
+        _write(tmp_path, [_ok(agent="nonsense")])
         with pytest.raises(ValueError, match="agent must be one of"):
             probes.load(tmp_path)
 
@@ -199,3 +199,92 @@ def test_the_improve_agent_is_probed_with_its_delegation_tool_present():
 
     assert "code" in probes.PROBE_PEERS
     assert "delegate_fix" in tools.make_tools(Path("."), probes.PROBE_PEERS)
+
+
+class TestHistory:
+    """A probe that starts mid-run: the recorded turns, then the decision."""
+
+    def test_a_recorded_call_becomes_the_call_and_its_answer(self):
+        probe = probes.Probe(id="h", prompt="brief", expect={"no_tool": True},
+                             history=[{"ai": "", "calls": [
+                                 {"name": "tavily_search", "args": {"query": "q"},
+                                  "result": "a page"}]}])
+        brief, call, answer = probes.messages(probe)
+        assert brief.content == "brief"
+        assert call.tool_calls[0]["name"] == "tavily_search"
+        assert answer.tool_call_id == call.tool_calls[0]["id"]
+        assert answer.content == "a page"
+
+    def test_an_entry_that_is_neither_side_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(history=[{"tool": "x"}])])
+        with pytest.raises(ValueError, match="history does not parse"):
+            probes.load(tmp_path)
+
+    def test_the_history_travels_with_the_dataset_example(self):
+        probe = probes.Probe(id="h", prompt="p", expect={"no_tool": True},
+                             history=[{"user": "more"}])
+        assert probe_dataset.as_example(probe)["inputs"]["history"] == [{"user": "more"}]
+
+
+def test_the_researcher_probed_is_the_one_the_explorer_compiled(tmp_path):
+    """Rebuilding the researcher beside the explorer would drift from it."""
+    from agent.explore import agent as explore
+    from tests.agent.test_explore import _recorder
+
+    researcher = probes._researcher(
+        explore.build_agent(tmp_path, _recorder(), members=3))
+    tools = researcher.nodes["tools"].bound.tools_by_name
+    assert "tavily_search" in tools and "task" not in tools
+
+
+class TestThrough:
+    """The decision judged is the first call outside the probe's `through`."""
+
+    def _run(self, monkeypatch, through, *turns):
+        from langchain_core.messages import AIMessage
+
+        class Graph:
+            def stream(self, inputs, config, stream_mode):
+                said = list(inputs["messages"])
+                for name in turns:
+                    said.append(AIMessage("", tool_calls=[
+                        {"name": name, "args": {}, "id": name}]))
+                    yield {"messages": list(said)}
+
+        monkeypatch.setattr(probes, "_build", lambda *a: Graph())
+        probe = probes.Probe(id="t", prompt="p", expect={"no_tool": True},
+                             through=through)
+        return probes.first_decision(probe, None, floor=0, members=0)
+
+    def test_a_reflection_is_passed_through_to_the_write(self, monkeypatch):
+        got = self._run(monkeypatch, ["think_tool"], "think_tool", "write_file")
+        assert [t["name"] for t in got["tools"]] == ["write_file"]
+
+    def test_without_through_the_first_call_is_the_decision(self, monkeypatch):
+        got = self._run(monkeypatch, [], "think_tool", "write_file")
+        assert [t["name"] for t in got["tools"]] == ["think_tool"]
+
+
+def test_running_out_of_passes_is_not_a_pass(monkeypatch):
+    """Three baseline runs passed a negative probe by deciding nothing."""
+    from langchain_core.messages import AIMessage
+
+    class Graph:
+        def stream(self, inputs, config, stream_mode):
+            said = list(inputs["messages"])
+            for n in range(probes.MAX_THROUGH + 2):
+                said.append(AIMessage("", tool_calls=[
+                    {"name": "think_tool", "args": {}, "id": str(n)}]))
+                yield {"messages": list(said)}
+
+    monkeypatch.setattr(probes, "_build", lambda *a: Graph())
+    probe = probes.Probe(id="t", prompt="p", through=["think_tool"],
+                         expect={"not_tool": "write_file"})
+    decision = probes.first_decision(probe, None, floor=0, members=0)
+    assert not probes.score(probe, decision)["passed"]
+
+
+def test_a_reply_is_judged_by_what_it_says():
+    probe = probes.Probe(id="t", expect={"text_not_matches": "does not exist"})
+    said = {"tools": [], "text": "Mods does not exist.", "error": ""}
+    assert not probes.score(probe, said)["passed"]
