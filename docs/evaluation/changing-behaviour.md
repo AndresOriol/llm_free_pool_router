@@ -101,7 +101,7 @@ right regression check.
 | `probes-code-editing` | How the coding agent changes a repository: reading first and not twice, the shell and workspace it has (no git where there is no repository), recovering from a refused call |
 | `probes-code-scope` | What the task allows the coding agent to change: a stale page the task's own source overrides, against a guarantee someone else relies on (the Contradicted Requests section) |
 | `probes-improve-diagnosis` | How the improvement agent diagnoses: the ledger before the traces, a diagnosis before any delegation or edit, and no issue, delegation or report the evidence it already read contradicts |
-| `probes-explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, claims that something does not exist |
+| `probes-explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, figures no page carries, claims that something does not exist |
 
 ## Reviewing examples
 
@@ -129,7 +129,8 @@ situation into an invented one.
 
 ## The first case: the explorer's absence claims
 
-*Open. The record so far, on branch `explore-nonexistence-claims`.*
+*Open. The record so far, on branches `explore-nonexistence-claims` and
+`probes-expansion`.*
 
 The explorer concluded that Claude Mods do not exist; they do
 ([research/claude-mods/postmortem.md](../../research/claude-mods/postmortem.md),
@@ -140,9 +141,42 @@ researcher that `site:` and `OR` are not applied: that probe went from 0/3 to
 2/3 in both rounds. The absence claims did not move, including on full flash
 models.
 
-The reading so far: these examples start after the conversation has committed
-to the wrong answer. The brief asked for the alias explanation, and the
-researcher's own reflection already said "no official feature". Rules in a
-long prompt do not undo that. The next lever to try is structure (step 5.5
-above): a review run in a fresh context that sees the request and the pages,
-not the researchers' confident replies.
+The reading: these examples start after the conversation has committed to the
+wrong answer. The brief asked for the alias explanation, and the researcher's
+own reflection already said "no official feature". Rules in a long prompt do not
+undo that.
+
+**The dataset outgrew one run (2026-09-20).** Seven probes were added from the
+2026-09-10 machintl market-analysis runs, where the same family fails without
+any absence claim: a researcher ruling gesture analysis lawful and minimal-risk
+with no page saying so, quoting a price the one page it read calls unpublished,
+and writing margins and a payback that first appear in its own `think_tool`
+reflection. Four more candidates were screened out because they passed 3/3 at
+baseline. Every one of these claims enters through a reflection, which the tool
+echoes back as a `ToolMessage` — the model's memory arrives in the same shape
+as a page.
+
+**Structure was the lever that moved, and only where it applies.** Pinned to
+`gemini-3.5-flash-lite`, three repetitions:
+
+| Experiment | Failures | Regressions |
+| --- | --- | --- |
+| `explore-evidence-baseline2-lite` | 9/30 | 8/12 |
+| `explore-evidence-fix1-lite` (researcher prose: reflections are not sources) | 6/30 | 9/12 |
+| `explore-evidence-fix2-lite` (`review-agent`, the check in a fresh context) | 11/30 | 11/12 |
+| `explore-evidence-fix3-lite` (both) | 12/30 | 8/12 |
+
+`fix2` is what merged ([The check that did not do the research](../agents/explore.md#the-check-that-did-not-do-the-research)).
+It moves exactly the two orchestrator probes that sign off and integrate an
+unsupported absence claim, 1/3 and 0/3 to 3/3 each, and it moves them by
+changing what the orchestrator does at that point: it delegates the check
+instead of writing. **That is a path those probes were frozen against, and they
+now test the delegation rather than the claim** — said here rather than patched
+into the histories. Whether the reviewer catches the claim is not measured by a
+probe: driven once by hand over the Mods page, flash-lite searched for plugins
+rather than for "Mods" and confirmed the false claim. A third prose round on
+the researcher did not move the researcher's own probes and is not kept.
+
+What is still open: a pinned full-flash pair (the machintl failures were
+`gemini-3.5`/`3.6-flash`, and both models' daily quota was spent), a probe on
+the reviewer itself, and the scenario run the promotion rule asks for.
