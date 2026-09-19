@@ -1,13 +1,25 @@
 ---
 name: behaviour-change
-description: Change how one of this repo's agents behaves, test-first - find the turn a recorded run went wrong, freeze it as a probe in a topic dataset, show it red, change prompts/tools/models/middleware until it passes in LangSmith experiments, and keep the dataset's regression examples green. Use when asked to fix an agent's behaviour, make an agent stop/start doing something, act on a trace review or J2 finding, add probes or dataset examples, or review stale probes.
+description: The agent-improvement loop, test-first - from recorded runs to the turn one went wrong, a probe frozen there, a change until it passes in LangSmith experiments, and the dataset's regression examples kept green. Start here for any agent improvement - it routes to trace-reviewer (one run), j2-error-analysis (a batch) and deepagents (making the change). Use when asked to improve or fix an agent's behaviour, make an agent stop/start doing something, act on a trace review or J2 finding, add probes or dataset examples, or review stale probes.
 ---
 
 # Changing how an agent behaves
 
 The method is [Changing how an agent behaves](../../../docs/evaluation/changing-behaviour.md);
 the instrument is [Probes](../../../docs/evaluation/probes.md). Read the method first.
-This file is the order of work and the commands.
+This file is the order of work and the commands. It is the entry point for
+improving an agent, and the pieces below are its stages:
+
+| You have | Use | It gives you |
+| --- | --- | --- |
+| A batch of runs, and no idea yet what to fix | `j2-error-analysis` skill | ranked failure categories, each naming a run and turn to probe |
+| One run that went wrong | `trace-reviewer` agent | the turn it could not recover from, and the probe command |
+| A turn to freeze | §2 below | a probe, red at baseline |
+| A red probe | `deepagents` skill, §4 below | the change, on the lightest rung that works |
+
+How to read a run, and the traps in doing so, are in
+[Reading a recorded run](../../../docs/evaluation/reading-runs.md), the one
+copy of those rules.
 
 Behaviour is judged by **experiments**, not unit tests. `pytest` covers the probe
 machinery. It says nothing about whether the agent decides well.
@@ -25,16 +37,19 @@ numbers meaningless. Review it (docs/evaluation/changing-behaviour.md#reviewing-
 ## 1. Find the turn
 
 Start from a recorded run of a task a user would ask for: a scenario run under
-`evals/results/runs/`, or any run record (`AGENT_TRACE_FILE`). Use the
+`evals/results/runs/`, or any run record (`AGENT_TRACE_FILE`). Coming from J2,
+start from the run and turn its top recommendation names. Use the
 `trace-reviewer` agent for one run, or read the record's `turns` yourself.
 
-Name the **earliest decision that changed the outcome**, with its turn number
-and the model that made it. Several decisions can each be a probe.
+Name the **earliest decision that changed the outcome**, with its turn `n` and
+the model that made it. Several decisions can each be a probe. A probe needs
+the run's `trace.json`. A run without one can only be diagnosed, not frozen, so
+record a traced run of the same scenario first.
 
 ## 2. Freeze it
 
 ```bash
-python -m evals probes --from-run <record.json> --turn N --agent <code|improve|explore|explore-researcher> --id <what-it-must-not-do>
+python -m evals probes --from-run <run_dir>/trace.json --turn N --agent <code|improve|explore|explore-researcher> --id <what-it-must-not-do>
 ```
 
 This prints a skeleton. Fill in:
@@ -73,14 +88,12 @@ from its files when each probe starts.
 
 ## 4. Change the agent
 
-Apply the `deepagents` skill first. Go down the ladder only when the level
-above has been tried and measured:
-
-1. prompt or tool-description Markdown;
-2. which tools are offered;
-3. model selection (router config);
-4. middleware;
-5. structure (a sub-agent, a fresh-context review).
+Apply the `deepagents` skill first. Its extension ladder is the one ordering
+of levers (prose → skill → harness profile → model selection → tool →
+middleware → sub-agent → backend). Go down a rung only when the one above has
+been tried and measured. For a judgement failure, "a stronger model" is a
+legitimate answer. A sub-agent is not
+([Judgement, not topology](../../../docs/evaluation/reading-runs.md#judgement-not-topology)).
 
 After each change:
 

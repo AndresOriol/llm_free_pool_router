@@ -94,29 +94,40 @@ question of what a parameter does.
 
 ## Pick the lightest extension point that works
 
-Ordered cheapest-first. Do not skip a row without a reason you can write down.
+Ordered cheapest-first. This is the **one ladder** in this repo: the
+`behaviour-change` loop, J2's recommendations and the trace reviews all name
+their fix as a rung on it. Do not skip a rung without a reason you can write
+down, and when changing behaviour, go down one only after the rung above has
+been measured with a probe experiment.
 
-1. **Prose** — a `prompts/*.md` edit. Always true, on every call. This is the
-   first thing to try and usually the last thing needed.
+1. **Prose** — a `prompts/*.md` or `tool_descriptions/*.md` edit. Always
+   present, on every call. This is the first thing to try and usually the
+   last thing needed.
 2. **A skill** — `skills/<name>/SKILL.md`, reached by `skills=`. A *procedure*
    most runs never need. Only the name and description are charged per call; the
    body is read with `read_file` if the model decides it applies. The
    description is the gate — write the trigger, not a summary.
 3. **A harness profile** — `register_harness_profile(model_id, HarnessProfileConfig(...))`
-   for tool descriptions, excluded tools, a prompt suffix, extra middleware.
-   Declarative, public, upgrade-safe.
-4. **A tool** — a plain function passed to `tools=`. Additive only: it can never
+   for which tools are offered, their descriptions, a prompt suffix, extra
+   middleware. Declarative, public, upgrade-safe.
+4. **Model selection** — which pool members serve the agent
+   (`llm_router/config.yaml`, `CONTEXT_FLOOR` in `agent/utils/pool.py`). Not a
+   `deepagents` extension point, but it is this repo's answer to a judgement
+   failure, and it is cheaper than anything below it.
+5. **A tool** — a plain function passed to `tools=`. Additive only: it can never
    remove a built-in. Reach for this when the agent needs a capability nothing
    else provides (a search API, a ledger read).
-5. **A subagent** — `subagents=[SubAgent(...)]`. For work that deserves its own
-   context window and returns one report. Costs a whole conversation.
-6. **A backend** — subclass `FilesystemBackend` / implement `SandboxBackendProtocol`.
+6. **Middleware** — `middleware=[...]`, appended after the base stack. For
+   cross-cutting concerns (logging, refusal messages). Keep state in graph
+   state, never on the instance, and remember it does not reach the `task`
+   subagent unless you pass it there (below).
+7. **A subagent** — `subagents=[SubAgent(...)]`. For work that deserves its own
+   context window and returns one report. Costs a whole conversation. Never
+   the fix for a failure of judgement.
+8. **A backend** — subclass `FilesystemBackend` / implement `SandboxBackendProtocol`.
    Justified only when *where files live or what may run* is genuinely different
    here. This repo has one legitimate case: the jail.
-7. **Middleware** — `middleware=[...]`, appended after the base stack. For
-   cross-cutting concerns (logging, refusal messages). Keep state in graph
-   state, never on the instance.
-8. **Monkeypatching a private name** — `_underscore` attributes of the package.
+9. **Monkeypatching a private name** — `_underscore` attributes of the package.
    This is not an extension point. See below.
 
 ## The verified facts
