@@ -7,7 +7,7 @@ not say which broke:
    to a threshold or a heuristic is visible as a named test rather than as a
    number moving in a report.
 2. **The recorded run** — the numbers the first live delegation actually
-   produced ([16.9](../../docs/16-delegation.md)). These are the
+   produced ([What the first live delegation showed](../../docs/agents/delegation.md#what-the-first-live-delegation-showed)). These are the
    regression baseline: they are not what the explorer *should* do, they are
    what it *did*, and a change meant to improve the explorer has to move them.
 

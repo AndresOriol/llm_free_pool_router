@@ -10,8 +10,8 @@ Four files, one job each:
 Nothing here changes an agent, and nothing here *is* an agent. The worker runs
 `python -m agent.<name> <workdir> --task "..."` -- the same command a person
 types -- so a served run and a local one are the same run
-([18. Serving](../../docs/18-serving.md),
-[16. Delegation](../../docs/16-delegation.md)).
+([Serving the agents](../../docs/operations/serving.md),
+[Delegation](../../docs/agents/delegation.md)).
 """
 
 from agent.serve.workspace import BadWorkspace

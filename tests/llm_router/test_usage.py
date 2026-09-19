@@ -1,5 +1,5 @@
 """Checks for the usage ledger -- the file the quota panel reads, so its shape
-is a contract in the same way the eval trace's is (docs/07-observability.md).
+is a contract in the same way the eval trace's is (docs/evaluation/observability.md).
 
 No framework: `python -m tests.llm_router.test_usage` (or run the file).
 """

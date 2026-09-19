@@ -15,7 +15,7 @@ This file is the whole harness. Read top to bottom:
 
 What the agent *does* is in the text, not here. Change a behaviour by editing a
 Markdown file; the reasons for each setting are in
-[15. The web explorer](../../docs/15-explorer.md).
+[The web explorer](../../docs/agents/explore.md).
 
 ## How context reaches the model
 

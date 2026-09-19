@@ -1,7 +1,7 @@
 """The seven tools the improvement loop needs, and nothing else.
 
 Tool schemas are 91% of what a step of this loop spends
-([6.4](../../docs/06-agent.md#64-why-it-is-shaped-this-way)), so the count here
+([Why it is shaped this way](../../docs/agents/code.md#why-it-is-shaped-this-way)), so the count here
 is a budget rather than a preference. Each one is a stage of the loop:
 
 | Tool | Stage |
@@ -17,7 +17,7 @@ is a budget rather than a preference. Each one is a stage of the loop:
 `draft_scenario` is the odd one out and earns its schema: the eval set is what
 bounds every claim this loop can make, including about its own fixes, and five
 scenarios cannot tell one configuration from another
-([6.4.2](../../docs/06-agent.md#642-the-pass-column-is-noise)). A tool that
+([The pass column is noise](../../docs/agents/code.md#the-pass-column-is-noise)). A tool that
 turns a failure into a test is the only one here that raises that ceiling.
 
 Two shapes are deliberate and both are about the pool that serves this agent.
@@ -68,7 +68,7 @@ TIMEOUT_ENV = "IMPROVE_EVAL_TIMEOUT"
 DEFAULT_TIMEOUT = 3_600
 # Runs per call. Verification wants a handful of runs on one scenario, not a
 # batch: pass rates at these sample sizes are noise
-# ([6.4.2](../../docs/06-agent.md#642-the-pass-column-is-noise)), so a bigger
+# ([The pass column is noise](../../docs/agents/code.md#the-pass-column-is-noise)), so a bigger
 # number here would buy confidence the numbers cannot carry.
 MAX_REPS = 3
 
@@ -325,7 +325,7 @@ def make_tools(workdir: Path, peers=None) -> dict:
         # What the repository says, read from git rather than out of the
         # delegate's prose. The first delegation this loop ever made came back
         # describing three changes to `session.py` that the diff did not
-        # contain (docs/19-improvement-agent.md#199-what-the-first-live-pass-showed).
+        # contain (docs/agents/improve.md#what-the-first-live-pass-showed).
         moved = gitstate.moved(report)
         rendered = _delegation(code, output, report)
 

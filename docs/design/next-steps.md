@@ -26,10 +26,10 @@ We have no holdout. `check_issue` replays an issue's signature against
 whatever runs exist, and `delegate_fix` gates on staleness rather than on a
 score. That is how a harness change overfits the handful of scenarios it was
 diagnosed from — and we already know the pass column is noise at these sample
-sizes ([6.4.2](../06-agent.md#642-the-pass-column-is-noise)), so the risk is
+sizes ([The pass column is noise](../agents/code.md#the-pass-column-is-noise)), so the risk is
 not theoretical. This is the most valuable thing in the examples for us.
 
-*Decision implemented:* Hold out scenarios by topic, not runs. Declared in `/evals/splits.yaml`. See the new section in `/docs/08-evaluation-method.md`. A pass count at these sample sizes is weak evidence and the gate is a floor, not a proof.
+*Decision implemented:* Hold out scenarios by topic, not runs. Declared in `/evals/splits.yaml`. See the new section in `/docs/evaluation/method.md`. A pass count at these sample sizes is weak evidence and the gate is a floor, not a proof.
 
 
 ### Declare the editable surfaces
@@ -41,7 +41,7 @@ eval run.
 
 Our issues carry a free-text `lever` — a path, written by the model, that
 nothing checks. A declared surface would make `_staleness` a lookup instead of a
-git archaeology pass ([19](../19-improvement-agent.md)), and would let a
+git archaeology pass ([The improvement agent](../agents/improve.md)), and would let a
 delegation be refused for naming something that is not editable.
 
 ### Read `ralph_mode` before building more of the long-run harness
@@ -92,8 +92,8 @@ all have changed.
   `hooks/register.ts` is the file to adapt.
 - Secondary write-ups: [Wavect](https://wavect.io/blog/claude-mods-function-hooks/) and
   [aitmpl](https://www.aitmpl.com/mods/).
-- Our side: [18. Serving](../18-serving.md), which returns 202 and a task id, then polls, and
-  [16. Delegation](../16-delegation.md).
+- Our side: [Serving the agents](../operations/serving.md), which returns 202 and a task id, then polls, and
+  [Delegation](../agents/delegation.md).
 
 **Paths, simplest first:**
 1. **No mod.** A skill or `.claude/agents/*.md` that runs `python -m agent.<name>` with Bash

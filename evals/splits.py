@@ -1,7 +1,7 @@
 """Train and holdout splits for evaluation scenarios.
 
 The split is data rather than a function because it is part of the method
-(documented in /docs/08-evaluation-method.md §8.11), and it lives in this repo
+(documented in docs/evaluation/method.md#the-train-and-holdout-split), and it lives in this repo
 rather than agent_evals so the gate can be computed from recorded run.json files
 even when the scenario repo is not on disk at all.
 

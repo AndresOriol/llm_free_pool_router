@@ -2,7 +2,7 @@
 
 `create_deep_agent` over a jailed backend, configured the way LangChain's
 `deepagents-code` configures a coding agent
-([6. The coding agent](../../docs/06-agent.md)).
+([The coding agent](../../docs/agents/code.md)).
 
 - `agent.py` builds it -- settings, templating, model, project context, agent,
   and one run, top to bottom.

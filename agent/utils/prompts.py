@@ -17,12 +17,12 @@ each adaptation is a fact about this pool rather than a preference:
 
 - **Headless always.** dcode defaults to an interactive TUI where the agent may
   ask and wait. Nobody is watching a run here, so the text takes the branch that
-  says assume and proceed (docs/design/long-run-harness.md#3 R3).
+  says assume and proceed (docs/design/long-run-harness.md#3-what-helpful-requires-draft--v3, R3).
 - **Identity is a pool, not a model.** dcode names the model and its context
   window. Here the router picks per call and one run is routinely served by
   four or five models, so a name would be false by the second step. The floor
   every eligible member clears is the part that stays true
-  ([4. Failover](../../docs/04-failover.md)).
+  ([Failover](../../docs/pool/failover.md)).
 - **Paths are rooted at `/`.** dcode tells the model to build absolute host
   paths. The backend here runs in `virtual_mode`, where `/` *is* the workdir, so
   that instruction would fail every file tool call.

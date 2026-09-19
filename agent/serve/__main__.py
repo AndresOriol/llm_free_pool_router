@@ -2,7 +2,7 @@
 
 Serves every agent this pool can offer over HTTP, so a container can run the
 harness and a caller can bind an agent to a workspace
-([18. Serving](../../docs/18-serving.md)).
+([Serving the agents](../../docs/operations/serving.md)).
 
 The CLI entry points are unchanged and remain the primary way to run one task:
 
@@ -26,14 +26,14 @@ Environment:
   LLM_ROUTER_USAGE_DIR  the usage ledger's directory. **Point this at a volume
                      in a container**, or every restart begins believing the
                      whole pool is fresh
-                     (docs/17-deployment.md#176-what-has-to-change-first)
+                     (docs/operations/deployment.md#what-has-to-change-first)
   AGENT_CONTEXT_FLOOR  override the input-token floor (default 128,000)
   AGENT_PEERS        agents the coding agent may run; unset means `explore`,
-                     empty means none (docs/16-delegation.md)
+                     empty means none (docs/agents/delegation.md)
   AGENT_DELEGATE_TIMEOUT  ceiling in seconds on one agent run (default 4 hours)
   IMPROVE_RECORDS    extra directories of recorded runs the `improve` agent may
                      read; point it at SERVE_RECORD_DIR to include live runs
-                     (docs/19-improvement-agent.md)
+                     (docs/agents/improve.md)
 """
 
 import logging

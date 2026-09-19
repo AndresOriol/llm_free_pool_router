@@ -3,7 +3,7 @@
 This reverses a settled decision. The old record was composed locally out of
 four artefacts -- a flat `trace.jsonl`, a `journal.jsonl`, one markdown file per
 role turn, and a rationale -- because a hosted trace expires and a verdict must
-rest on files on disk (docs/07-observability.md#71-why-two).
+rest on files on disk (docs/evaluation/observability.md#why-two).
 
 The expiry argument still holds; the *composition* was the mistake. Three of
 those four files existed to record handoffs between narrow roles, and a

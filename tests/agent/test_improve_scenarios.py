@@ -7,7 +7,7 @@ unusable briefs is worse than none. Two things are therefore checked here.
 **A draft that could not become a scenario is refused.** No prompt is a topic,
 not a task; no `fail_to_pass` is a scenario that cannot decide anything. Those
 are the two fields the acceptance contract is built from
-([9.4](../../docs/09-scenarios.md#94-scenarioyaml)).
+([`scenario.yaml`](../../docs/evaluation/scenarios.md#scenarioyaml)).
 
 **Provenance is read, never claimed.** The most forgeable line in a brief is
 "this really happened", so the outcome, the failure class and the files the run

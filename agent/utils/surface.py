@@ -12,7 +12,7 @@ short of that route, and both are library limits rather than preferences:
   would take its tools with it anyway. Which sections to cut is each agent's
   choice, so the caller passes them -- imported from deepagents rather than
   quoted, so an upstream rewording fails a test instead of silently leaving the
-  text in ([15.5.3](../../docs/15-explorer.md)).
+  text in ([What the framework says that is not true here](../../docs/agents/explore.md#what-the-framework-says-that-is-not-true-here)).
 - **`PROFILE_BLIND` descriptions.** See below.
 
 The middleware is passed to every sub-agent spec as well: a caller's

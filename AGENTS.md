@@ -29,7 +29,7 @@ requirement to design around. Groq stays in the pool for work that fits it.
 **This was a maintenance decision, not a measurement.** The deleted arm won the
 last cost comparison 39× over, on inputs that no longer hold and that nobody
 re-ran. `tokens_in` per run is the number that says whether that was a
-mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
+mistake ([The arm that was deleted](docs/agents/code.md#the-arm-that-was-deleted)).
 
 ## Non-goals
 
@@ -56,8 +56,8 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   nothing; one reader of the same ledger tells the router which members have
   spent their day, so a daily ceiling is skipped rather than rediscovered by
   refusal — advisory, and never able to stall a run
-  ([4.2.1](docs/04-failover.md#421-skipping-a-member-whose-day-is-spent),
-  [14. Quota panel](docs/14-quota-panel.md)).
+  ([Skipping a member whose day is spent](docs/pool/failover.md#skipping-a-member-whose-day-is-spent),
+  [Quota panel](docs/pool/quota.md)).
 - [agent/utils](agent/utils/) — what every agent needs and none of them owns: `RouterChatModel` (the
   failover loop, as a LangChain `BaseChatModel`), the filesystem jail with
   `python`/`pytest`/`git` execution, the tools over it, and the trace. Knows
@@ -75,7 +75,7 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   and converts it, so the **page** reaches the model rather than a summary of it;
   `think_tool` forces a pause between searches. It runs no programs at all, and
   hands off to the coding agent by writing `/research/*.md`
-  ([15. The web explorer](docs/15-explorer.md)). Every deviation from upstream is
+  ([The web explorer](docs/agents/explore.md)). Every deviation from upstream is
   marked `ADAPTED` in [deep_prompts.py](agent/explore/deep_prompts.py).
 - [agent/improve](agent/improve/) — the agent whose project is the other
   agents, modelled on [LangSmith
@@ -88,7 +88,7 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   ([readonly.py](agent/improve/readonly.py)): the agent that diagnoses is not
   the agent that changes the code, which is what makes a diff reviewable against
   a diagnosis written before it. An issue never closes because nobody looked
-  ([19. The improvement agent](docs/19-improvement-agent.md)). **Unmeasured** —
+  ([The improvement agent](docs/agents/improve.md)). **Unmeasured** —
   `IMPROVE_FIX=0` is the diagnose-only arm.
 - [agent/protocol](agent/protocol/) — how one agent asks another for work. The
   vocabulary is [A2A](https://a2a-protocol.org)'s — `AgentCard`, `Task`,
@@ -106,13 +106,13 @@ mistake ([6.1.1](docs/06-agent.md#611-the-arm-that-was-deleted)).
   root, never a path from the request, and the server clones a repository into
   a new one on request. Exactly one worker, because per-process cooldown and a
   JSONL ledger both say so. Nothing here changes an agent
-  ([18. Serving](docs/18-serving.md)).
+  ([Serving the agents](docs/operations/serving.md)).
 - [evals](evals/) — the harness that decides whether a change to the above
   helped. Scenarios live in the separate `agent_evals` repo. Two instruments:
   a **scenario run** is the acceptance contract (minutes, one bit, decided by
   hidden tests), and a **probe** is the small end — the real agent in front of
   one situation, stopped at its first decision, one model call
-  ([20. Probes](docs/20-probes.md), `python -m evals probes`). A probe cannot
+  ([Probes](docs/evaluation/probes.md), `python -m evals probes`). A probe cannot
   say a task was solved; it says the agent started the way it should, which is
   where the recorded failures live. Probes are defined in
   [evals/probes/](evals/probes/) with the failure each one guards cited beside
@@ -143,15 +143,15 @@ sections that link back into the repo with relative paths. They are working
 documents, so they go stale; a finding that outlives its artifact belongs in
 [docs/](docs/) instead.
 
-Quick pointers: [18. Serving](docs/18-serving.md) for the container and the
-endpoints, [4. Failover](docs/04-failover.md) for how the router works,
-[14. Quota panel](docs/14-quota-panel.md) for what the accounts have spent,
+Quick pointers: [Serving the agents](docs/operations/serving.md) for the container and the
+endpoints, [Failover](docs/pool/failover.md) for how the router works,
+[Quota panel](docs/pool/quota.md) for what the accounts have spent,
 [16. The agent protocol](docs/16-agent-protocol.md) for agent-to-agent
-delegation, [19. The improvement agent](docs/19-improvement-agent.md) for the
+delegation, [The improvement agent](docs/agents/improve.md) for the
 loop that turns recorded runs into fixes,
-[5. Providers](docs/05-providers.md) for accounts and limits,
-[12. Development harness](docs/12-development-harness.md) for which model tier
-does what, [15. The web explorer](docs/15-explorer.md) for web research, [13. Roadmap and scope](docs/13-roadmap.md) for what's next and
+[Providers and limits](docs/pool/providers.md) for accounts and limits,
+[Driving the free agents](docs/operations/driving-agents.md) for which model tier
+does what, [The web explorer](docs/agents/explore.md) for web research, [Roadmap and scope](docs/status.md#roadmap-and-scope) for what's next and
 what's already settled.
 
 ## Coding standards
@@ -174,8 +174,8 @@ loop) are evaluated, not argued. Each candidate is a branch = one *agent
 configuration*, run against scenario-based tests and compared to the baseline
 on quantitative metrics; a change that can't be shown to help doesn't merge.
 The protocol, metrics and promotion rule are in
-[8. Evaluation method](docs/08-evaluation-method.md) and
-[10. Metrics](docs/10-metrics.md). The runner and its results live in
+[Evaluation method](docs/evaluation/method.md) and
+[Metrics](docs/evaluation/metrics.md). The runner and its results live in
 [evals/](evals/); only the scenarios live in the separate `agent_evals` repo,
 so they survive branch switching.
 

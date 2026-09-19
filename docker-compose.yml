@@ -1,4 +1,4 @@
-# One service, one worker, one pool. See docs/18-serving.md.
+# One service, one worker, one pool. See docs/operations/serving.md.
 #
 #   cp .env.example .env      # then fill in the keys and SERVE_TOKEN
 #   docker compose up --build
@@ -7,7 +7,7 @@
 # supported configuration: cooldown lives on the provider object in one process
 # and the usage ledger is a JSONL file appended from it, so a second replica
 # would rediscover every rate limit by paying for it and both would interleave
-# writes into the same ledger (docs/17-deployment.md#176-what-has-to-change-first).
+# writes into the same ledger (docs/operations/deployment.md#what-has-to-change-first).
 # The pool's whole day is ~42 minutes of flat-out routing anyway, so a second
 # replica buys 429s rather than throughput.
 
@@ -32,7 +32,7 @@ services:
       # this machine's Tailscale address (100.x.y.z) -- the port is then on the
       # overlay network only, and the home LAN and the home IP gain no exposure
       # at all. What must never go here is 0.0.0.0 plus a port forward on the
-      # router (docs/18-serving.md#189-reaching-it-from-outside-the-house).
+      # router (docs/operations/serving.md#reaching-it-from-outside-the-house).
       - "${SERVE_PUBLISH_ADDR:-127.0.0.1}:8080:8080"
 
     volumes:
@@ -43,12 +43,12 @@ services:
       # What the accounts have spent. The one volume that is not optional: a
       # container starting with an empty ledger believes the whole pool is
       # fresh and rediscovers each spent account by 429
-      # (docs/17-deployment.md#176-what-has-to-change-first).
+      # (docs/operations/deployment.md#what-has-to-change-first).
       - agent-usage:/var/lib/agent/usage
       # One directory per task: the A2A record, and the run tree beside it.
       - agent-records:/var/lib/agent/records
 
-    # docs/17-deployment.md#175-what-fits: 1 vCPU / 2 GiB for the agent, 4 GiB
+    # docs/operations/deployment.md#what-fits: 1 vCPU / 2 GiB for the agent, 4 GiB
     # if it runs a heavy test suite in the jail -- a target project's suite
     # shares this limit and one measured at 440-517 MB on its own.
     mem_limit: 2g

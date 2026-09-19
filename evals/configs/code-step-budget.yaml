@@ -1,7 +1,7 @@
 # `code` with the step limit treated as a work budget instead of a loop guard.
 #
 # Three changes ship together because they were one repair
-# (docs/06-agent.md#621-the-step-budget):
+# (docs/agents/code.md#the-step-budget):
 #
 #   1. `RECURSION_LIMIT` 120 -> 400, with 40 supersteps reserved. Spending the
 #      budget ends the run instead of raising `GraphRecursionError` out of
@@ -24,11 +24,11 @@
 #
 #   1. **`tokens_in` first.** A budget more than three times larger is a licence
 #      to spend, and this arm can buy its success rate with tokens on an agent
-#      whose whole premise is a free tier (docs/06-agent.md#611). A rise in
+#      whose whole premise is a free tier (docs/agents/code.md#the-arm-that-was-deleted). A rise in
 #      `solved` that comes with a large rise in `tokens_in` is not a win.
 #   2. Does `stopping` shrink? Runs that used to die at the limit should now
 #      either finish or stop cleanly. The taxonomy separates them
-#      (docs/10-metrics.md): a spent budget is not a loop.
+#      (docs/evaluation/metrics.md): a spent budget is not a loop.
 #   3. Do the two prompt paragraphs pay for themselves? They cost context on
 #      every run to save steps wasted on `&&` refusals and on trusting a masked
 #      exit code. `calls` and `bounces` are where that shows up.

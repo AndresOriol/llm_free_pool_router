@@ -12,7 +12,7 @@ pip install -r requirements.txt
 ```
 
 Create `llm_router/.env` with your API keys (see
-[docs/05-providers.md](docs/05-providers.md) for how to get a free key from each
+[Providers and limits](docs/pool/providers.md) for how to get a free key from each
 provider):
 
 ```
@@ -36,7 +36,7 @@ switching model mid-task:
 echo "Read NOTES.md and do what the newest feedback asks for" | python -m agent.code ../my-project
 ```
 
-See [docs/06-agent.md](docs/06-agent.md).
+See [The coding agent](docs/agents/code.md).
 
 ## Web explorer
 
@@ -50,14 +50,14 @@ echo "What are the current Gemini free-tier rate limits?" | python -m agent.expl
 ```
 
 It writes `/research/*.md` with a source URL beside every claim. See
-[docs/15-explorer.md](docs/15-explorer.md).
+[The web explorer](docs/agents/explore.md).
 
 You can also let the coding agent ask for that itself, mid-task, instead of
 running the two by hand. There is no protocol: it runs the same command you
 would, `python -m agent.explore . --task "..."`, and reads back the final
 message and the notes it wrote. A delegation costs a whole explorer session, so
 it is worth knowing it is on — `AGENT_PEERS=` turns it off. See
-[docs/16-delegation.md](docs/16-delegation.md).
+[Delegation](docs/agents/delegation.md).
 
 ## The agent that improves the agents
 
@@ -72,7 +72,7 @@ python -m agent.improve .          # work the ledger, in this repo
 
 An issue closes only when runs recorded *after* its fix stop matching it, and
 never because nobody looked. The ledger is `evals/results/issues/`. See
-[docs/19-improvement-agent.md](docs/19-improvement-agent.md).
+[The improvement agent](docs/agents/improve.md).
 
 ## Run it in a container
 
@@ -95,8 +95,8 @@ curl -sS -X POST localhost:8080/v1/agents/code/run \
 You get **202** and a task id to poll at `/v1/tasks/<id>` — a run lasts hours,
 so nothing waits on the request. An agent is bound to a *workspace*: a directory
 under the mounted root, either mounted in from the host or cloned from a
-repository URL you pass. See [docs/18-serving.md](docs/18-serving.md), and
-[docs/17-deployment.md](docs/17-deployment.md) for where this can actually run.
+repository URL you pass. See [Serving the agents](docs/operations/serving.md), and
+[Deployment](docs/operations/deployment.md) for where this can actually run.
 
 ## Docs
 
@@ -104,17 +104,17 @@ Everything beyond the quick start lives in the wiki — start at
 **[docs/README.md](docs/README.md)**, which indexes it.
 
 - **Deploy this in a container, or call the agents as endpoints?** →
-  [18. Serving the agents](docs/18-serving.md)
+  [Serving the agents](docs/operations/serving.md)
 - **New provider account, or want to add a provider?** →
-  [5. Providers and limits](docs/05-providers.md)
-- **Have one agent ask another for work?** → [16. Delegation](docs/16-delegation.md)
-- **Run the coding agent on the pool?** → [6. The coding agent](docs/06-agent.md)
+  [Providers and limits](docs/pool/providers.md)
+- **Have one agent ask another for work?** → [Delegation](docs/agents/delegation.md)
+- **Run the coding agent on the pool?** → [The coding agent](docs/agents/code.md)
 - **How does the router actually work, and why?** →
-  [4. Failover](docs/04-failover.md)
+  [Failover](docs/pool/failover.md)
 - **Curious how this project is built (agent roles, model tiers)?** →
-  [12. Development harness](docs/12-development-harness.md)
+  [Driving the free agents](docs/operations/driving-agents.md)
 - **How much of the free tier is left?** →
-  [14. Quota panel](docs/14-quota-panel.md) —
+  [Quota panel](docs/pool/quota.md) —
   `python -m llm_router.quota status`
-- **Where is this going next?** → [13. Roadmap and scope](docs/13-roadmap.md)
+- **Where is this going next?** → [Roadmap and scope](docs/status.md#roadmap-and-scope)
 - **Project goals and standards** → [CLAUDE.md](CLAUDE.md)

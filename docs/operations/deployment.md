@@ -1,37 +1,37 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 17. Deployment
+# Deployment
 
 *Where this harness can actually run, why most hosting platforms cannot run it
 at all, and what has to change before any of them can.*
 
-## 17.1 The question
+## The question
 
-[Phase 2](13-roadmap.md#131-the-two-phases-of-the-project) wants a standing
+[Phase 2](../status.md#the-two-phases-of-the-project) wants a standing
 maintainer that works a project unattended for hours
-([long-run-harness](design/long-run-harness.md)). The obvious next thought is to
+([long-run-harness](../design/long-run-harness.md)). The obvious next thought is to
 host it somewhere, so that a run does not depend on one laptop staying awake —
-[awake.py](../agent/utils/awake.py) exists only because it does.
+[awake.py](../../agent/utils/awake.py) exists only because it does.
 
 Most of the obvious answers are wrong, and they are all wrong for the same
 reason: they host a *web backend*, and this is not one. This page records the
 elimination so it is not re-derived.
 
-## 17.2 What the workload actually is
+## What the workload actually is
 
 Four properties. Measured 2026-09-02 on this repo, not estimated.
 
 | Property | Evidence |
 | --- | --- |
-| **A run lasts hours** | [awake.py](../agent/utils/awake.py) exists because a session "runs for hours with long gaps between provider calls" |
+| **A run lasts hours** | [awake.py](../../agent/utils/awake.py) exists because a session "runs for hours with long gaps between provider calls" |
 | **Memory floor ~186 MB, before any conversation** | RSS after importing `llm_router` (153 MB) plus `RouterChatModel` and both sessions. Cold imports take 6.2 s. Add the message history: a session only routes to members holding ≥128,000 input tokens |
-| **It spawns child processes** | `execute` is a host shell ([6.2](06-agent.md#62-the-blast-radius)), and whatever it launches shares the container memory limit. A target project test suite can peak far above the agent itself — closet_ai's ONNX segmentation suite measured 440–517 MB |
-| **Nothing calls it while it works** | The entry point is `python -m agent.code [workdir] < brief.md`. There is an HTTP server now ([18](18-serving.md)), and it does not change this: a caller submits a task and polls, so the hours in between still carry no inbound traffic |
+| **It spawns child processes** | `execute` is a host shell ([The blast radius](../agents/code.md#the-blast-radius)), and whatever it launches shares the container memory limit. A target project test suite can peak far above the agent itself — closet_ai's ONNX segmentation suite measured 440–517 MB |
+| **Nothing calls it while it works** | The entry point is `python -m agent.code [workdir] < brief.md`. There is an HTTP server now ([Serving the agents](serving.md)), and it does not change this: a caller submits a task and polls, so the hours in between still carry no inbound traffic |
 
 CPU is the one thing it barely needs. The agent is I/O-bound on provider calls;
 it is the `pytest` child, not the loop, that wants a core.
 
-## 17.3 Why request/response platforms cannot host it
+## Why request/response platforms cannot host it
 
 Each of the following was checked against vendor documentation, not assumed.
 
@@ -55,11 +55,11 @@ Two corrections worth keeping, because both circulate as folklore:
   is running*, not the CPU time of requests. Scale-to-zero does not make a long
   run cheap; it makes it fail.
 
-## 17.4 The ceiling is the pool, not the compute
+## The ceiling is the pool, not the compute
 
 This is why "keep the agents always working" does not follow from "rent a
 server that is always on". Summing `rpd` across
-[config.yaml](../llm_router/config.yaml) (2026-09-07: 1 Groq account, 6 Gemini):
+[config.yaml](../../llm_router/config.yaml) (2026-09-07: 1 Groq account, 6 Gemini):
 
 | Tier | Requests/day |
 | --- | --- |
@@ -73,13 +73,13 @@ Aggregate RPM is 600, so the whole pool's day is **~44 minutes of flat-out
 routing**. The scarce tier is scarcer still: 600 reasoning requests is a couple
 of hours of one agent's architectural steps, after which quality degrades to
 gemma for the rest of the day
-([4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent)).
+([Skipping a member whose day is spent](../pool/failover.md#skipping-a-member-whose-day-is-spent)).
 
 An always-on host cannot manufacture free-tier quota. It buys idle time, and
-[1.1](01-overview.md#11-the-goal) is explicitly about not paying a recurring
+[The goal](../overview.md#the-goal) is explicitly about not paying a recurring
 bill to keep an agent running.
 
-## 17.5 What fits
+## What fits
 
 Scheduled or triggered execution, on something with a real filesystem.
 
@@ -99,30 +99,30 @@ scheduled-job price for the same work.
 Sizing, whichever is chosen: **1 vCPU / 2 GiB** for the agent, **4 GiB** if it
 runs a heavy test suite in the jail. 512 MB is not a candidate.
 
-## 17.6 What has to change first
+## What has to change first
 
 Prerequisites, not polish. Every option above trips on them.
 
-*Where these stand since [18. Serving](18-serving.md): the ledger and the
+*Where these stand since [Serving the agents](serving.md): the ledger and the
 secrets are handled by the image and its volumes
-([18.7](18-serving.md#187-what-has-to-be-a-volume)). Per-process cooldown and
+([What has to be a volume](serving.md#what-has-to-be-a-volume)). Per-process cooldown and
 concurrent JSONL appends are **not** solved — they are the reason the server
 runs exactly one worker
-([18.5](18-serving.md#185-why-there-is-exactly-one-worker)), which contains
+([Why there is exactly one worker](serving.md#why-there-is-exactly-one-worker)), which contains
 them rather than fixing them.*
 
 - **The usage ledger is machine-local and ephemeral.**
   `llm_router/.usage/ledger.jsonl` lives inside the repo tree
-  ([14.3](14-quota-panel.md#143-two-files-under-llm_routerusage),
-  [2.7](02-repo-map.md#27-state-that-lives-outside-git)). In a container every
+  ([Two files, under `llm_router/.usage/`](../pool/quota.md#two-files-under-llm_routerusage),
+  [State that lives outside git](../overview.md#state-that-lives-outside-git)). In a container every
   start begins with an empty ledger, so the RPD preflight believes the whole
   pool is fresh, hammers accounts that already spent their day, and
   rediscovers the wall by 429 — the exact behaviour
-  [4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent) exists to
+  [Skipping a member whose day is spent](../pool/failover.md#skipping-a-member-whose-day-is-spent) exists to
   avoid. It has to outlive the container before anything else is worth doing.
 - **Cooldown is per-process** and unshared
-  ([2.7](02-repo-map.md#27-state-that-lives-outside-git),
-  [13.4](13-roadmap.md#134-open-questions)). Already a known limitation on one
+  ([State that lives outside git](../overview.md#state-that-lives-outside-git),
+  [Open questions](../status.md#open-questions)). Already a known limitation on one
   machine; running two executions in parallel makes it load-bearing. Keep
   concurrency at 1 until it is solved.
 - **Appending JSONL from concurrent replicas is not safe**, least of all over
@@ -135,15 +135,11 @@ them rather than fixing them.*
   in the router becomes the only thing between a dropped socket and a stalled
   run.
 
-## 17.7 Provider terms
+## Provider terms
 
-[1.4](01-overview.md#14-what-is-deliberately-not-built) commits this project to
+[What is deliberately not built](../overview.md#what-is-deliberately-not-built) commits this project to
 not circumventing provider terms of service. Moving six Gemini accounts and one
 Groq account from a residential connection to a datacenter IP, all egressing
 through one NAT, is a visible change in profile. Read each provider's terms
 before deploying. This is the project's own stated constraint, not an external
 one.
-
----
-
-**Previous:** [← 16. Delegation](16-delegation.md) · **Next:** [18. Serving the agents →](18-serving.md)

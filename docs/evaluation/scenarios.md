@@ -1,14 +1,14 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 9. Scenarios
+# Scenarios
 
 *What a test case looks like, why the answers are hidden from the agent, and
 how a scenario proves it still measures something.*
 
 Scenarios live in the **`agent_evals`** repo, not this one
-([8.3](08-evaluation-method.md#83-where-things-live)).
+([Where things live](method.md#where-things-live)).
 
-## 9.1 Storage: one branch per topic, one commit per scenario
+## Storage: one branch per topic, one commit per scenario
 
 ```
 topic/<topic>              the topic's line of scenarios
@@ -23,7 +23,7 @@ Tags are the handle runs actually use, and they are **never moved**. To change a
 scenario, commit again and tag the new commit — so a result citing the old tag
 stays reproducible forever.
 
-## 9.2 Materialization is `git archive`, not a checkout
+## Materialization is `git archive`, not a checkout
 
 Three things follow, all load-bearing:
 
@@ -34,7 +34,7 @@ Three things follow, all load-bearing:
 - No detached-HEAD or dirty-tree handling on the scenario repo, and concurrent
   reads of different scenarios can't interfere.
 
-## 9.3 Anatomy
+## Anatomy
 
 ```
 <the code, at the root>   the code state — this is what the agent gets
@@ -58,7 +58,7 @@ The runner **asserts** the withholding after materializing rather than assuming
 it. A scenario that leaked its own tests would score every configuration far too
 well, and would read as a win rather than as a bug.
 
-### 9.3.1 `evaluation/scenario.md`, the page for a human
+### `evaluation/scenario.md`, the page for a human
 
 `criteria.md` is written *at* a judge and `## Judge notes` is written at a
 verdict; neither is what someone browsing the set to decide what to author next
@@ -76,7 +76,7 @@ the trap itself.
 The first line of *The challenge* is lifted verbatim into the catalogue's
 summary column, so it is written as one self-contained sentence.
 
-## 9.4 `scenario.yaml`
+## `scenario.yaml`
 
 ```yaml
 id: router-cooldown
@@ -85,7 +85,7 @@ category: bugfix            # bugfix | feature | refactor | tests | ambiguous | 
 difficulty: L1              # see the ladder below
 tags: [python, single-file, long-context]
 context_mode: none          # none | claude_md — does the code state ship a CLAUDE.md?
-immutable:                  # files the agent must not weaken (see 8.5)
+immutable:                  # files the agent must not weaken (see method.md, "The run lifecycle")
   - tests/test_cooldown.py
 doc_invariants:             # sentences that must survive, not files that must not change
   docs/cooldown.md:
@@ -107,11 +107,11 @@ satisfies the first while failing the second. A run passes only if every
 
 **`context_mode`** mirrors agentbench's context settings. Since the agent loads
 a workdir's `CLAUDE.md` as its system prompt
-([13.2](13-roadmap.md#132-what-to-do-next)), running the same scenario in
+([What to do next](../status.md#what-to-do-next-1)), running the same scenario in
 both modes measures how much the harness depends on curated context — worth
 knowing before investing in more of it.
 
-### 9.6.0 Where a scenario comes from
+### Where a scenario comes from
 
 A scenario invented to be testable tests what is easy to grade. Every scenario
 added since the generative batch is drawn from a request someone actually made,
@@ -121,9 +121,9 @@ recovered from the recorded sessions with `python -m evals mine --out <dir>` —
 The extractor interprets nothing: it turns an append-only log into a turn list
 so that reading a hundred sessions is a grep. The judgement — which shapes recur
 and which are worth a scenario — is a table a human maintains, in
-[evals/ARCHETYPES.md](../evals/ARCHETYPES.md).
+[evals/ARCHETYPES.md](../../evals/ARCHETYPES.md).
 
-### 9.6.1 `immutable` or `doc_invariants`?
+### `immutable` or `doc_invariants`?
 
 They protect different things and are not interchangeable.
 
@@ -148,7 +148,7 @@ deleting the guarantee that stated it, in the page, the test and the code at
 once. Until this key existed that was caught only because that one scenario
 happens to pin the phrase with a hidden test.
 
-## 9.5 The task file
+## The task file
 
 ```markdown
 ---
@@ -172,28 +172,28 @@ a failing test, fix it"*, *"users report X, find and fix it"* (no test given),
 and *"add feature Y on top"* — three very different capability probes for one
 authoring cost.
 
-## 9.6 Categories to cover
+## Categories to cover
 
 | Category | What it probes |
 | --- | --- |
 | **bugfix, test-driven** | Baseline competence. Failing test provided. |
 | **bugfix, symptom only** | Diagnosis — no test, the agent must localize. |
 | **feature** | Multi-file construction, from a spec plus hidden tests. |
-| **generative** | Construction from nothing — "build X". No before state, so the empty-patch gate degenerates and a second reference implementation replaces it; scored on a tier ladder rather than a boolean ([design note](design/generative-scenarios.md)). |
+| **generative** | Construction from nothing — "build X". No before state, so the empty-patch gate degenerates and a second reference implementation replaces it; scored on a tier ladder rather than a boolean ([design note](../design/generative-scenarios.md)). |
 | **tests** | Writing tests for existing code; verified mutation-style (the tests must fail against a seeded broken variant). |
 | **refactor** | Restraint — behaviour-preserving, hidden tests must still pass. |
-| **long-context** | A requirement buried in a document too large to read in full — the agent must find the part that matters. **Not** a routing probe; see 9.6.2. |
+| **long-context** | A requirement buried in a document too large to read in full — the agent must find the part that matters. **Not** a routing probe; see [What `long-context` stopped meaning](#what-long-context-stopped-meaning). |
 | **ambiguous** | Judge-only. Does the agent ask, or invent requirements? |
 | **trap** | The brief asks for something the code contradicts, or that would break a documented invariant. Measures over-eagerness. No auto-pass. |
 
-### 9.6.2 What `long-context` stopped meaning
+### What `long-context` stopped meaning
 
 It used to read *"a large file that exceeds small-TPM pool members. Directly
 probes size-based routing."* That is no longer true of any run in this set, and
 the definition was measuring nothing.
 
 A coding session selects only members holding at least **128,000** input tokens
-(`CONTEXT_FLOOR` in [agent/utils/pool.py](../agent/utils/pool.py)). The
+(`CONTEXT_FLOOR` in [agent/utils/pool.py](../../agent/utils/pool.py)). The
 8,000-token Groq members are therefore never candidates for this work, so no
 scenario file can be large enough to exclude them — they were excluded before
 the file was read. A category defined around a filter that never runs cannot
@@ -218,7 +218,7 @@ gap to paper over. If those members ever serve a coding session again, the thing
 to add is a scenario whose *prompt* fits 8,000 tokens — not a large file, which
 is what the old definition confused itself with.
 
-## 9.7 The difficulty ladder
+## The difficulty ladder
 
 Scenarios carry an explicit difficulty, because **a task that every
 configuration passes, or every configuration fails, carries no information.**
@@ -242,7 +242,7 @@ Recording L3 results is still worth it as an absolute-progress marker — just
 never make a promotion decision on a metric that reads zero for both
 configurations.
 
-## 9.8 The validation gate
+## The validation gate
 
 Every scenario must self-test before it's usable:
 
@@ -263,7 +263,7 @@ python -m evals validate
    reads clean through every check above — `0 > 0` is false, `0 != 0` is false,
    and the reference solution "passes" — so the scenario hands every
    configuration a free pass, forever, without measuring anything.
-5. Neither catalogue page ([9.9](#99-the-catalogue)) is in the code state. They
+5. Neither catalogue page ([The catalogue](#the-catalogue)) is in the code state. They
    repeat the withheld material, and `docs/` is visible seed content, so a topic
    branch rooted on a master commit that carried them would hand a human's full
    explanation to the agent.
@@ -276,7 +276,7 @@ every configuration regressing at once — a conclusion that would waste days.
 A scenario that fails validation never enters a suite. This single gate catches
 most of the ways an eval set silently stops measuring anything.
 
-## 9.9 The catalogue
+## The catalogue
 
 The set is only useful if someone can see what is in it. `python -m evals index`
 renders two pages onto the scenario repo's `master`, which is documentation and
@@ -291,7 +291,7 @@ nothing else:
   A scenario's page is a stable address, so a result or a commit message can
   cite one; a backticked scenario id in the prose becomes a link to it.
 - **`docs/results/`** — what each agent version scored
-  ([8.3](08-evaluation-method.md#83-where-things-live)).
+  ([Where things live](method.md#where-things-live)).
 
 `--check` fails when either has drifted from the tags or the run records, and
 a page under `docs/scenarios/` that no tag claims any more — what a renamed tag
@@ -301,10 +301,6 @@ hand-maintained table this replaced had already gone wrong in the ordinary way:
 the index exists to show was the gap it was hiding.
 
 This is the **one** thing that ever writes to the scenario repo
-([9.2](#92-materialization-is-git-archive-not-a-checkout) is otherwise still
+([Materialization is `git archive`, not a checkout](#materialization-is-git-archive-not-a-checkout) is otherwise still
 true: nothing writes to a *scenario*). It writes on `master`, which no run
 materializes, which is what lets both pages repeat what a run withholds.
-
----
-
-**Previous:** [← 8. Evaluation method](08-evaluation-method.md) · **Next:** [10. Metrics →](10-metrics.md)

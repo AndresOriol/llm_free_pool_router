@@ -2,7 +2,7 @@
 
 `RouterChatModel` is a `BaseChatModel`, so `create_deep_agent` takes the pool
 where a model id would go, with no adapter
-([4.5](../../docs/04-failover.md#45-the-failover-loop)).
+([The failover loop](../../docs/pool/failover.md#the-failover-loop)).
 
 **The floor is hard.** Groq's members hold 8,000 input tokens and 100,000 *per
 day*; one full-context request would spend an account's entire daily budget. A

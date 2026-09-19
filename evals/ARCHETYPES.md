@@ -8,7 +8,7 @@ worth lives here.
 Seven shapes recur across the corpus. Five became scenarios; two did not, and
 the reason is recorded so nobody re-derives it.
 
-Read [9. Scenarios](../docs/09-scenarios.md) for what a scenario has to be, and
+Read [Scenarios](../docs/evaluation/scenarios.md) for what a scenario has to be, and
 [design/generative-scenarios.md](../docs/design/generative-scenarios.md) §2 and
 §4 for why a recorded request is better raw material than an invented one.
 
@@ -55,7 +55,7 @@ or the scenario measures luck.
 
 A session that resumes another's work is only gradeable if the account it reads
 is load-bearing, and
-[10.2.1](../docs/10-metrics.md#1021-the-account-and-why-it-is-only-counted)
+[The account, and why it is only counted](../docs/evaluation/metrics.md#the-account-and-why-it-is-only-counted)
 records that 7 of 23 successful runs wrote one at all. Build the expectation
 first, then the scenario that depends on it.
 

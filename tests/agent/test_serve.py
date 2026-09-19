@@ -16,7 +16,7 @@ than once.
 
 The third is **submission that blocks**. A run lasts hours and every platform in
 front of this kills a request in minutes
-([17.3](../../docs/17-deployment.md#173-why-requestresponse-platforms-cannot-host-it)),
+([Why request/response platforms cannot host it](../../docs/operations/deployment.md#why-requestresponse-platforms-cannot-host-it)),
 so `run` answering 202 immediately is the property that makes the
 deployment possible at all -- and the easiest one to lose to a refactor that
 "simplifies" the queue away.
@@ -504,7 +504,7 @@ def test_a_timeout_is_reported_as_a_stop_and_not_a_crash(runner, monkeypatch):
 
 def test_tasks_are_run_one_at_a_time(runner, monkeypatch):
     """Concurrency is one, and it is not a default to tune: per-process
-    cooldown and a JSONL ledger both depend on it (docs/18-serving.md#185)."""
+    cooldown and a JSONL ledger both depend on it (docs/operations/serving.md#why-there-is-exactly-one-worker)."""
     overlap = []
     inside = threading.Semaphore(1)
 

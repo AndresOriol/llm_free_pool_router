@@ -1,11 +1,11 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 8. Evaluation method
+# Evaluation method
 
 *How a change to the harness gets decided. This is the design; the current
-numbers are in [11. Evaluation status](11-eval-status.md).*
+numbers are in [Status and roadmap](../status.md).*
 
-## 8.1 The premise
+## The premise
 
 Changes to the harness — router config, system prompt, backend, agent loop —
 are **evaluated, not argued**. A change that can't be shown to help doesn't
@@ -20,7 +20,7 @@ set of scenarios.
 This is the point of the whole system: the harness stops being improved by
 plausible reasoning and starts being improved by measurement.
 
-## 8.2 Vocabulary
+## Vocabulary
 
 | Term | Meaning |
 | --- | --- |
@@ -32,11 +32,11 @@ plausible reasoning and starts being improved by measurement.
 | **suite** | A named subset of tasks, so a targeted change needn't pay for the full set. |
 | **verdict** | A run's graded result: automatic metrics + integrity checks + judge scores. |
 
-## 8.3 Where things live
+## Where things live
 
 **Code with the code it measures; data on its own.**
 
-- **This repo** — the agent under test, plus [evals/](../evals/): the runner,
+- **This repo** — the agent under test, plus [evals/](../../evals/): the runner,
   the metric definitions, the configurations, and the results. Metrics are code
   and evolve with the agent, so a metric change and the change it measures land
   in the same history.
@@ -44,7 +44,7 @@ plausible reasoning and starts being improved by measurement.
   whose tree is a real codebase state, which is the natural storage for a test
   case aimed at something that edits code. Its `master` carries no scenario at
   all: it is documentation, holding the generated scenario catalogue and the
-  **results ledger** ([9.9](09-scenarios.md#99-the-catalogue)).
+  **results ledger** ([The catalogue](scenarios.md#the-catalogue)).
 
 Two consequences, both of which were nearly designed wrong:
 
@@ -59,9 +59,9 @@ Two consequences, both of which were nearly designed wrong:
   forks, so `python -m evals index` renders the ledger onto its `master`. The
   evidence stays local; the ledger names the `run_id` holding each.
 - Results answer LangSmith expiring: everything a verdict rests on is on disk
-  ([7.1](07-observability.md#71-why-two)).
+  ([Why two](observability.md#why-two)).
 
-## 8.4 What a configuration is
+## What a configuration is
 
 A pinned commit plus overrides:
 
@@ -82,7 +82,7 @@ a comparison runs. `router_config` is the one path resolved against the repo
 rather than the worktree, which is why every configuration sets it to
 `llm_router/config.yaml`: one pool, shared by every arm, instead of each arm
 drawing from whatever its own commit pinned
-([5.2](05-providers.md#52-config-schema)). The runner records the resolved
+([Config schema](../pool/providers.md#config-schema)). The runner records the resolved
 **SHA** plus a hash of the effective overrides as the fingerprint: `ref:
 master` today and `ref: master` next week are different configurations, and the
 records say so.
@@ -104,16 +104,16 @@ carry.
 `agent_cmd` stays overridable even though there is one shipping agent, because
 there is more than one thing to launch from a config: `evals/fake_agent.py`
 exercises the runner's own paths without spending quota, and `agent.explore`
-([15](15-explorer.md)) deliberately takes the same arguments as `agent.code`,
+([The web explorer](../agents/explore.md)) deliberately takes the same arguments as `agent.code`,
 so pointing an arm at the explorer is a config line rather than a second
 runner. A config that omits it gets `python -m agent.code <workdir>`.
 
 A configuration may also **pin a single model**, bypassing failover. That isn't
 how the agent ships, but it's the lowest-variance way to attribute a change to
 the prompt or loop rather than to which account happened to be warm
-([8.6](#86-fair-comparison)).
+([Fair comparison](#fair-comparison)).
 
-## 8.5 The run lifecycle
+## The run lifecycle
 
 Runs execute **serially**. Parallel runs contend for the same free-tier pool,
 which both burns quota faster and makes each run's model mix depend on the
@@ -156,7 +156,7 @@ others — destroying comparability.
    One recorded run leaked diff markers into a test body, scored `tampered`, and
    was therefore the only run in its batch with no failure class at all — a
    textbook tooling failure, invisible.
-6. **Judge** — [10.4](10-metrics.md#104-the-judge). Skipped if a run with an
+6. **Judge** — [The judge](metrics.md#the-judge). Skipped if a run with an
    identical diff hash was already judged.
 7. **Record** — write `evals/results/runs/<run_id>/`, one self-contained
    directory.
@@ -166,7 +166,7 @@ leads so that a plain listing of `results/runs/` is chronological and the newest
 batch is the last thing on screen — and so `bundle --since` is a prefix
 comparison rather than a slice off the end of a variable-length name.
 
-## 8.6 Fair comparison
+## Fair comparison
 
 The pool picks a different model per step depending on which accounts are warm
 *at that moment*. Two threats follow. Both are design problems, not caveats.
@@ -187,7 +187,7 @@ quick read, N=5 when promoting. Report success rate with a Wilson interval and
 treat overlapping intervals as **no difference**. Concretely: at N=5 × 6 tasks
 (30 trials), differences under roughly 15 points are noise. Don't ship on them.
 
-## 8.7 The promotion rule
+## The promotion rule
 
 > Promote a configuration over the baseline when **no task regresses by more
 > than one trial**, *and* either success rate improves beyond interval overlap,
@@ -199,7 +199,7 @@ Everything else is a draw. **A draw means keep the simpler configuration.**
 These thresholds are a starting heuristic, not a measurement — recalibrate them
 once a real baseline shows actual run-to-run variance.
 
-## 8.8 Suites and selective running
+## Suites and selective running
 
 Tasks carry `suite` and `tags`, and the runner filters:
 
@@ -228,7 +228,7 @@ and measured runs is worse than no leaderboard:
 python -m evals run --config stub-fix --config stub-lost --reps 1 --results /tmp/selftest
 ```
 
-## 8.9 Budget
+## Budget
 
 A single task run is roughly 20–60 provider calls. `smoke` at 4 tasks × 3 reps ×
 2 configurations ≈ 24 runs — several hundred to ~1500 calls, executed serially.
@@ -239,7 +239,7 @@ loop.
 Judging is the only paid component, and diff-hash caching keeps it to one call
 per distinct patch.
 
-## 8.10 Prior art, and why we still build
+## Prior art, and why we still build
 
 Public SWE-agent benchmarks are calibrated for frontier models on real
 repositories. We run pooled free-tier 8B–70B models — a different capability
@@ -267,7 +267,7 @@ are ever wanted, the cheap move is a small shim exposing the router as
 scenarios test the *agent loop*, and neither needs bespoke wiring. Don't build
 it until a specific harness is actually wanted; noted so it isn't re-derived.
 
-## 8.11 The train and holdout split
+## The train and holdout split
 
 To prevent overfitting harness changes to the few scenarios they were diagnosed
 from, the eval set is split into train and holdout splits, keyed by topic in
@@ -293,8 +293,18 @@ roughly a day of free-tier quota (~20 provider calls a run, ~9 runs a day on the
 flash tier), which is payable once per fix.
 
 A pass count at these sample sizes is weak evidence; the improvement agent's
-gate is a floor, not a proof (see [6.4.2](06-agent.md#642-the-pass-column-is-noise)).
+gate is a floor, not a proof (see [The pass column is noise](../agents/code.md#the-pass-column-is-noise)).
 
 ---
-**Previous:** [← 7. Observability](07-observability.md) · **Next:** [9. Scenarios →](09-scenarios.md)
 
+
+## The rule that governs changes to the harness
+
+Any change to the harness — router config, system prompt, backend, agent loop —
+is a candidate configuration, not a decision. Branch it, add a config, run the
+suite that covers it interleaved against baseline, apply the promotion rule, and
+record the verdict in [evals/CONFIGS.md](../../evals/CONFIGS.md) — **including for
+changes that lost.** Knowing what didn't work is most of the value of keeping
+the data, and it's what stops the same idea being re-tried every few months.
+
+Full workflow: [Evaluation method](#).

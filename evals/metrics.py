@@ -91,7 +91,7 @@ def added_tests(patch_text: str) -> int:
     and `bots-to-base-class` the added tests pinned exactly the bug and the
     invariant under test -- the behaviour a standing maintainer most needs, and
     the only thing the harness did with it was score it as tampering
-    (docs/08-evaluation-method.md#85).
+    (docs/evaluation/method.md#the-run-lifecycle).
 
     Added lines only, and only inside a file pytest would collect: a `def
     test_...` moved between files is not a new test, and one written into a
@@ -195,7 +195,7 @@ def from_trace(events: list) -> dict:
         # produced this needed exactly that split: over 40 runs `tokens_in`
         # correlates +0.95 with `steps` and only +0.24 with `failover_bounces`,
         # so what a run spends is the conversation being re-sent every step,
-        # not failover replaying it (docs/06-agent.md#611).
+        # not failover replaying it (docs/agents/code.md#the-arm-that-was-deleted).
         "tokens_per_call": round(
             tokens_in / len(provider_starts))
         if provider_starts else 0,

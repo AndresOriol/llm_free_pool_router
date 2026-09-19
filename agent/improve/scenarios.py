@@ -2,14 +2,14 @@
 
 The set has five scenarios and the repo already says why that is the binding
 constraint: seven configurations were run against one L0 scenario and none could
-be distinguished from another ([6.4.2](../../docs/06-agent.md#642-the-pass-column-is-noise)).
+be distinguished from another ([The pass column is noise](../../docs/agents/code.md#the-pass-column-is-noise)).
 More scenarios is the only thing that raises the ceiling on what any measurement
 here can claim -- including every claim this agent makes about its own fixes.
 
 **The raw material is already the right kind.** `evals/mine.py` established the
 principle: a scenario invented to be testable tests what is easy to grade, and
 one recovered from a request someone actually made tests what someone actually
-needed ([9.6.0](../../docs/09-scenarios.md#960-where-a-scenario-comes-from)).
+needed ([Where a scenario comes from](../../docs/evaluation/scenarios.md#where-a-scenario-comes-from)).
 That module mines recorded *Claude Code* sessions and deliberately interprets
 nothing, leaving the authoring to a human and a table
 ([evals/ARCHETYPES.md](../../evals/ARCHETYPES.md)).
@@ -24,7 +24,7 @@ to say what the failure was.
 `agent_evals` repository, needs a seed codebase, hidden tests and a gold patch,
 and getting it wrong in the direction of "leaks its own tests" would score every
 configuration far too well and read as a win rather than as a bug
-([9.3](../../docs/09-scenarios.md#93-anatomy)). So what is produced here is a
+([Anatomy](../../docs/evaluation/scenarios.md#anatomy)). So what is produced here is a
 *brief*: the judgement, written down, in the shape the builder needs -- and the
 building is a coding session against that repository, with the seed, the tests
 and the patch written by an agent that can run them.
@@ -46,7 +46,7 @@ logger = logging.getLogger("harness.improve")
 DRAFTS_DIR = Path("evals") / "results" / "scenarios"
 
 # `scenario.yaml`'s own vocabulary, so a draft cannot invent a category the
-# runner will reject ([9.4](../../docs/09-scenarios.md#94-scenarioyaml)).
+# runner will reject ([`scenario.yaml`](../../docs/evaluation/scenarios.md#scenarioyaml)).
 CATEGORIES = ("bugfix", "feature", "refactor", "tests", "ambiguous", "trap")
 DIFFICULTIES = ("L0", "L1", "L2", "L3")
 
@@ -76,7 +76,7 @@ class Draft:
 
         Deliberately the four headings of `evaluation/scenario.md` -- The seed,
         The task, The challenge, What it checks
-        ([9.3.1](../../docs/09-scenarios.md#931-evaluationscenariomd-the-page-for-a-human))
+        ([`evaluation/scenario.md`, the page for a human](../../docs/evaluation/scenarios.md#evaluationscenariomd-the-page-for-a-human))
         -- plus the two things only the source run can supply. A builder that
         follows this is filling in a page the set already has a shape for,
         rather than being asked to invent one.
@@ -134,7 +134,7 @@ class Draft:
             "above, `scenario.md`, `criteria.md`, a `solution.patch` that makes "
             "`fail_to_pass` pass, and `scenario.yaml` naming both test sets.",
             "",
-            "Read `docs/09-scenarios.md` before starting, and run `python -m "
+            "Read `docs/evaluation/scenarios.md` before starting, and run `python -m "
             "evals validate --scenario <tag>` when finished: the gate checks "
             "that the untouched seed fails `fail_to_pass`, that the gold patch "
             "makes it pass, and that nothing under `evaluation/` leaked into "
@@ -197,7 +197,7 @@ def draft(store: DraftStore, fields: dict, record=None) -> Draft:
     is not a second opinion about it. What it refuses is a draft that could not
     become a scenario at all: no prompt to pipe, or no statement of what would
     go from failing to passing, which is the whole acceptance contract
-    ([9.4](../../docs/09-scenarios.md#94-scenarioyaml)).
+    ([`scenario.yaml`](../../docs/evaluation/scenarios.md#scenarioyaml)).
     """
     title = str(fields.get("title") or "").strip()
     if not title:
@@ -243,7 +243,7 @@ def builder_brief(draft: Draft, scenario_repo: str) -> str:
     """The request handed to a coding session bound to the scenario repo."""
     return (
         f"Build the eval scenario described below in this repository "
-        f"({scenario_repo}). Read `docs/09-scenarios.md` in the harness repo "
+        f"({scenario_repo}). Read `docs/evaluation/scenarios.md` in the harness repo "
         f"first if it is reachable; otherwise follow the structure the brief "
         f"states.\n\n"
         f"Work on a topic branch. When you are done, the untouched seed must "

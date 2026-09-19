@@ -83,7 +83,7 @@ def main() -> None:
     # pass has drafted. `scenarios` is offered only if that repo is really
     # there. IMPROVE_FIX=0 takes both away, which leaves a diagnose-only pass --
     # the arm to compare against when asking whether the delegation is worth
-    # what it spends (docs/19-improvement-agent.md).
+    # what it spends (docs/agents/improve.md).
     wanted = () if os.environ.get("IMPROVE_FIX") == "0" else ("code", "scenarios")
     peers = delegation.available(wanted)
 
@@ -108,7 +108,7 @@ def _summary(final, written, workdir: Path) -> None:
 
     **The final message is the output of this command**, unclipped, because a
     caller may have run it from a shell and this is the answer it gets back
-    (docs/16-delegation.md).
+    (docs/agents/delegation.md).
     """
     messages = (final or {}).get("messages") or []
     said = [m for m in messages if isinstance(m, AIMessage)]

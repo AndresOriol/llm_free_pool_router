@@ -7,7 +7,7 @@ script swaps one agent for the other by changing `agent_cmd` and nothing else
 
 **This command is also how another agent delegates to this one.** There is no
 protocol: a caller runs it with `execute` and reads the summary below
-(docs/16-delegation.md).
+(docs/agents/delegation.md).
 
 Environment:
   ROUTER_CONFIG      pool config to load; unset uses llm_router/config.yaml
@@ -18,7 +18,7 @@ Environment:
                      few are reserved so a stopped run can still commit
   AGENT_PEERS        comma-separated agents this one may run; unset means
                      `explore`, and an empty value means none
-                     (docs/16-delegation.md)
+                     (docs/agents/delegation.md)
   AGENT_INVARIANT_GUARD=0, AGENT_WRITE_ACCOUNT=0
                      leave that section out of the prompt (agent.py)
 
@@ -79,7 +79,7 @@ def main() -> None:
             model, task, workdir, config={"recursion_limit": budget},
             floor=floor, members=members,
             # Probed, not declared: an agent offered and then unusable costs a
-            # session to discover (docs/16-delegation.md).
+            # session to discover (docs/agents/delegation.md).
             peers=delegation.available(),
             trace_path=Path(trace_file) if trace_file else None)
 
@@ -87,7 +87,7 @@ def main() -> None:
     # Exit 0 for any clean end. Whether the work was any good is the hidden
     # tests' verdict, not this process's exit code -- exiting non-zero on an
     # orderly stop made the eval runner record it as `crash`, which means the
-    # opposite (docs/08-evaluation-method.md#85-the-run-lifecycle).
+    # opposite (docs/evaluation/method.md#the-run-lifecycle).
     sys.exit(0)
 
 
@@ -111,7 +111,7 @@ def _summary(final, written, state=None) -> None:
 
     **The final message is the output of this command**, unclipped, because
     another agent may have run it and this is the answer it gets back
-    (docs/16-delegation.md). Everything below it is the mechanical detail a
+    (docs/agents/delegation.md). Everything below it is the mechanical detail a
     human wants and a caller can ignore.
     """
     messages = (final or {}).get("messages") or []
@@ -129,7 +129,7 @@ def _summary(final, written, state=None) -> None:
     # What the repository says, after what the session says about itself. A
     # caller reading this back from a delegation gets the verdict either way;
     # the prose above is not evidence and this is
-    # (docs/19-improvement-agent.md#199-what-the-first-live-pass-showed).
+    # (docs/agents/improve.md#what-the-first-live-pass-showed).
     verdict = gitstate.render(state or {})
     if verdict:
         print(f"\n{verdict}")

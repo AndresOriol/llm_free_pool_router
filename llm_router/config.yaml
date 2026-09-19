@@ -2,7 +2,7 @@
 # step and reroutes mid-task). Groq's `compound` systems are excluded for that.
 #
 # Models are defined once per platform; the loader fans each out across every
-# account on that platform. See docs/03-pool-model.md and docs/05-providers.md.
+# account on that platform. See docs/pool/model.md and docs/pool/providers.md.
 #
 # Fields:
 #   type              provider adapter: openai_compatible (url = v1 base) or gemini
@@ -12,7 +12,7 @@
 #                     min(TPM, context window). Omit only if genuinely unknown.
 #   limits            published free-tier quota (rpm/rpd/tpm/tpd). The quota panel
 #                     checks all four; the router reads only rpd, to skip a member
-#                     whose day is spent (docs/04-failover.md). A missing key = not
+#                     whose day is spent (docs/pool/failover.md). A missing key = not
 #                     published/enforced. Snapshot values -- re-check periodically.
 #
 # Priority tiers: reasoning (1-9) -> mid (10-19) -> workhorse (20-29) -> last
@@ -114,7 +114,7 @@ models:
 
   # -- Workhorse fallback: weaker, but Groq's shared request budget routinely
   # dumps whole tasks here once the upper tiers exhaust, so quality still matters.
-  # See docs/03-pool-model.md#34-priority-tiers.
+  # See docs/pool/model.md#priority-tiers.
   - name: GptOss20b
     platform: groq
     model: openai/gpt-oss-20b

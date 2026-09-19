@@ -3,7 +3,7 @@
 
 # The keys. Seven provider accounts plus LangSmith and Tavily live here, and
 # none of them belongs in an image layer -- they are environment variables at
-# run time (docs/17-deployment.md#176-what-has-to-change-first). Listed even
+# run time (docs/operations/deployment.md#what-has-to-change-first). Listed even
 # though it is gitignored: a build context is the working tree, not the index.
 llm_router/.env
 **/.env

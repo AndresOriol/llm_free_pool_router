@@ -22,10 +22,10 @@ several, review the first and say so.
 The system under review is a **conversational coding agent** — `create_deep_agent`
 configured the way `deepagents-code` configures one, with this project's free-tier
 pool as its model (`agent/code/`,
-[6.5](../../docs/06-agent.md#65-what-makes-it-a-coding-agent)). One conversation, one
+[What makes it a coding agent](../../docs/agents/code.md#what-makes-it-a-coding-agent)). One conversation, one
 workdir, one task on stdin. It is the **only** coding agent; the narrow-role arm
 it was compared against is deleted
-([6.1.1](../../docs/06-agent.md#611-the-arm-that-was-deleted)).
+([The arm that was deleted](../../docs/agents/code.md#the-arm-that-was-deleted)).
 
 Four properties of it shape every review you will write:
 
@@ -51,7 +51,7 @@ Four properties of it shape every review you will write:
 **The open question about it is cost.** The conversational loop lost the last
 comparison 226,854 input tokens to 5,756, and the arm that won was retired
 without the re-run ever happening
-([6.4.1](../../docs/06-agent.md#641-the-cost-result-is-the-one-that-replicated)).
+([The cost result is the one that replicated](../../docs/agents/code.md#the-cost-result-is-the-one-that-replicated)).
 Every review therefore says something about *token trajectory*, not only about
 correctness. A run that passed expensively has not settled the question — and
 there is no longer a cheaper arm to fall back to, which makes the number matter
@@ -106,7 +106,7 @@ the same six headings.
 
 With a `trace.json`, read `turns`. The flattening that used to be your job is now
 done on the way to disk
-([7.8](../../docs/07-observability.md#77-what-goes-to-disk-the-condensed-run)):
+([What goes to disk: the condensed run](../../docs/evaluation/observability.md#what-goes-to-disk-the-condensed-run)):
 the middleware spans are gone and each tool call sits under the turn that asked
 for it. What is *not* pruned is the conversation: every turn keeps its `input`,
 the whole history that call received, so §4's question is answered by reading
@@ -249,7 +249,7 @@ Rules on this section, and they are hard:
   to". Counting across runs is J2's job, and it needs your notes to do it.
 - **Do not propose promoting or retiring an arm.** That is the promotion rule's
   call over a batch
-  ([8.7](../../docs/08-evaluation-method.md#87-the-promotion-rule)), and one run
+  ([The promotion rule](../../docs/evaluation/method.md#the-promotion-rule)), and one run
   carries no rate.
 - Do not propose anything you cannot say how to measure.
 

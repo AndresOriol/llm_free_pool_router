@@ -1,37 +1,37 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 18. Serving the agents
+# Serving the agents
 
 *How the agents become endpoints, what binds one to a repository, and why
 submitting a task does not wait for it.*
 
-## 18.1 What this adds, and what it does not
+## What this adds, and what it does not
 
-[17. Deployment](17-deployment.md) ends with a list of prerequisites and no
+[Deployment](deployment.md) ends with a list of prerequisites and no
 server. This is the server, plus the packaging that makes the prerequisites
 someone's actual configuration rather than a note.
 
 Nothing here changes an agent, and nothing here *is* an agent. The worker runs
 `python -m agent.<name> <workdir> --task "..."` — the same command a person
 types, in the same container — so a served run and a local run are the same run
-([16. Delegation](16-delegation.md)). What is added is an address, a queue, and
+([Delegation](../agents/delegation.md)). What is added is an address, a queue, and
 a workspace to bind to:
 
 | | CLI | Served |
 | --- | --- | --- |
 | Which agent | which module you ran | the path you POST to |
-| What it works on | `sys.argv[1]`, a path you trust | a workspace *name*, resolved under one mounted root ([18.4](#184-binding-an-agent-to-a-repository-or-a-filesystem)) |
+| What it works on | `sys.argv[1]`, a path you trust | a workspace *name*, resolved under one mounted root ([Binding an agent to a repository or a filesystem](#binding-an-agent-to-a-repository-or-a-filesystem)) |
 | The task | `--task`, or stdin to EOF | `task` in the request body, passed on as `--task` |
-| Waiting | the process runs until it is done | 202 and a task id; you poll ([18.3](#183-why-submission-does-not-block)) |
-| Concurrency | one process, one run | one worker, a queue ([18.5](#185-why-there-is-exactly-one-worker)) |
+| Waiting | the process runs until it is done | 202 and a task id; you poll ([Why submission does not block](#why-submission-does-not-block)) |
+| Concurrency | one process, one run | one worker, a queue ([Why there is exactly one worker](#why-there-is-exactly-one-worker)) |
 
 The CLI is not deprecated and remains the shortest way to run one task.
 
-## 18.2 The surface
+## The surface
 
 A request is a command line sent over a socket: which agent, which workspace,
 and the task string. There used to be A2A cards and `Message` objects here; they
-went with the rest of the protocol ([16.2](16-delegation.md#162-why-a-command-and-not-a-protocol)).
+went with the rest of the protocol ([Why a command, and not a protocol](../agents/delegation.md#why-a-command-and-not-a-protocol)).
 
 ```
 GET  /health                    liveness, no token
@@ -74,19 +74,19 @@ the *bound workspace*, which arrives with the task — so a workspace with nothi
 recorded in it comes back as a `failed` task whose output is the command's own
 refusal, naming what would fix it.
 
-## 18.3 Why submission does not block
+## Why submission does not block
 
-A run lasts hours ([17.2](17-deployment.md#172-what-the-workload-actually-is))
+A run lasts hours ([What the workload actually is](deployment.md#what-the-workload-actually-is))
 and every platform that might sit in front of this kills a request in seconds
 or minutes — 240 s of ingress on Container Apps, 900 s on Lambda
-([17.3](17-deployment.md#173-why-requestresponse-platforms-cannot-host-it)). A
+([Why request/response platforms cannot host it](deployment.md#why-requestresponse-platforms-cannot-host-it)). A
 synchronous `POST` that returns when the agent is finished is therefore not a
 simpler design that could be tightened later; it is a design that cannot be
 deployed at all.
 
 So `run` answers **202** with a `queued` task and a `Location` header, and the
 caller polls. A local delegation blocks instead
-([16.4](16-delegation.md#164-why-a-subprocess-costs-something-real)): an agent
+([Why a subprocess costs something real](../agents/delegation.md#why-a-subprocess-costs-something-real)): an agent
 running another is idle until it returns, and there is no gap to poll across.
 Over HTTP there is nothing else the gap could be.
 
@@ -96,7 +96,7 @@ half-written commit and a half-appended ledger line, and a cancel that leaves a
 workspace in a state nobody can describe is worse than one that refuses. The
 task comes back still `running`, and the caller reads the state.
 
-## 18.4 Binding an agent to a repository or a filesystem
+## Binding an agent to a repository or a filesystem
 
 One rule: **a workspace is a direct child of `WORKSPACES_DIR`, named, never a
 path.**
@@ -138,12 +138,12 @@ programs.
 **Nothing is pushed.** The jail permits `add`, `commit` and `branch` and
 refuses `merge`, `push`, `rebase`, `reset` and `clean`, unchanged from the CLI
 — the human's gate is still the merge
-([design/long-run-harness.md](design/long-run-harness.md)). A served run leaves
+([design/long-run-harness.md](../design/long-run-harness.md)). A served run leaves
 commits on a branch in a workspace, and someone reviews them.
 
-## 18.5 Why there is exactly one worker
+## Why there is exactly one worker
 
-Not a default to tune. Two of [17.6](17-deployment.md#176-what-has-to-change-first)'s
+Not a default to tune. Two of [What has to change first](deployment.md#what-has-to-change-first)'s
 prerequisites are unsolved and both bind here:
 
 - **Cooldown lives on the provider object**, in this process. The pool is built
@@ -156,11 +156,11 @@ prerequisites are unsolved and both bind here:
 
 And the ceiling was never compute anyway. Summed across the pool, a day is
 about **42 minutes of flat-out routing**
-([17.4](17-deployment.md#174-the-ceiling-is-the-pool-not-the-compute)). A
+([The ceiling is the pool, not the compute](deployment.md#the-ceiling-is-the-pool-not-the-compute)). A
 second worker would not buy throughput; it would buy 429s. Tasks queue, thirty‑two
 deep, and a full queue is a `503` rather than a dropped task.
 
-## 18.6 The token is not optional
+## The token is not optional
 
 This server runs agents that execute programs in a mounted filesystem and will
 clone a repository into it. An open port serving that is not a deployment.
@@ -183,28 +183,28 @@ remote code execution to anyone holding it. The compose file publishes to
 `127.0.0.1` for that reason; widening it is a decision, and TLS termination in
 front is someone's job.
 
-## 18.7 What has to be a volume
+## What has to be a volume
 
 Three directories, and the first one is the prerequisite
-[17.6](17-deployment.md#176-what-has-to-change-first) leads with:
+[What has to change first](deployment.md#what-has-to-change-first) leads with:
 
 | Path | Why it outlives the container |
 | --- | --- |
-| `LLM_ROUTER_USAGE_DIR=/var/lib/agent/usage` | **The usage ledger.** It defaults to a directory inside the package tree, so a fresh container starts believing the whole pool is unspent, hammers accounts that already spent their day, and rediscovers the wall by 429 — the exact behaviour [4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent) exists to avoid |
+| `LLM_ROUTER_USAGE_DIR=/var/lib/agent/usage` | **The usage ledger.** It defaults to a directory inside the package tree, so a fresh container starts believing the whole pool is unspent, hammers accounts that already spent their day, and rediscovers the wall by 429 — the exact behaviour [Skipping a member whose day is spent](../pool/failover.md#skipping-a-member-whose-day-is-spent) exists to avoid |
 | `WORKSPACES_DIR=/workspaces` | The work. Agent commits live here and a container is not where a branch should be stored |
-| `SERVE_RECORD_DIR=/var/lib/agent/records` | One directory per task: the A2A record and the run tree beside it, which is what a human reads afterwards ([7.6](07-observability.md#76-the-record-one-run-tree)) |
+| `SERVE_RECORD_DIR=/var/lib/agent/records` | One directory per task: the A2A record and the run tree beside it, which is what a human reads afterwards ([The record: one run tree](../evaluation/observability.md#the-record-one-run-tree)) |
 
 The ledger needed no code change — `LLM_ROUTER_USAGE_DIR` already existed
-([usage.py](../llm_router/usage.py)). It needed to be *pointed somewhere that
+([usage.py](../../llm_router/usage.py)). It needed to be *pointed somewhere that
 survives*, which the image does.
 
-The remaining [17.6](17-deployment.md#176-what-has-to-change-first) items are
-unchanged and still true: per-process cooldown is why [18.5](#185-why-there-is-exactly-one-worker)
+The remaining [What has to change first](deployment.md#what-has-to-change-first) items are
+unchanged and still true: per-process cooldown is why [Why there is exactly one worker](#why-there-is-exactly-one-worker)
 exists, concurrent ledger appends are why it stays that way, and `keep_awake`
 is a no-op off Windows — so on Linux the router's call timeout is the only
 thing between a dropped socket and a stalled run.
 
-## 18.8 Running it
+## Running it
 
 ```bash
 cp .env.example .env      # keys, and SERVE_TOKEN=$(openssl rand -hex 32)
@@ -212,7 +212,7 @@ docker compose up --build
 curl -sS localhost:8080/health
 ```
 
-Sizing is [17.5](17-deployment.md#175-what-fits)'s: 1 vCPU / 2 GiB, 4 GiB if the
+Sizing is [What fits](deployment.md#what-fits)'s: 1 vCPU / 2 GiB, 4 GiB if the
 agent runs a heavy test suite in the jail, because a target project's suite
 shares the container's limit and one measured at 440–517 MB on its own. The
 compose file sets 2 GiB. 512 MB is not a candidate — the imports alone are
@@ -223,15 +223,15 @@ the server clones, and declares `git safe.directory` for the workspace root:
 git refuses to operate in a directory owned by another user, which is exactly
 what a bind-mounted host repository looks like from inside.
 
-Where to put it is still [17.5](17-deployment.md#175-what-fits)'s answer and
+Where to put it is still [What fits](deployment.md#what-fits)'s answer and
 this page does not change it. A container makes the harness *portable*; it does
 not make an always-on host cheaper than a scheduled one, and it cannot
-manufacture free-tier quota. [17.7](17-deployment.md#177-provider-terms) still
+manufacture free-tier quota. [Provider terms](deployment.md#provider-terms) still
 applies: moving seven accounts onto a datacenter IP behind one NAT is a visible
 change in profile, and reading each provider's terms before deploying is this
 project's own stated constraint.
 
-## 18.9 Reaching it from outside the house
+## Reaching it from outside the house
 
 The intended deployment is a machine at home, reachable by its owner from
 elsewhere. That is a normal thing to want and a bad thing to improvise, because
@@ -240,7 +240,7 @@ of what this particular service is.
 **Start from what the token buys.** A caller holding `SERVE_TOKEN` can ask the
 coding agent to write a file and run it. That is the agent's whole purpose, and
 since its backend is deepagents' `LocalShellBackend`
-([6.2](06-agent.md#62-the-blast-radius)), "run it" means an arbitrary command in
+([The blast radius](../agents/code.md#the-blast-radius)), "run it" means an arbitrary command in
 the container. The token is not "access to an app" — it is **execution on that
 host**, and the container is the only thing containing it. Every decision below
 follows from that one sentence, and none of it is generic advice about running a
@@ -257,7 +257,7 @@ is wrong here on three counts at once:
   port in minutes; they are not looking for this app specifically, and they do
   not have to.
 - The only thing between a scanner and the agent is one bearer token in a
-  header, sent **in clear** — there is no TLS in [app.py](../agent/serve/app.py)
+  header, sent **in clear** — there is no TLS in [app.py](../../agent/serve/app.py)
   and there should not be, because terminating TLS is a job for something that
   does it for a living.
 
@@ -281,7 +281,7 @@ docker compose up -d
 ```
 
 `SERVE_PUBLISH_ADDR` defaults to `127.0.0.1`, so the safe configuration is the
-one you get by doing nothing ([docker-compose.yml](../docker-compose.yml)). From
+one you get by doing nothing ([docker-compose.yml](../../docker-compose.yml)). From
 a laptop anywhere:
 
 ```bash
@@ -335,17 +335,13 @@ same flat network as a laptop with mounted drives.
 - Keep `SERVE_TOKEN` long and per-caller if you can issue more than one; treat
   a leaked token as a compromised host, not a compromised password.
 - Keep the container's limits: non-root, `cap_drop: ALL`, `no-new-privileges`,
-  `pids_limit`, and memory ([docker-compose.yml](../docker-compose.yml)).
+  `pids_limit`, and memory ([docker-compose.yml](../../docker-compose.yml)).
   Never mount the Docker socket into it — a container that can reach the daemon
   can start a privileged one, and every other limit becomes decoration.
 - Mount into `/workspaces` only the repositories the agent is meant to work.
-  It cannot escape the workspace root ([18.4](#184-binding-an-agent-to-a-repository-or-a-filesystem)),
+  It cannot escape the workspace root ([Binding an agent to a repository or a filesystem](#binding-an-agent-to-a-repository-or-a-filesystem)),
   so what is not mounted is not reachable.
 - Watch the ledger. `python -m llm_router.quota status` against the mounted
   usage volume is also an intrusion signal: consumption nobody asked for is the
   cheapest evidence that someone else is using the token
-  ([14. Quota panel](14-quota-panel.md)).
-
----
-
-**Previous:** [← 17. Deployment](17-deployment.md) · **Next:** [Wiki index →](README.md)
+  ([Quota panel](../pool/quota.md)).

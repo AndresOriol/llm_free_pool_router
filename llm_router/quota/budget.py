@@ -2,11 +2,11 @@
 member any requests-per-day left?
 
 Everything else in this package renders the ledger for a human, and
-[14.9](../../docs/14-quota-panel.md#149-what-it-deliberately-doesnt-do) argued
+[What it deliberately doesn't do](../../docs/pool/quota.md#what-it-deliberately-doesnt-do) argued
 that none of it should touch routing. That argument is now half-kept. The report
 still never gates a call; this module answers one boolean off the same
 arithmetic, and the router uses it to *skip* a member rather than to *choose*
-one -- see [4.2](../../docs/04-failover.md#42-size-aware-selection).
+one -- see [Size-aware selection](../../docs/pool/failover.md#size-aware-selection).
 
 Only requests-per-day. A daily ceiling is the one budget a cooldown cannot
 represent: a rate limit hands back a `Retry-After` measured in seconds, so the
@@ -16,9 +16,9 @@ The per-minute windows need none of this -- they clear on their own, which is
 what a cooldown already is.
 
 **Wrong in the tolerable direction, by construction.** The count is this
-router's own ([14.4](../../docs/14-quota-panel.md#144-one-source-and-what-it-misses)),
+router's own ([One source, and what it misses](../../docs/pool/quota.md#one-source-and-what-it-misses)),
 the day it counts over is the vendor's calendar day and not ours -- Gemini's
-turns at midnight Pacific ([14.5](../../docs/14-quota-panel.md#145-windows-and-when-they-reset),
+turns at midnight Pacific ([Windows, and when they reset](../../docs/pool/quota.md#windows-and-when-they-reset),
 [windows.py](windows.py)) -- and a reading is reused for `ttl` seconds, so a
 burst can spend past a ceiling
 this still calls open. Every one of those errors ends in an attempt the provider
@@ -50,7 +50,7 @@ logger = logging.getLogger("LLMRouter")
 DEFAULT_TTL_SECONDS = 30.0
 
 #: Set to "0" to route exactly as the pool did before this filter existed --
-#: the off switch for an A/B (docs/08-evaluation-method.md).
+#: the off switch for an A/B (docs/evaluation/method.md).
 ENV_VAR = "LLM_ROUTER_RPD_FILTER"
 
 
@@ -62,7 +62,7 @@ def exhausted_rpd(directory=None, now: Optional[float] = None) -> Set[str]:
     named only when it declares an `rpd` limit in `config.yaml` and the ledger's
     24-hour window already holds that many requests -- refusals included, since
     the provider answered them and they spent budget
-    ([14.6](../../docs/14-quota-panel.md#146-how-a-refused-attempt-is-counted)).
+    ([How a refused attempt is counted](../../docs/pool/quota.md#how-a-refused-attempt-is-counted)).
 
     Raises whatever the ledger raises. `RpdBudget` is what the router holds, and
     it is the layer that turns a failure into "available".

@@ -1,11 +1,11 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 5. Providers and limits
+# Providers and limits
 
 *The free-tier landscape the router is built around, the config that describes
 it, and how to grow the pool.*
 
-## 5.1 Getting keys
+## Getting keys
 
 **Groq** — free tier, fast inference, generous request limits.
 
@@ -19,7 +19,7 @@ it, and how to grow the pool.*
 1. [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → sign in.
 2. **Create API key** (choose "create in new project" if unsure).
 3. Put it in `llm_router/.env` as `GEMINI_API_KEY_1`.
-4. For additional accounts/keys: follow [5.1.1 Creating a dedicated email for additional Gemini keys](#511-creating-a-dedicated-email-for-additional-gemini-keys) to set up a secondary Google account and register `GEMINI_API_KEY_2`.
+4. For additional accounts/keys: follow [Creating a dedicated email for additional Gemini keys](#creating-a-dedicated-email-for-additional-gemini-keys) to set up a secondary Google account and register `GEMINI_API_KEY_2`.
 
 **Tavily Search** — search API for autonomous agents.
 
@@ -33,7 +33,7 @@ it, and how to grow the pool.*
 config references an env var *name*, never a value.
 
 
-### 5.1.1 Creating a dedicated email for additional Gemini keys
+### Creating a dedicated email for additional Gemini keys
 
 To expand your Gemini key pool via Google AI Studio, each API key requires a separate Google account. If you need to create a new dedicated email account for this purpose:
 
@@ -63,10 +63,10 @@ To expand your Gemini key pool via Google AI Studio, each API key requires a sep
          api_key_env: GEMINI_API_KEY_2
      ```
 
-## 5.2 Config schema
+## Config schema
 
-[config.yaml](../llm_router/config.yaml) has two lists, and the loader
-multiplies them ([3.3](03-pool-model.md#33-the-fan-out)):
+[config.yaml](../../llm_router/config.yaml) has two lists, and the loader
+multiplies them ([The fan-out](model.md#the-fan-out)):
 
 ```yaml
 accounts:
@@ -91,7 +91,7 @@ which is what appears in routing logs and in the trace.
 
 `ROUTER_CONFIG` overrides the config path at runtime, so a configuration can
 swap the whole model pool without touching the checked-in file
-([8.4](08-evaluation-method.md#84-what-a-configuration-is)); unset, the default
+([What a configuration is](../evaluation/method.md#what-a-configuration-is)); unset, the default
 is used.
 
 Every eval configuration points it at `llm_router/config.yaml` **in the main
@@ -103,15 +103,15 @@ There used to be a second file here, `config.eval.yaml`: `config.yaml` minus the
 models that were dead upstream, because Groq's `404 model_not_found` is not
 transient and propagated far enough to kill a run. The router now retires a
 member the platform says is gone and carries on with the rest
-([4.6](04-failover.md#46-known-gaps)), so the trimmed pool had no job left —
+([Known gaps](failover.md#known-gaps)), so the trimmed pool had no job left —
 and, being a copy maintained by hand, it had drifted into a staler pool than the
 one actually shipping.
 
-## 5.3 Why `max_input_tokens` matters
+## Why `max_input_tokens` matters
 
 It is not documentation. It is the number the router uses to decide whether a
 request can physically fit a model before trying it
-([4.2](04-failover.md#42-size-aware-selection)). Set it to
+([Size-aware selection](failover.md#size-aware-selection)). Set it to
 `min(tokens-per-minute, context window)`:
 
 - On **Groq** the TPM limit is the bottleneck, and it is small — often well
@@ -123,7 +123,7 @@ never filtered out, which means a too-large request will be sent to it and fail.
 **Update it whenever a vendor changes a limit** — a stale ceiling silently
 degrades routing.
 
-## 5.4 Current free-tier limits
+## Current free-tier limits
 
 These are the numbers `max_input_tokens` is derived from. They change; treat
 this table as a snapshot to re-check, not as truth.
@@ -140,16 +140,16 @@ each other; none of them is a source worth writing into `config.yaml`, because a
 *wrong* ceiling degrades routing further than a stale one.
 
 Two things the page does still state, and the quota panel now models
-([14.5](14-quota-panel.md#145-windows-and-when-they-reset)):
+([Windows, and when they reset](quota.md#windows-and-when-they-reset)):
 
 - **RPD resets at midnight Pacific time** — a calendar day, not 24 hours after
   your first call.
 - **TPM is "tokens per minute (input)"** — the reply is not charged against it.
 
 They are also declared per model as `limits:` in
-[config.yaml](../llm_router/config.yaml), which is this table in a form a program
+[config.yaml](../../llm_router/config.yaml), which is this table in a form a program
 can read: the quota panel measures recorded usage against it
-([14. Quota panel](14-quota-panel.md)). **Update both together** — the table is
+([Quota panel](quota.md)). **Update both together** — the table is
 what a person reads, the config is what the panel believes.
 
 ### Groq
@@ -167,7 +167,7 @@ upstream and are gone from both this table and the config: all four answer
 The published per-model limits are misleading in one important way: in practice
 Groq's free tier behaves as a **single shared request budget across every model
 on the account**, so these do not add up to three independent pools. See
-[3.4](03-pool-model.md#34-priority-tiers).
+[Priority tiers](model.md#priority-tiers).
 
 ### Gemini
 
@@ -187,7 +187,7 @@ Note the shape difference that drives the whole design: Groq gives you many
 requests with tiny token budgets; Gemini gives you huge token budgets with very
 few requests per day. Neither alone supports an agent. Together they mostly do.
 
-## 5.5 Adding a model or account
+## Adding a model or account
 
 **A new account on an existing platform** — the cheap, high-value move:
 
@@ -199,23 +199,23 @@ Done. Every model on that platform now has a second account behind it.
 **A new model on an existing platform:**
 
 1. Confirm it **supports tool calling** — non-negotiable
-   ([3.6](03-pool-model.md#36-every-pool-member-must-support-tool-calling)).
+   ([Every pool member must support tool calling](model.md#every-pool-member-must-support-tool-calling)).
 2. Add a `models:` entry with a priority inside the right tier band, and a
    `max_input_tokens` derived from its limits.
 3. Update the limits table above.
 
-## 5.6 Adding a new platform
+## Adding a new platform
 
 Candidates worth evaluating: Cerebras, OpenRouter's free models, Mistral's free
 tier, HuggingFace Inference. The provider list is meant to grow.
 
 1. Confirm it has a genuinely free tier, and read its rate limits and terms.
    Pooling means holding legitimate accounts — see
-   [1.4](01-overview.md#14-what-is-deliberately-not-built).
+   [What is deliberately not built](../overview.md#what-is-deliberately-not-built).
 2. If its request/response shape is OpenAI-compatible, you need **no code** —
    just an `accounts:` entry with `type: openai_compatible` and the right `url`.
 3. Otherwise implement an `LLMProvider` subclass in
-   [providers.py](../llm_router/providers.py) and register it in the loader's
+   [providers.py](../../llm_router/providers.py) and register it in the loader's
    type map. Do **not** special-case a provider inside the router.
 4. Add its limits to this page.
 
@@ -223,7 +223,3 @@ Both existing adapters set `max_retries=0` on the underlying LangChain model, an
 a new one must too. The SDK's own retry logic would retry against the *same*
 dead account — exactly the job the router already owns one level up. Two retry
 layers would either race or duplicate the cooldown decisions.
-
----
-
-**Previous:** [← 4. Failover](04-failover.md) · **Next:** [6. The coding agent →](06-agent.md)

@@ -4,7 +4,7 @@ A scenario run is the only test this project has had, and it is a blunt one. It
 materialises a repository, runs an agent for minutes, and returns a single bit
 decided by hidden tests. That bit is the right acceptance contract and a poor
 instrument: it costs real free-tier quota per sample, it is noisy at the sample
-sizes a free tier affords ([6.4.2](../docs/06-agent.md#642-the-pass-column-is-noise)),
+sizes a free tier affords ([The pass column is noise](../docs/agents/code.md#the-pass-column-is-noise)),
 and when it says "fail" it does not say where.
 
 A **probe** is the small end of the same idea. It puts the real agent -- the
@@ -26,7 +26,7 @@ avoid rather than to have.
 
 Probes live in `evals/probes/*.yaml` so they are reviewed in git, and are pushed
 to a LangSmith dataset from there -- the file is the source of truth and the
-dataset is a projection of it ([10.7](../docs/10-metrics.md)).
+dataset is a projection of it ([Metrics](../docs/evaluation/metrics.md)).
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 # What a probe is for. A `failure` guards a decision a recorded run got wrong; a
 # `regression` pins a decision the agent already gets right, so a fix for one
-# failure cannot quietly break the normal path (docs/21-changing-behaviour.md).
+# failure cannot quietly break the normal path (docs/evaluation/changing-behaviour.md).
 KINDS = ("failure", "regression")
 
 # What an agent's behaviour is made of: its own package, what every agent
@@ -305,7 +305,7 @@ def _materialize(probe: Probe, root: Path) -> Path:
 # Nothing is stubbed behind the name. A probe stops at the first decision and
 # never launches anything; what matters is that the schema is in front of the
 # model, so declining to use it is a choice
-# ([20. Probes](../docs/20-probes.md)).
+# ([Probes](../docs/evaluation/probes.md)).
 PROBE_PEERS = ("code",)
 
 

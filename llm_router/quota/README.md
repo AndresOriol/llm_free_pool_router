@@ -13,7 +13,7 @@ and its tokens-per-minute counts the prompt alone, so `resets in` is read off
 the calendar rather than off when we happened to start
 ([windows.py](windows.py)).
 
-The concepts are in [14. Quota panel](../../docs/14-quota-panel.md); this file is
+The concepts are in [Quota panel](../../docs/pool/quota.md); this file is
 how to run it.
 
 ## Use

@@ -10,7 +10,7 @@ turns every delegation into a failure minutes in, after the brief has already
 been written.
 
 **A configuration that is not comparable.** `AGENT_PEERS=` is the baseline arm
-of the A/B ([13.7](../../docs/13-roadmap.md#137-how-to-propose-a-change)). If
+of the A/B ([How to propose a change](../../docs/status.md#how-to-propose-a-change)). If
 the delegating configuration differed by a *tool* rather than a paragraph, the
 comparison would be measuring a schema on every step and not the delegation.
 That is exactly what the old `delegate` tool did, and it is why this shape is
@@ -103,7 +103,7 @@ def test_the_coding_agent_gains_no_tool_at_all():
     """**This is what makes the A/B valid.** The delegating configuration
     differs from the baseline by a paragraph of prompt and nothing else; if it
     differed by a tool, the comparison would be measuring a schema charged on
-    every step ([6.4](../../docs/06-agent.md#64-why-it-is-shaped-this-way))."""
+    every step ([Why it is shaped this way](../../docs/agents/code.md#why-it-is-shaped-this-way))."""
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
     from agent.code.agent import build_agent
@@ -192,7 +192,7 @@ def test_the_delegate_skill_asks_for_the_hour_a_session_needs(tmp_path):
     """The backend's ceiling is sized for a test run, and nothing in Python
     knows that one command is a delegation. The model is what asks for the
     longer timeout, so the skill has to tell it to
-    ([16. Delegation](../../docs/16-delegation.md))."""
+    ([Delegation](../../docs/agents/delegation.md))."""
     text = (Path(code.__file__).parent / "skills" / "delegate"
             / "SKILL.md").read_text(encoding="utf-8")
     assert "timeout=3600" in text

@@ -8,7 +8,7 @@
 # the session reads the project's feedback file and appends its account to it",
 # and calls that file the whole human interface. 7 of the 23 runs that solved
 # their task wrote one, and four scenarios have never produced one at all
-# (docs/10-metrics.md#1021). The agent was obeying the prompt: `## Documentation`
+# (docs/evaluation/metrics.md#the-account-and-why-it-is-only-counted). The agent was obeying the prompt: `## Documentation`
 # forbids exactly this, which is right for a one-shot task and wrong for a
 # standing maintainer whose deliverable is the account.
 #

@@ -11,7 +11,7 @@ to scan, then page, then page again. That is a default sized for a paid context
 window being spent carefully. This pool's scarce resource is a different one: a
 session routes only to members holding at least 128,000 input tokens
 ([pool.py](pool.py)), and what actually runs out is *requests against a daily
-quota* ([4.2.1](../../docs/04-failover.md#421-skipping-a-member-whose-day-is-spent)).
+quota* ([Skipping a member whose day is spent](../../docs/pool/failover.md#skipping-a-member-whose-day-is-spent)).
 
 Reading a 400-line file in four pages spends four calls to deliver what one call
 could, and every one of those calls re-sends the whole conversation. Paginating

@@ -1,5 +1,5 @@
 """Checks for the JSONL eval trace -- the file every automatic metric in
-docs/10-metrics.md is derived from, so its shape is a contract.
+docs/evaluation/metrics.md is derived from, so its shape is a contract.
 
 No framework: `python -m tests.agent.test_trace` (or run the file).
 """
@@ -121,7 +121,7 @@ def _run():
 
 def test_trace():
     """Collected by pytest -- see the note in test_restricted_backend.py. The
-    trace's event shape is a contract (docs/07-observability.md#74), and a
+    trace's event shape is a contract (docs/evaluation/observability.md#the-shape-is-a-contract), and a
     contract nothing runs is not one."""
     _run()
 

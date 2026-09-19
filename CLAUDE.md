@@ -34,20 +34,20 @@ its model. Its behaviour lives in Markdown, not Python.
 | Where | What it is |
 | --- | --- |
 | [llm_router](llm_router/) | One provider per account×model; picks the highest-priority one that is available and large enough. Selection only — it never makes a call. Config: [config.yaml](llm_router/config.yaml) |
-| [llm_router/quota](llm_router/quota/) | How much free tier is left, read from the usage ledger. Advisory: it can skip a spent member, never stall a run ([14](docs/14-quota-panel.md)) |
-| [agent/utils](agent/utils/) | What every agent needs and none of them owns: the failover loop as a `BaseChatModel`, the pool's context floor, shared prompts, and the trace. The backends are deepagents' own ([6.2](docs/06-agent.md#62-the-blast-radius)) |
-| [agent/code](agent/code/) | The coding agent ([6](docs/06-agent.md)) |
-| [agent/explore](agent/explore/) | The web researcher; hands off by writing `/research/*.md` ([15](docs/15-explorer.md)) |
-| [agent/improve](agent/improve/) | Reads recorded runs, names recurring failures as issues, delegates the fix. Cannot edit a file ([19](docs/19-improvement-agent.md)) |
-| [agent/delegation.py](agent/delegation.py) | How one agent asks another: it runs it as a command ([16](docs/16-delegation.md)) |
-| [agent/serve](agent/serve/) | The agents as HTTP endpoints, for containers ([18](docs/18-serving.md)) |
-| [evals](evals/) | What decides whether a change helped: scenario runs and probes ([8](docs/08-evaluation-method.md), [20](docs/20-probes.md)). Scenarios live in the separate `agent_evals` repo |
+| [llm_router/quota](llm_router/quota/) | How much free tier is left, read from the usage ledger. Advisory: it can skip a spent member, never stall a run ([Quota panel](docs/pool/quota.md)) |
+| [agent/utils](agent/utils/) | What every agent needs and none of them owns: the failover loop as a `BaseChatModel`, the pool's context floor, shared prompts, and the trace. The backends are deepagents' own ([The blast radius](docs/agents/code.md#the-blast-radius)) |
+| [agent/code](agent/code/) | [The coding agent](docs/agents/code.md) |
+| [agent/explore](agent/explore/) | The web researcher; hands off by writing `/research/*.md` ([The web explorer](docs/agents/explore.md)) |
+| [agent/improve](agent/improve/) | Reads recorded runs, names recurring failures as issues, delegates the fix. Cannot edit a file ([The improvement agent](docs/agents/improve.md)) |
+| [agent/delegation.py](agent/delegation.py) | How one agent asks another: it runs it as a command ([Delegation](docs/agents/delegation.md)) |
+| [agent/serve](agent/serve/) | The agents as HTTP endpoints, for containers ([Serving the agents](docs/operations/serving.md)) |
+| [evals](evals/) | What decides whether a change helped: scenario runs and probes ([Evaluation method](docs/evaluation/method.md), [Probes](docs/evaluation/probes.md)). Scenarios live in the separate `agent_evals` repo |
 
-Providers today: Groq, Gemini. The list is meant to grow ([5](docs/05-providers.md)).
+Providers today: Groq, Gemini. The list is meant to grow ([Providers and limits](docs/pool/providers.md)).
 
 ## Docs
 
-[docs/](docs/) is a wiki: numbered, concept-first pages explaining the logic
+[docs/](docs/) is a wiki: concept-first pages, grouped by subsystem, explaining the logic
 rather than the code. **Read it instead of the source** to understand the
 system; read the source when you are about to change it. Start at
 [docs/README.md](docs/README.md) — the index, and the conventions for adding a
@@ -85,12 +85,12 @@ Changes to the harness (router config, prompts, backend, agent loop) are
 evaluated, not argued. A candidate is a branch = one agent configuration, run
 against scenarios and compared to baseline on quantitative metrics; a change
 that cannot be shown to help does not merge. Protocol and metrics:
-[8](docs/08-evaluation-method.md), [10](docs/10-metrics.md).
+[Evaluation method](docs/evaluation/method.md), [Metrics](docs/evaluation/metrics.md).
 
 A change to how an agent *behaves* starts from an example, not a hunch: the
 turn a recorded run went wrong, frozen as a probe in a topic dataset, red before
 the change and green after it, with that dataset's regression examples still
-passing ([21](docs/21-changing-behaviour.md)). Apply the **`behaviour-change`
+passing ([Changing how an agent behaves](docs/evaluation/changing-behaviour.md)). Apply the **`behaviour-change`
 skill** ([.claude/skills/behaviour-change/](.claude/skills/behaviour-change/SKILL.md)).
 
 ## Commits

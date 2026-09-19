@@ -79,7 +79,7 @@ class AutonomousLLMRouter:
 
         **It is the last word on nothing.** The count is our own, over a window
         model we know is approximate
-        (docs/14-quota-panel.md#145-windows-and-when-they-reset), so it may not
+        (docs/pool/quota.md#windows-and-when-they-reset), so it may not
         overrule anything factual: it picks *among* the members that fit the
         request and clear the floor, never across them -- a member that cannot
         hold the job is not made preferable by having budget left. And if none

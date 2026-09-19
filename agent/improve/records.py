@@ -18,7 +18,7 @@ returns.
 **Nothing here parses console output.** Every field comes from `run.json`,
 `trace.jsonl` (the flat event log) or `trace.json` (the condensed run tree) --
 the same three files every automatic metric is summed over
-([10. Metrics](../../docs/10-metrics.md)). `stderr.log` is searchable but is
+([Metrics](../../docs/evaluation/metrics.md)). `stderr.log` is searchable but is
 never a source for a number.
 """
 

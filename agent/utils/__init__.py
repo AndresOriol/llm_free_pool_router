@@ -8,7 +8,7 @@ call cost and what the run did. `agent/code`, `agent/explore` and
 
 The backends are deepagents' own: `LocalShellBackend` where an agent runs
 commands, `FilesystemBackend` where it only reads and writes
-([6.2](../../docs/06-agent.md#62-the-blast-radius)).
+([The blast radius](../../docs/agents/code.md#the-blast-radius)).
 """
 
 from agent.utils import file_tools  # noqa: F401 - read_file reads whole files

@@ -1,20 +1,20 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 14. Quota panel
+# Quota panel
 
 *What the pool has spent, how close each free account is to its wall, and which
 of the two possible sources that figure came from.*
 
-## 14.1 The question
+## The question
 
 The router treats a rate limit as weather: reroute, cool the account down, carry
-on ([4. Failover](04-failover.md)). That is the right behaviour mid-run and a
+on ([Failover](failover.md)). That is the right behaviour mid-run and a
 poor answer to the question asked before one — *is there enough left in these
 accounts to work unattended this afternoon?* Nothing could answer it, because
 nothing was writing down what had been spent, and the vendors' consoles answer
 only one account per login.
 
-## 14.2 The path of one number
+## The path of one number
 
 Nothing is computed twice and nothing is fetched at read time. Two writers put
 files on disk; one reader joins them by provider name.
@@ -40,14 +40,14 @@ is why that name is generated in one place and never re-parsed. Reading is
 side-effect free: `status` and `panel` open two files and touch no network, so an
 agent may ask as often as it likes.
 
-## 14.3 Two files, under `llm_router/.usage/`
+## Two files, under `llm_router/.usage/`
 
 Gitignored; `LLM_ROUTER_USAGE_DIR` moves the directory.
 
 | File | Written by | Holds |
 | --- | --- | --- |
-| `ledger.jsonl` | [usage.py](../llm_router/usage.py), one line per attempt | Routing identity and outcome; token counts or retry hint; failover correlation; structured failure diagnostics |
-| `pool.json` | [loader.py](../llm_router/loader.py), on every pool build | the pool as configured, with each model's declared `limits` |
+| `ledger.jsonl` | [usage.py](../../llm_router/usage.py), one line per attempt | Routing identity and outcome; token counts or retry hint; failover correlation; structured failure diagnostics |
+| `pool.json` | [loader.py](../../llm_router/loader.py), on every pool build | the pool as configured, with each model's declared `limits` |
 
 They move on different clocks, which is why they are not one file. The ledger
 only grows. The snapshot is rebuilt from the pool the loader *actually built*, so
@@ -59,7 +59,7 @@ limits nobody is using.
 where the panel is opened before any agent has run.
 
 Recording happens at the one place that knows which account served a call: the
-failover loop in [`RouterChatModel`](../agent/utils/chat_model.py). Token counts
+failover loop in [`RouterChatModel`](../../agent/utils/chat_model.py). Token counts
 are the provider's own numbers, never `estimate_tokens` — a panel reporting a
 chars/4 guess as consumption would be worse than reporting nothing.
 
@@ -80,7 +80,7 @@ Writing to either file can never fail a run. The writers swallow their own
 errors and log at debug: an unattended agent losing an afternoon's work to a full
 disk, over a convenience, would be a self-inflicted wound.
 
-## 14.4 One source, and what it misses
+## One source, and what it misses
 
 Every figure comes off the ledger, which counts what *this router* spent. The
 account may have spent more: a key used from another machine, another checkout,
@@ -97,9 +97,9 @@ that disagree about what happened. The probe is in `git log`.
 
 What is kept from that experiment is the part the vendor gives away for free: a
 `Retry-After` on a refusal, recorded in the ledger at the moment it was said
-([14.5](#145-windows-and-when-they-reset)).
+([Windows, and when they reset](#windows-and-when-they-reset)).
 
-## 14.5 Windows, and when they reset
+## Windows, and when they reset
 
 **A window is a bucket on the vendor's clock, not a span our first call opened.**
 Google states it plainly: *"Requests per day (RPD) quotas reset at midnight
@@ -109,7 +109,7 @@ when the wall clock's minute does.
 
 So `used` is what landed inside the bucket the clock is currently in, and
 `resets in` is the time left on the clock — a fact about the calendar, and no
-longer a fact about our history. [windows.py](../llm_router/quota/windows.py)
+longer a fact about our history. [windows.py](../../llm_router/quota/windows.py)
 holds the two vendor facts this needs, both declared rather than measured
 because a ledger cannot see them:
 
@@ -129,15 +129,15 @@ The ledger caught it doing exactly that — **50 calls Gemini served at moments
 when the rolling count already read *spent***, and a single rolling 24-hour span
 holding **35** served requests against a member declared at 20 a day.
 
-That is not a harmless pessimism. [4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent)
+That is not a harmless pessimism. [Skipping a member whose day is spent](failover.md#skipping-a-member-whose-day-is-spent)
 skips a member the ledger calls spent, so an arithmetic that says *spent* when
 Google says *served* takes a working account out of the pool for hours — the one
-error [14.9](#149-what-it-deliberately-doesnt-do) says this may never make.
+error [What it deliberately doesn't do](#what-it-deliberately-doesnt-do) says this may never make.
 
 Counting the vendor's day instead takes that 50 down to 26. It does not reach
 zero, and it is not meant to: the rest is the filter's own 30-second cache
 letting a burst through a ceiling it last read as open, which is
-[budget.py](../llm_router/quota/budget.py)'s deliberate overspend and lands on
+[budget.py](../../llm_router/quota/budget.py)'s deliberate overspend and lands on
 the retry path. A calendar window errs the same way — at worst it forgets a
 spent day slightly early and the next attempt is refused, which is the path
 failover already handles.
@@ -157,42 +157,42 @@ of eleven requests in one clock minute against a declared five came from this,
 and dissolved when the same ledger was read over five minutes.
 
 The caller now passes the moment it issued the request and
-[usage.py](../llm_router/usage.py) dates the line by that. **Lines written
+[usage.py](../../llm_router/usage.py) dates the line by that. **Lines written
 before that change still carry the completion time**, so a per-minute figure
 read over the older half of a long ledger is still smeared — and a spike there
 is not evidence that a published limit is stale.
 
 **Accounts do not share windows.** A model is fanned across every account on its
-platform ([3.3](03-pool-model.md#33-the-fan-out)), so `gemini-3.5-flash` may be
+platform ([The fan-out](model.md#the-fan-out)), so `gemini-3.5-flash` may be
 three rows; each is a separate budget with its own clock. Nothing is ever summed
 across accounts — a row is one account × one model, and the account rollup
 aggregates rows *within* one account. Two Groq keys are two pools, even though
 Groq meters each of them org-wide across its own models
-([3.4](03-pool-model.md#34-priority-tiers)).
+([Priority tiers](model.md#priority-tiers)).
 
-## 14.6 How a refused attempt is counted
+## How a refused attempt is counted
 
 A `rate_limited` line is an attempt the provider turned away for want of quota
-([`is_rate_limited`](../llm_router/base_provider.py)). It is recorded, not
+([`is_rate_limited`](../../llm_router/base_provider.py)). It is recorded, not
 dropped, and then counted asymmetrically:
 
 | | Counted? | Why |
 | --- | --- | --- |
 | Request gauges (RPM, RPD) | **yes**, and shown as *n refused* | It spent a request to be told no |
 | Token gauges (TPM, TPD) | **no** | No tokens were spent being refused, and none are recorded |
-| The window it lands in | both | A refusal and a served call sit in the same clock minute; what differs is what each one counts, not when either clears ([14.5](#145-windows-and-when-they-reset)) |
+| The window it lands in | both | A refusal and a served call sit in the same clock minute; what differs is what each one counts, not when either clears ([Windows, and when they reset](#windows-and-when-they-reset)) |
 | `Retry-After` | kept verbatim | The one statement about the future that isn't ours |
 
 **Only an attempt the provider answered counts at all.** Two things that look
 like requests are not:
 
 - **A member the router skipped.** Size-based selection filters a member out
-  before any call is made ([4.2](04-failover.md#42-size-aware-selection)); a
+  before any call is made ([Size-aware selection](failover.md#size-aware-selection)); a
   request too large for `gpt-oss-120b` never reaches Groq, and nothing is
   written. The ledger holds attempts, not intentions.
 - **An attempt that got no answer.** A timeout or a failed connection may never
   have left this machine. `reached_provider`
-  ([base_provider.py](../llm_router/base_provider.py)) asks for positive
+  ([base_provider.py](../../llm_router/base_provider.py)) asks for positive
   evidence — an HTTP status, or the wording of a quota refusal — and without it
   the line is marked `reached: false`: still an error, never a request.
 
@@ -213,7 +213,7 @@ refusals are called out inside it.
 It is also the reason a token figure can look low while an account is stuck: the
 requests are being spent and the tokens are not.
 
-## 14.7 What the report says
+## What the report says
 
 **The default view is per model, across every account that serves it.** That is
 the question the panel was built for — *how much Gemini have I got left* — and
@@ -232,26 +232,26 @@ never disagree.
 A platform is summed for what it spent and is deliberately given **no ceiling of
 its own**. Groq meters one org-wide request budget across every model on an
 account, so adding its per-model limits together would invent capacity that does
-not exist ([3.4](03-pool-model.md#34-priority-tiers)).
+not exist ([Priority tiers](model.md#priority-tiers)).
 
 Per entry, per window: requests, tokens, how much of each declared limit that is,
 when the window resets, and how many of those requests were refused. A ceiling
 folded from several accounts is shown as the sum it is — `2×5`, not a mystery 10.
 The context window is a column of its own, for the same reason the router routes
-by it ([4.2](04-failover.md#42-size-aware-selection)): a member that cannot hold
+by it ([Size-aware selection](failover.md#size-aware-selection)): a member that cannot hold
 the job is not capacity, however much quota it has left. A limit the
 vendor doesn't publish (Gemma's TPM) is *no ceiling*, not a zero one. The
 **tightest** gauge is the one that will stop that entry first, which is rarely
 the one you would guess: on Groq a step-heavy run hits TPM long before RPD.
 
-Declared limits come from `limits:` in [config.yaml](../llm_router/config.yaml),
-which is [5.4](05-providers.md#54-current-free-tier-limits) in a form a program
+Declared limits come from `limits:` in [config.yaml](../../llm_router/config.yaml),
+which is [Current free-tier limits](providers.md#current-free-tier-limits) in a form a program
 can read. **Update both when a vendor moves a limit**; the table is what a person
 reads, the config is what the panel measures against.
 
-## 14.8 Reading it
+## Reading it
 
-[`llm_router/quota/`](../llm_router/quota/) — Python, standard library only.
+[`llm_router/quota/`](../../llm_router/quota/) — Python, standard library only.
 
 ```bash
 python -m llm_router.quota status                     # every model, over all its accounts
@@ -281,18 +281,18 @@ This began as a TypeScript submodule and was ported. Nothing in it justified a
 second toolchain in a Python repo: it is dict-reshaping and string templating,
 and keeping the ledger's writer and its reader in one language matters more.
 
-## 14.9 What it deliberately doesn't do
+## What it deliberately doesn't do
 
 **It never gates a call**, and that is now a narrower claim than it was. The
 *report* still gates nothing: no table, no JSON, no panel is on the path of a
 request. But the ledger underneath it is read by one caller for one purpose —
-[`budget.py`](../llm_router/quota/budget.py) tells the router which members have
+[`budget.py`](../../llm_router/quota/budget.py) tells the router which members have
 spent their requests-per-day, and selection skips those
-([4.2](04-failover.md#42-size-aware-selection)).
+([Size-aware selection](failover.md#size-aware-selection)).
 
 The original objection was that routing off a stored count means trusting our own
 arithmetic, over a window model we know is approximate
-([14.5](#145-windows-and-when-they-reset)), against the provider's live answer —
+([Windows, and when they reset](#windows-and-when-they-reset)), against the provider's live answer —
 and being wrong in the direction that stalls a run. That last risk was real and
 was being taken: the rolling day this used to count over held members out of the
 pool that Google had already forgiven at midnight Pacific, fifty times over in
@@ -321,7 +321,3 @@ information to predict.
 For post-mortems, `python -m llm_router.quota diagnose` emits JSON grouped by
 account and model, including quota ids, failover chains, first refusals, tokens
 accepted before typed TPM refusals, and model-wide versus account-wide patterns.
-
----
-
-**Previous:** [← 13. Roadmap and scope](13-roadmap.md) · **Back to** [wiki index](README.md)

@@ -19,10 +19,10 @@ message can cite, and a backticked scenario id in the prose becomes a link.
 
 **`docs/results/`** — what each agent version scored. `evals/results/runs/` is
 gitignored and lives only on the machine that produced it
-([10.6](../docs/10-metrics.md)), so a comparison currently survives only as
+([What a run leaves behind](../docs/evaluation/metrics.md#what-a-run-leaves-behind)), so a comparison currently survives only as
 prose someone remembered to write. This page is the durable ledger. It belongs
 here rather than in the harness repo for the reason
-[8.3](../docs/08-evaluation-method.md) gives for keeping results out of it:
+[Where things live](../docs/evaluation/method.md#where-things-live) gives for keeping results out of it:
 configurations are *branches* of that repo, so a shared index would conflict on
 every merge. The scenario repo has one branch and no forks, so it does not.
 
@@ -39,7 +39,7 @@ from evals import run as run_mod, scenario as scenario_mod
 
 # The categories and levels the set is meant to cover, so the gap list is a
 # statement about coverage rather than a list of what happens to exist.
-# Mirrors docs/09-scenarios.md; `generative` is the addition this branch makes.
+# Mirrors docs/evaluation/scenarios.md; `generative` is the addition this branch makes.
 CATEGORIES = ("bugfix", "feature", "generative", "tests", "refactor",
               "long-context", "ambiguous", "trap")
 LEVELS = ("L0", "L1", "L2", "L3")
@@ -407,9 +407,9 @@ because that is what the run records say.
 def _wilson(passed: int, total: int, z: float = 1.96) -> tuple:
     """95% interval on a pass rate.
 
-    [8.6](../docs/08-evaluation-method.md) requires it and treats overlapping
+    [Fair comparison](../docs/evaluation/method.md#fair-comparison) requires it and treats overlapping
     intervals as no difference; `show` prints a bare rate, which is how
-    [11.3](../docs/11-eval-status.md)'s "the pass column is noise" ended up in
+    [Where the numbers stand](../docs/status.md#where-the-numbers-stand)'s "the pass column is noise" ended up in
     a footnote instead of in the output.
     """
     if not total:

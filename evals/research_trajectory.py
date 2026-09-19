@@ -7,7 +7,7 @@ full of claims and its failures are all failures of *method*: it can search
 thirteen times, cite real sources, write a report that reads beautifully, and
 still never have opened a single page it quoted.
 
-That run happened ([11. Evaluation status](../docs/11-eval-status.md)), and none
+That run happened ([Status and roadmap](../docs/status.md)), and none
 of the existing metrics moved. So these exist.
 
 **Every check here is a divergence observed in a recorded run, not a rule
@@ -29,7 +29,7 @@ from typing import Optional
 # Two vocabularies, because there are two research agents and a trace has to be
 # readable long after the one that wrote it was replaced. `web_search`/`read_url`
 # is the grounded-Gemini pair; `tavily_search`/`think_tool` is the deep-research
-# port (docs/15-explorer.md#158). Which checks apply depends on which the run
+# port (docs/agents/explore.md#the-deep-research-port). Which checks apply depends on which the run
 # used, and guessing wrong scores an agent against rules it was never given.
 CLASSIC_SEARCH = "web_search"
 DEEP_SEARCH = "tavily_search"
@@ -312,7 +312,7 @@ def check(events: list, *, budget: Optional[int] = None) -> list:
         # Steps 6 and 7, and the ones whose absence is invisible in the output:
         # an unreviewed page reads exactly like a reviewed one. Nothing in the
         # harness forces them -- the prompt asks and this counts, which is the
-        # whole arrangement (docs/15-explorer.md#1554-the-review-at-the-end).
+        # whole arrangement (docs/agents/explore.md#the-review-at-the-end).
         add("logged the run and its review",
             m["logged"] or m["reports"] == 0,
             "wrote to log.md" if m["logged"] else "no log entry",

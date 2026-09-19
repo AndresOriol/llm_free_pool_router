@@ -1,7 +1,7 @@
 # The harness as a long-running container: the pool, both agents, and the HTTP
-# binding that makes them addressable (docs/18-serving.md).
+# binding that makes them addressable (docs/operations/serving.md).
 #
-# This image is sized and shaped by docs/17-deployment.md, and two of its
+# This image is sized and shaped by docs/operations/deployment.md, and two of its
 # choices are load-bearing rather than habit:
 #
 #   * `git` is installed because it is not optional here. The coding agent
@@ -11,11 +11,11 @@
 #     it lives inside the package tree by default, and a container that starts
 #     with an empty ledger believes the whole pool is fresh, hammers accounts
 #     that already spent their day, and rediscovers the wall by 429
-#     (docs/17-deployment.md#176-what-has-to-change-first).
+#     (docs/operations/deployment.md#what-has-to-change-first).
 #
 # Sizing: 1 vCPU / 2 GiB for the agent, 4 GiB if it runs a heavy test suite in
 # the jail. 512 MB is not a candidate -- the imports alone are ~186 MB before
-# any conversation (docs/17-deployment.md#172-what-the-workload-actually-is).
+# any conversation (docs/operations/deployment.md#what-the-workload-actually-is).
 
 FROM python:3.12-slim
 
@@ -58,7 +58,7 @@ RUN useradd --create-home --uid 10001 agent \
     && chown -R agent:agent /workspaces /var/lib/agent /app
 
 # WORKSPACES_DIR      where an agent is bound: mount a host directory here, or
-#                     let the server clone into it (docs/18-serving.md#184).
+#                     let the server clone into it (docs/operations/serving.md#binding-an-agent-to-a-repository-or-a-filesystem).
 # LLM_ROUTER_USAGE_DIR  what the accounts have spent. This one must outlive the
 #                     container -- see the header.
 # SERVE_RECORD_DIR    task records and run traces, one directory per task.

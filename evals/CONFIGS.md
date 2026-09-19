@@ -5,7 +5,7 @@ changes are recorded too — knowing what didn't work is most of the value of
 keeping the data at all, and it's what stops the same idea being re-tried every
 few months.
 
-Promotion rule (see [8.7](../docs/08-evaluation-method.md#87-the-promotion-rule)):
+Promotion rule (see [The promotion rule](../docs/evaluation/method.md#the-promotion-rule)):
 promote when no task regresses by more than one trial **and** either success
 rate improves beyond interval overlap, or success rate holds flat while a
 secondary metric improves materially. Anything else is a draw, and a draw keeps
@@ -15,7 +15,7 @@ the simpler configuration.
 > the architecture most of them were variants of.** The narrow-role harness —
 > every `harness-v*` row, `adhoc-harness`, `session` and `context-and-gate` —
 > was deleted, leaving `evals/configs/code.yaml` as the only agent
-> configuration ([6.1.1](../docs/06-agent.md#611-the-arm-that-was-deleted)).
+> configuration ([The arm that was deleted](../docs/agents/code.md#the-arm-that-was-deleted)).
 > These rows stay because a ledger of what was tried and what it showed is the
 > point of the file; `git log` has the code behind each name.
 >
@@ -37,7 +37,7 @@ the simpler configuration.
 | `code-account` | `agent/write-the-account` | `code` plus one paragraph: the project's own `NOTES.md` is the exception to "do not create summary markdown files" | session suite, n=1, 10 scenarios | solved 6/10 → 7/10; **account 2/10 → 8/10**; cost flat | **promoted** — flat success, secondary metric four-fold |
 | `code-invariant-guard` | `agent/invariant-guard` | `code` plus one prompt section, `## Contradicted Requests`: never edit a test or a document so that it stops contradicting the task; do the rest; say what you declined | session suite n=1, three contested scenarios n=3, `count-and-share` n=8 | solved 12/16 vs 10/16; **weakened 4 → 1**; `count-and-share` **0/8 → 3/4**; cost flat | **promoted** — the set-wide interval overlaps and is not the evidence; the target scenario is |
 | `code-step-budget` | `harness/step-budget` | `code` plus three changes shipped together: the step limit becomes a 400-superstep budget with 40 reserved for a wrap-up turn instead of a 120-step loop guard that raised `GraphRecursionError`; the prompt names the programs `execute` can run; the prompt warns that a `python -c subprocess.run(...)` wrapper exits 0 whatever the child did | `session` suite, n=1, 10 scenarios, interleaved | solved **8/10 both**; same two failures; `tokens_in` 692k → 616k (**-11%**), cheaper in 8/10; calls 22.1 → 18.8; bounces 3.2 → 2.3 | **draw on the evidence collected** — flat success and a material secondary gain, but **the budget was never exercised** (see below) |
-| `code-peers` | `master` | `code` plus one prompt paragraph: it can ask the web explorer for a report mid-task by running `python -m agent.explore` with `execute` ([16](../docs/16-delegation.md)). The explorer is LangChain's deep-research agent, ported ([15.8](../docs/15-explorer.md#158-the-deep-research-port)) | — | **never run** | no verdict — read `tokens_in` first, and interleave against `code` |
+| `code-peers` | `master` | `code` plus one prompt paragraph: it can ask the web explorer for a report mid-task by running `python -m agent.explore` with `execute` ([Delegation](../docs/agents/delegation.md)). The explorer is LangChain's deep-research agent, ported ([The deep-research port](../docs/agents/explore.md#the-deep-research-port)) | — | **never run** | no verdict — read `tokens_in` first, and interleave against `code` |
 
 
 ### explore-decision-led, Machintl live comparison (2026-09-10)
@@ -133,7 +133,7 @@ measures exactly that section and nothing else.
 
 **The set-wide rate is not the evidence and should not be quoted as it.** At
 n=16 those intervals overlap almost entirely, which is the same warning
-[11.3](../docs/11-eval-status.md) already carries.
+[Where the numbers stand](../docs/status.md#where-the-numbers-stand) already carries.
 
 The evidence is one scenario. On `scenario/ledger/count-and-share`, `code`
 failed **8 times out of 8** with a byte-identical signature every time — f2p
@@ -247,14 +247,14 @@ The pair is a clean A/B by construction: with `AGENT_PEERS=` empty this branch's
 agent has exactly the tools `code` has -- and so does it with peers on, because
 delegation is a command and not a tool. The only difference measured is the
 prompt section naming what it can run
-([16.6](../docs/16-delegation.md#166-what-this-costs-and-what-is-unmeasured)).
+([What this costs, and what is unmeasured](../docs/agents/delegation.md#what-this-costs-and-what-is-unmeasured)).
 
 Expect it to be the expensive arm. A delegation is a whole explorer session --
 14-21 model calls -- billed to the same `EVAL_TRACE_FILE` as the caller, so
 `tokens_in` here includes it and is not comparable to `code` without counting
 the `python -m agent.explore` calls in the trace. Nothing enforces a per-task
 token budget yet; that number is meant to be observed rather than invented
-([16.5](../docs/16-delegation.md#165-what-a-delegation-costs)).
+([What a delegation costs](../docs/agents/delegation.md#what-a-delegation-costs)).
 
 The question is not really cost, though. It is whether the agent delegates on
 questions that genuinely need outside knowledge, or reaches for the web on things
@@ -265,7 +265,7 @@ and the trajectories will.
 
 The arm exists and works; nothing about it is comparable to anything yet. Two
 ad-hoc runs outside the runner — no scenario, no hidden tests — are recorded in
-[docs/11-eval-status.md](../docs/11-eval-status.md#the-coding-agent-first-look-2026-08-25)
+[The coding agent, first look (2026-08-25)](../docs/status.md#the-coding-agent-first-look-2026-08-25)
 because they bear on whether the comparison is worth its quota.
 
 The short version: both runs produced a correct minimal fix, and neither
@@ -300,14 +300,14 @@ the journals are.
 ### The harness family, 2026-08-06
 
 Full write-up in
-[docs/06-agent.md](../docs/06-agent.md#64-why-it-is-shaped-this-way). Three
+[Why it is shaped this way](../docs/agents/code.md#why-it-is-shaped-this-way). Three
 things worth carrying forward:
 
 **No promotion.** Nothing beat baseline on the gating axis, and nothing is
 distinguishable from anything else. `harness-v3-merged` scored 3/3 in one batch
 and 1/3 in the next on an identical configuration — direct evidence that one L0
 task at n=3 sits inside the noise floor, exactly as
-[docs/08-evaluation-method.md](../docs/08-evaluation-method.md#86-fair-comparison)
+[Fair comparison](../docs/evaluation/method.md#fair-comparison)
 predicts. Any ranking read off these pass rates would be invented.
 
 **The cost result is real.** Token and call counts replicated across every rep

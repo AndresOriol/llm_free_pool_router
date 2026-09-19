@@ -1,6 +1,6 @@
 """Local JSONL trace of one agent run, for offline evaluation.
 
-Hosted traces expire; the eval harness (docs/10-metrics.md) derives every automatic
+Hosted traces expire; the eval harness (docs/evaluation/metrics.md) derives every automatic
 metric -- provider calls, failover bounces, tokens, bad tool calls, the failure
 taxonomy -- from this file instead, so the evidence behind a verdict survives.
 
@@ -177,7 +177,7 @@ def traced(config: Optional[dict]) -> dict:
     attached to the config rather than to the agent so it is *inherited*: it
     then also sees the provider calls under `RouterChatModel`, which is what
     makes a failover bounce countable
-    ([7.3](../../docs/07-observability.md)) and what every metric in
+    ([The local trace](../../docs/evaluation/observability.md#the-local-trace)) and what every metric in
     `evals/metrics.py` is summed over.
     """
     config = dict(config or {})

@@ -1,11 +1,11 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 3. The pool model
+# The pool model
 
-*The vocabulary and the mental model. Read this before [4. Failover](04-failover.md);
+*The vocabulary and the mental model. Read this before [Failover](failover.md);
 everything there assumes these terms.*
 
-## 3.1 Vocabulary
+## Vocabulary
 
 | Term | Meaning |
 | --- | --- |
@@ -18,7 +18,7 @@ everything there assumes these terms.*
 | **cooldown** | A provider is benched until a timestamp, after a failure. |
 | **ceiling** (`max_input_tokens`) | The largest request this provider can physically accept: `min(tokens-per-minute, context window)`. |
 
-## 3.2 Why the atom is account × model, not account
+## Why the atom is account × model, not account
 
 An account is not a unit of capacity, because "am I rate-limited?" is answered
 per model as often as per account. The same Groq key can be fine on one model
@@ -29,7 +29,7 @@ This also gives you fallback-within-an-account for free: "try the 70B model
 first, drop to a smaller model on the same key, only then move to a different
 platform" is expressed entirely by priority numbers, with no code change.
 
-## 3.3 The fan-out
+## The fan-out
 
 The config does **not** list one entry per provider. It lists accounts and
 models separately, and the loader multiplies them:
@@ -43,7 +43,7 @@ providers: Llama3_70b_groq_1, Gemini_3_5_Flash_gemini_1,
 ```
 
 Every model is fanned out across every account on its platform
-([loader.py](../llm_router/loader.py)). This is the single most important
+([loader.py](../../llm_router/loader.py)). This is the single most important
 property of the config format: the pool is meant to grow by adding accounts,
 and that must stay a one-line change.
 
@@ -57,7 +57,7 @@ a warning**, not raised on. A half-filled `.env` gets you a working smaller
 pool rather than a program that refuses to start — which matters because
 accounts get added incrementally.
 
-## 3.4 Priority tiers
+## Priority tiers
 
 Priorities are grouped into four bands rather than a flat ordering, with gaps
 so a new model can be slotted in without renumbering:
@@ -84,7 +84,7 @@ returned `MAX_TOKENS` and no text at all. Strongest-first is the right default;
 40× slower and one refusal in four is what overrides it. The tier exists
 for judgement over a wide view, and gpt-oss-120b cannot hold one — its 8,000
 token ceiling is a tenth of what the Geminis take
-([5.3](05-providers.md#53-why-max_input_tokens-matters)). It stays in the band
+([Why `max_input_tokens` matters](providers.md#why-max_input_tokens-matters)). It stays in the band
 because the flash models run out fast: 20 requests a day each, which a working
 afternoon spends.
 
@@ -111,11 +111,11 @@ Tiering does not fix that fallthrough. It only decides who is tried first while
 capacity still exists — which means the early steps of every run, and the whole
 of every short run, get the pool's best judgment instead of whatever happened to
 be first in the config file. Fixing the fallthrough itself needs more account
-capacity, not a routing change ([13.3](13-roadmap.md#133-known-constraints-that-shape-the-roadmap)).
+capacity, not a routing change ([Known constraints that shape the roadmap](../status.md#known-constraints-that-shape-the-roadmap)).
 
 Within a band, order barely matters, for the same reason.
 
-## 3.5 Availability is pull-based
+## Availability is pull-based
 
 A provider is a three-field state machine: `is_available`, `cooldown_until`,
 `consecutive_failures`.
@@ -132,7 +132,7 @@ so the next failure starts backoff fresh instead of compounding indefinitely. A
 single unlucky account shouldn't need a good call to escape an ever-growing
 penalty.
 
-## 3.6 Every pool member must support tool calling
+## Every pool member must support tool calling
 
 The agent issues tool calls on every step and can reroute onto any pool member
 mid-task, so a model that cannot accept a `tools` parameter would break a task
@@ -140,8 +140,4 @@ the moment it was selected. Groq's `compound` / `compound-mini` agentic systems
 are excluded for exactly this reason.
 
 This is a hard constraint on the pool used by the agent, and it is easy to
-violate by accident when adding a model. See [5.5](05-providers.md#55-adding-a-model-or-account).
-
----
-
-**Previous:** [← 2. Repo map](02-repo-map.md) · **Next:** [4. Failover →](04-failover.md)
+violate by accident when adding a model. See [Adding a model or account](providers.md#adding-a-model-or-account).
