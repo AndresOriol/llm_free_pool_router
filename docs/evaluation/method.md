@@ -255,10 +255,11 @@ instrument.
 | [RepoBench](https://github.com/Leolty/repobench) | **skip** | Next-line completion scored by Exact Match / CodeBLEU. No tools, no editing, no multi-turn. It grades a raw model, not a harness. |
 
 **Containerized execution.** SWE-bench needs per-repo Docker images because
-those repos need exact dependency versions. Our L0–L2 scenarios are authored as
-dependency-free pure-Python trees, so the restricted `python`/`pytest` backend
-is sufficient and Docker stays optional. Docker becomes mandatory only at L3 —
-a further reason to sequence L3 last.
+those repos need exact dependency versions. Our scenarios run on the host shell
+the agent already has: L0–L2 are dependency-free pure-Python trees, and the one
+L3 (`ui-port-to-typescript`) has the agent install its own toolchain. Docker
+becomes mandatory only for SWE-bench (P5) — a further reason to sequence it
+last.
 
 **One adapter, not N integrations.** Every external harness here drives an agent
 through either an OpenAI-compatible endpoint or a thin adapter class. If several

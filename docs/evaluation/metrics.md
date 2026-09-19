@@ -87,7 +87,7 @@ output ([The local trace](observability.md#the-local-trace)).
 | `broken_files` | Protected files the run left unrunnable — it removed nothing, it wrote something that does not run. Classified `tooling`, never integrity |
 | `lost_invariants` | Documented guarantees the run deleted — `"<page>: <phrase>"`, declared per scenario in `doc_invariants` ([`immutable` or `doc_invariants`?](scenarios.md#immutable-or-doc_invariants)) |
 | `extended_files` | Protected files it changed *without* weakening: it appended to a suite it was told not to break, and the original assertions still hold. Recorded, never scored |
-| `bad_tool_calls` | Invalid tool name, failed `edit_file`, malformed args |
+| `bad_tool_calls` | Invalid tool name, failed `edit_file`, malformed args. **Reads zero on every run today** — the trace discards the tool's status ([Blockers](../status.md#blockers)) |
 | `models_used` | Distinct models that served a step, and the per-model call mix |
 | `ran_own_tests` | Did the agent invoke `execute` on the test command itself |
 | `added_tests` | Test functions the run added that nothing asked for — see [Unprompted tests](#unprompted-tests) |

@@ -176,7 +176,7 @@ directories of Markdown, and the Markdown is the behaviour. See
 | File | The question it answers |
 | --- | --- |
 | [agent.py](../agent/explore/agent.py) | *How is it built?* — the whole harness, top to bottom: the budgets and the tools taken away, the templating that fills every Markdown file, the model and search pools, the three tools it adds, the middleware that fits the framework's tools and prompt to it, the two sub-agents, and one run |
-| [prompts/](../agent/explore/prompts/) | *What is it told?* — `system.md` (its job, what it cannot do, when it is finished), then LangChain's deep-research method, ported close to verbatim with every deviation marked `ADAPTED` ([The deep-research port](agents/explore.md#the-deep-research-port)) |
+| [prompts/](../agent/explore/prompts/) | *What is it told?* — `system.md` (its job, what it cannot do, when it is finished), then LangChain's deep-research method, ported close to verbatim ([The deep-research port](agents/explore.md#the-deep-research-port)) |
 | [tools.py](../agent/explore/tools.py) | *What can it do that the framework does not ship?* — `tavily_search` over the search pool, `think_tool`, and what its research directory holds |
 | [tool_descriptions/](../agent/explore/tool_descriptions/) | *What is each tool for?* — one Markdown file per tool, and that file is the description the model reads ([What it is allowed to do](agents/explore.md#what-it-is-allowed-to-do)) |
 | [`__main__.py`](../agent/explore/__main__.py) | CLI, and how another agent reaches it: same shape as the coding agent, final message first, then the notes *this* run wrote ([Delegation](agents/delegation.md)) |

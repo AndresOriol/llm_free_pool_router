@@ -173,6 +173,7 @@ on the account**, so these do not add up to three independent pools. See
 
 | Model | RPM | TPM | RPD |
 | :--- | :--- | :--- | :--- |
+| `gemini-3.8-flash` | 5 | 250K | 20 |
 | `gemini-3.7-flash` | 5 | 250K | 20 |
 | `gemini-3.6-flash` | 5 | 250K | 20 |
 | `gemini-3.5-flash` | 5 | 250K | 20 |

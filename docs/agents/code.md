@@ -2,8 +2,9 @@
 
 # The coding agent
 
-*One architecture over one pool and one jail, the comparison that ended with the
-other one deleted, and what the survivor can and cannot do.*
+*One conversation over the pool and the host shell, configured the way
+`deepagents-code` configures one — what it can do, what it costs, and the arm
+that was deleted to get here.*
 
 ## One conversation, on the pool
 
@@ -12,12 +13,12 @@ project, task on stdin, process exits at EOF, every model call routed through th
 pool ([Failover](../pool/failover.md)).
 
 ```bash
-python -m agent.code ../my-project < brief.md
+python -m agent.code ../my-project --task "..."    # or: < brief.md
 ```
 
-`workdir` is the project. The task arrives on stdin and the process exits at
-EOF, which is what makes it drivable from a script or from an orchestrating
-agent ([Driving the free agents](../operations/driving-agents.md#driving-the-free-agents)). Its
+`workdir` is the project. The task arrives on `--task` or stdin and the process
+exits when it is done, which is what makes it drivable from a script or from an orchestrating
+agent ([Driving the free agents](../operations/driving-agents.md)). Its
 counterpart, `python -m agent.explore`, takes the same shape and researches the
 web instead ([The web explorer](explore.md)).
 
@@ -73,12 +74,13 @@ where the money goes. The comparison itself is still unrun: 226,854 against
 5,756 was measured on a different pool, a different floor and a different SDK,
 and nothing since has put the two architectures on the same scenarios.
 
-**What left with it.** The narrow-role session read a project's `NOTES.md`,
-appended its own account to it, journalled every step so a crash could resume,
-and committed incrementally on its own branch. The conversational agent commits
-(it holds `git`) but does **none** of the rest. The standing-maintainer loop the
-North Star describes therefore has a hole in it until that is rebuilt on this arm
-([What to do next](../status.md#what-to-do-next)).
+**What left with it, and what came back.** The narrow-role session read a
+project's `NOTES.md`, appended its own account to it, journalled every step so a
+crash could resume, and committed incrementally on its own branch. This agent
+commits (it holds `git`), writes its account into `NOTES.md` (`code-account`,
+promoted), and commits a handover when its budget runs out
+([The step budget](#the-step-budget)). The crash journal has not come back
+([Status and roadmap](../status.md#the-two-phases-of-the-project)).
 
 ## The blast radius
 
@@ -174,26 +176,27 @@ to land its work before it goes — being told is the only thing that lets it.
 
 ## What failover looks like in practice
 
-Expect a single step to walk several small-TPM Groq members before a
-higher-capacity account accepts the request. That is the design working — but it
-is also why the pool drains fast, and why `failover_bounces` is a first-class
-metric ([Automatic metrics](../evaluation/metrics.md#automatic-metrics)).
+Behind the 128,000-token floor only Gemini members serve a coding session, so a
+step that meets a rate limit walks the other Gemini accounts and models before
+one accepts. That is the design working — but it is also why the pool drains
+fast, why a run so often ends up on the lite tier
+([Status and roadmap](../status.md#where-things-stand)), and why
+`failover_bounces` is a first-class metric
+([Automatic metrics](../evaluation/metrics.md#automatic-metrics)).
 
 Free tiers signal limits inconsistently — Groq uses HTTP 429 *and* 413 for
 tokens-per-minute — and both are transient
 ([Classifying a failure](../pool/failover.md#classifying-a-failure)). A model the platform has
 retired is not: it comes back as a 404, and the router drops that member from
-the pool for the rest of the process rather than dying on it.
-
-**Cheaper agents trip landmines expensive ones never reach.** A dead model is
-only routed to if a request is small enough to pass the size filter, so
-shrinking requests reaches *further* into the pool. Audit the pool before
-reading any efficiency result.
+the pool for the rest of the process rather than dying on it. A 503 is the
+model's capacity rather than the key's, so it benches that model on every
+account at once ([Failover](../pool/failover.md)).
 
 ## Why it is shaped this way
 
-Three findings from the runs that produced this architecture. The configurations
-themselves are in `git log`; these are what they showed, and they still hold.
+Four findings from the runs of the deleted narrow-role arm, on the one L0
+scenario. The configurations are in `git log`; these are what they showed, and
+the last three still shape how any result here is read.
 
 ### The cost result is the one that replicated
 
@@ -201,7 +204,8 @@ Same task, same pool, interleaved: **226,854 input tokens** through a
 conversational loop against **5,756** through narrow roles, stable across every
 rep and every batch, with between-configuration spread far exceeding
 within-configuration variance. Provider calls and failover bounces moved the
-same way. This is the result the architecture rests on.
+same way. It is the result the deleted arm rested on, and the one its deletion
+accepted ([The arm that was deleted](#the-arm-that-was-deleted)).
 
 ### The pass column is noise
 

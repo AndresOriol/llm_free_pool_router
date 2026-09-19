@@ -192,7 +192,7 @@ Three directories, and the first one is the prerequisite
 | --- | --- |
 | `LLM_ROUTER_USAGE_DIR=/var/lib/agent/usage` | **The usage ledger.** It defaults to a directory inside the package tree, so a fresh container starts believing the whole pool is unspent, hammers accounts that already spent their day, and rediscovers the wall by 429 — the exact behaviour [Skipping a member whose day is spent](../pool/failover.md#skipping-a-member-whose-day-is-spent) exists to avoid |
 | `WORKSPACES_DIR=/workspaces` | The work. Agent commits live here and a container is not where a branch should be stored |
-| `SERVE_RECORD_DIR=/var/lib/agent/records` | One directory per task: the A2A record and the run tree beside it, which is what a human reads afterwards ([The record: one run tree](../evaluation/observability.md#the-record-one-run-tree)) |
+| `SERVE_RECORD_DIR=/var/lib/agent/records` | One directory per task: the task record and the run tree beside it, which is what a human reads afterwards ([The record: one run tree](../evaluation/observability.md#the-record-one-run-tree)) |
 
 The ledger needed no code change — `LLM_ROUTER_USAGE_DIR` already existed
 ([usage.py](../../llm_router/usage.py)). It needed to be *pointed somewhere that

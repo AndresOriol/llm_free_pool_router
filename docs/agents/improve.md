@@ -343,7 +343,7 @@ echo "The last batch failed mostly as stopping. Split that class." \
 
 It refuses to start when the project has no recorded runs, and names the command
 that would fix that. Over HTTP it is `improve` alongside `code` and `explore`
-([Serving the agents](../operations/serving.md)); its card is always served, because what it needs is runs
+([Serving the agents](../operations/serving.md)); it is always listed, because what it needs is runs
 in the *bound workspace* and a workspace arrives with the task — so the probe
 happens in the handler, one step later, and a workspace with no runs is a
 rejected task rather than a missing agent.

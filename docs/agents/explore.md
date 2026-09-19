@@ -555,8 +555,9 @@ affordable because the orchestrator never sees them.
 
 ### What this pool forced us to change
 
-Each is marked `ADAPTED` in the prompt files, so the next reader can diff
-against the source rather than guess. The first four are forced by this pool:
+These are the deviations from upstream. The prompt files stopped marking them
+with `ADAPTED` comments on 2026-09-11, so diff against upstream to find them.
+The first four are forced by this pool:
 
 1. **`/research/` rather than the workdir root.** Upstream writes
    `/research_request.md` and `/final_report.md` at the root. Here the workdir is

@@ -272,7 +272,7 @@ binding is applied to whichever provider gets selected. It has to work this way
 
 | Gap | Effect | Status |
 | --- | --- | --- |
-| **Retirement is per process.** A **decommissioned model** returns `404 model_not_found`; the loop retires that member before the non-transient check and carries on, but nothing about the death outlives the process. | Not a crash any more. Each fresh run spends one attempt rediscovering each dead model before routing past it — one wasted call per process per dead model. | Item 5 in [What to do next](../status.md#what-to-do-next); a decommissioned model should be disabled *permanently*, the way a rate-limited one is benched *temporarily*. |
+| **Retirement is per process.** A **decommissioned model** returns `404 model_not_found`; the loop retires that member before the non-transient check and carries on, but nothing about the death outlives the process. | Not a crash any more. Each fresh run spends one attempt rediscovering each dead model before routing past it — one wasted call per process per dead model. | Handled by hand: a retired model is deleted from [config.yaml](../../llm_router/config.yaml), as Groq's Llama line and `qwen3-32b` were. |
 | Cooldown state is per process. | Two agents on the same keys each rediscover which accounts are hot. | Accepted for now; see [Open questions](../status.md#open-questions). |
 | The pool gets walked hard for trivial work — ~10 provider calls and 5–7 distinct models for a one-line fix. | Efficiency numbers are hard to read until this is understood. | Under measurement, see [Status and roadmap](../status.md). |
 
