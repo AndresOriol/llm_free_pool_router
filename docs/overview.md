@@ -251,7 +251,7 @@ Code lives with the code it measures; scenario *data* does not (see
 | [README.md](../README.md) | Human entry point: quick start and links out. Also short on purpose. |
 | `docs/` | This wiki. The place to understand the system without reading source. |
 | [.claude/settings.json](../.claude/settings.json) | The `Stop` hook that keeps this wiki from drifting ([Maintenance](README.md#maintenance)) |
-| [.claude/skills/](../.claude/skills/), [.claude/agents/](../.claude/agents/) | The skills (`deepagents`, `behaviour-change`, `j2-error-analysis`) and the `trace-reviewer` subagent used to work on this repo |
+| [.claude/skills/](../.claude/skills/), [.claude/agents/](../.claude/agents/) | The agent-improvement workflow: `behaviour-change` (the entry point), `j2-error-analysis`, `deepagents`, and the `trace-reviewer` subagent |
 | `tests/` | `llm_router/` and `agent/` unit tests, plus `smoke_test.py` — a single real prompt through the pool to check keys and config are wired |
 
 ### Related repos

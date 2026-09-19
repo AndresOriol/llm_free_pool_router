@@ -92,6 +92,10 @@ turn a recorded run went wrong, frozen as a probe in a topic dataset, red before
 the change and green after it, with that dataset's regression examples still
 passing ([Changing how an agent behaves](docs/evaluation/changing-behaviour.md)). Apply the **`behaviour-change`
 skill** ([.claude/skills/behaviour-change/](.claude/skills/behaviour-change/SKILL.md)).
+It is the entry point for improving an agent: it routes to the `trace-reviewer`
+agent (one run), the `j2-error-analysis` skill (a batch) and the `deepagents`
+skill (the change). All of them read runs by
+[Reading a recorded run](docs/evaluation/reading-runs.md).
 
 ## Commits
 

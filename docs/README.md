@@ -47,6 +47,7 @@ New here? Read [Overview](overview.md), then [Status and roadmap](status.md).
 | [Probes](evaluation/probes.md) | The small tests: one agent, one situation, one decision |
 | [Changing how an agent behaves](evaluation/changing-behaviour.md) | The test-first loop for a behaviour change, with probes as the instrument |
 | [Observability](evaluation/observability.md) | What a run leaves behind: the trace, the run tree, the condensed record |
+| [Reading a recorded run](evaluation/reading-runs.md) | What to open in a run directory, and the traps that have already produced wrong conclusions |
 
 ### Operations
 
