@@ -342,6 +342,10 @@ def project_section(workdir: Path) -> str:
             parts.append(f"Uncommitted changes: {len(status.splitlines())} file(s)")
         else:
             parts.append("Working tree is clean.")
+    else:
+        # Said, not left to be inferred from a missing line: every traced run
+        # of 2026-09-17 ran git in a workspace that had none.
+        parts.append("Not a Git repository: every `git` command fails here.")
 
     listing = tree(workdir)
     if listing:
