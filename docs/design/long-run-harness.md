@@ -3,7 +3,7 @@
 *Working document. Not a wiki page: this is where the design gets argued before
 anything is built, and it is expected to change every session. The settled parts
 graduate into [The coding agent](../agents/code.md) and
-[Roadmap and scope](../status.md#roadmap-and-scope); everything here is provisional until it does.*
+[Status and roadmap](../status.md); everything here is provisional until it does.*
 
 > **Read this as history from §3 onward.** The narrow-role harness this note
 > argues for — the orchestrator, the briefed roles, the shared log, the journal,
@@ -400,7 +400,7 @@ most and is the least defined.
 - **Wait instead of exhausting.** With time free, "all providers cooling down"
   should be a sleep, not an error.
 - **Permanently disable decommissioned models** rather than benching them
-  temporarily ([What to do next](../status.md#what-to-do-next-1)).
+  temporarily ([What to do next](../status.md#what-to-do-next)).
 - **Tier-aware selection (C2).** A request must be able to say *"this needs a
   wide-context member"* and have the router honour it, and conversely the pool
   must not spend request-scarce wide-context members on work that would have fit

@@ -10,7 +10,7 @@ turns every delegation into a failure minutes in, after the brief has already
 been written.
 
 **A configuration that is not comparable.** `AGENT_PEERS=` is the baseline arm
-of the A/B ([How to propose a change](../../docs/status.md#how-to-propose-a-change)). If
+of the A/B ([How to propose a change](../../docs/evaluation/method.md#how-to-propose-a-change)). If
 the delegating configuration differed by a *tool* rather than a paragraph, the
 comparison would be measuring a schema on every step and not the delegation.
 That is exactly what the old `delegate` tool did, and it is why this shape is

@@ -264,8 +264,7 @@ and the trajectories will.
 ### code, before any eval run (2026-08-25)
 
 The arm exists and works; nothing about it is comparable to anything yet. Two
-ad-hoc runs outside the runner — no scenario, no hidden tests — are recorded in
-[The coding agent, first look (2026-08-25)](../docs/status.md#the-coding-agent-first-look-2026-08-25)
+ad-hoc runs outside the runner — no scenario, no hidden tests — are recorded here
 because they bear on whether the comparison is worth its quota.
 
 The short version: both runs produced a correct minimal fix, and neither

@@ -228,7 +228,7 @@ notes it wrote — an empty list is the loudest thing it can print.
 
 **This is a configuration and it has not been measured.** By this repo's own
 rule a harness change is decided by evaluation, not argument
-([How to propose a change](../status.md#how-to-propose-a-change)), and what is written above is
+([How to propose a change](../evaluation/method.md#how-to-propose-a-change)), and what is written above is
 argument. Specifically unknown:
 
 - whether a coding agent that *can* delegate delegates when it should, or

@@ -47,7 +47,7 @@ HARNESS_ROOT = Path(__file__).resolve().parents[1]
 
 # Which peers to offer. Default on, so this stays a configuration that can be
 # measured against a baseline rather than a feature nobody exercises
-# ([How to propose a change](../docs/status.md#how-to-propose-a-change)). AGENT_PEERS=
+# ([How to propose a change](../docs/evaluation/method.md#how-to-propose-a-change)). AGENT_PEERS=
 # (empty) runs the agent alone.
 PEERS_ENV = "AGENT_PEERS"
 DEFAULT_PEERS = ("explore",)

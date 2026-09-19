@@ -298,13 +298,23 @@ gate is a floor, not a proof (see [The pass column is noise](../agents/code.md#t
 ---
 
 
-## The rule that governs changes to the harness
+## How to propose a change
 
-Any change to the harness — router config, system prompt, backend, agent loop —
-is a candidate configuration, not a decision. Branch it, add a config, run the
-suite that covers it interleaved against baseline, apply the promotion rule, and
-record the verdict in [evals/CONFIGS.md](../../evals/CONFIGS.md) — **including for
-changes that lost.** Knowing what didn't work is most of the value of keeping
-the data, and it's what stops the same idea being re-tried every few months.
+Any change to the harness — router config, prompt, backend, agent loop — is a
+candidate configuration, not a decision.
 
-Full workflow: [Evaluation method](#).
+1. Check it against the north star in [CLAUDE.md](../../CLAUDE.md). If it does
+   not serve the standing maintainer or the pool it runs on, it does not get
+   built, however good the idea is in the abstract.
+2. Check it against the [settled decisions](../overview.md#settled-decisions).
+   If it reopens one, say what new evidence justifies that.
+3. Make it a branch, add a configuration in [evals/configs/](../../evals/configs/),
+   and run the suite that covers it interleaved against baseline. A change to
+   how an agent *behaves* starts from a probe instead
+   ([Changing how an agent behaves](changing-behaviour.md)).
+4. Apply [the promotion rule](#the-promotion-rule) and record the verdict in
+   [evals/CONFIGS.md](../../evals/CONFIGS.md) — **including for changes that
+   lost.** Knowing what didn't work is most of the value of keeping the data,
+   and it is what stops the same idea being re-tried every few months.
+5. Merge or drop. A change that cannot be shown to help does not merge, and a
+   draw keeps the simpler configuration.

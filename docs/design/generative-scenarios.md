@@ -285,7 +285,7 @@ Four hold, two changed, and one is worse than it was described.
 Two findings the plan did not have:
 
 - **`input_tokens` did not exist.** [CLAUDE.md](../../CLAUDE.md),
-  [The coding agent](../agents/code.md), [Status and roadmap](../status.md), [Roadmap and scope](../status.md#roadmap-and-scope),
+  [The coding agent](../agents/code.md), [Status and roadmap](../status.md), [Status and roadmap](../status.md),
   [Delegation](../agents/delegation.md), `CONFIGS.md` and both agent configs named
   `input_tokens` as the column to read first on every batch. The key
   `metrics.py` emits is **`tokens_in`**, so anyone — or any agent — following

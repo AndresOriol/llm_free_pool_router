@@ -78,7 +78,7 @@ appended its own account to it, journalled every step so a crash could resume,
 and committed incrementally on its own branch. The conversational agent commits
 (it holds `git`) but does **none** of the rest. The standing-maintainer loop the
 North Star describes therefore has a hole in it until that is rebuilt on this arm
-([What to do next](../status.md#what-to-do-next-1)).
+([What to do next](../status.md#what-to-do-next)).
 
 ## The blast radius
 
@@ -217,7 +217,7 @@ this project has had to retract one.
 configuration found the file, edited it, and ran the tests — and was
 conceptually wrong. No change of topology moves that, which is why more
 architecture work was not the next move and scenario authoring was
-([What to do next](../status.md#what-to-do-next-1)).
+([What to do next](../status.md#what-to-do-next)).
 
 A taxonomy where one class holds 92% of the mass is a rename of "failed", not a
 diagnosis. Subdividing it is the standing job of the batch analysis

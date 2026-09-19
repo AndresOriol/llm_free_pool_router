@@ -107,7 +107,7 @@ satisfies the first while failing the second. A run passes only if every
 
 **`context_mode`** mirrors agentbench's context settings. Since the agent loads
 a workdir's `CLAUDE.md` as its system prompt
-([What to do next](../status.md#what-to-do-next-1)), running the same scenario in
+([What to do next](../status.md#what-to-do-next)), running the same scenario in
 both modes measures how much the harness depends on curated context — worth
 knowing before investing in more of it.
 
