@@ -220,12 +220,15 @@ time of writing the entire evidence base is one pass that got the answer wrong.
 
 `python -m evals probes --agent improve` is the cheap instrument: the real agent,
 one situation, stopped at its first decision, one model call
-([Probes](../evaluation/probes.md)). The four that exist ask whether it reads the ledger before
-the traces, whether it delegates before diagnosing, whether it tries to edit the
-harness it is forbidden to touch, and whether it reaches for a `python` it does
-not have. None of them can say a pass was any good. All of them can say it
-started wrong, which is where every recorded failure of this agent so far has
-begun.
+([Probes](../evaluation/probes.md)). Three hand-written ones ask whether it
+reads the ledger before the traces, delegates before diagnosing, or tries to
+edit the harness it is forbidden to touch. The rest are frozen from the two
+traced passes (2026-09-08 and 2026-09-18) at the moment each filed, delegated or
+reported something its own conversation already disproved: an issue and a
+delegation for a limit already raised, a delegate's account repeated as done,
+an explore issue read off a truncated `trace.jsonl` line, a router issue whose
+signature matched any Google 503. None of them can say a pass was any good. All
+of them can say a decision was wrong where a recorded one was.
 
 ## What it costs, and what is unmeasured
 
