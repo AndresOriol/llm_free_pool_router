@@ -1791,3 +1791,298 @@ probes:
         /research/claude-mods/integration-paths-and-feasibility.md (6,081 bytes)
         /research/claude-mods/open-questions.md (1,519 bytes)
         /research/claude-mods/overview.md (2,914 bytes)
+- id: orchestrator-reads-the-wiki-before-delegating
+  agent: explore
+  why: 'Run 01a0b8a8, turn 1, done right: the orchestrator''s first move was research_status, as workflow.md''s
+    Orient step asks. Delegating before looking would research again what the wiki already holds.'
+  kind: regression
+  source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 1
+  reviewed: '2026-09-19'
+  expect:
+    not_tool: task
+  research_dir: research/claude-mods
+  through: *id001
+  prompt: |-
+    # Research request: "Mods" in Claude, and using them to expose our agents as Claude subagents
+
+    ## Context
+
+    This repository (the workdir) contains several LangChain `deepagents` agents that run on a pool of
+    free-tier LLM accounts (Groq, Gemini):
+
+    - a coding agent, run as `python -m agent.code <workdir> < brief.md`
+    - a web researcher (you), run as `python -m agent.explore <workdir> < question.md`
+    - an improvement agent, `python -m agent.improve`
+    - all of them can also be served over HTTP (see `/docs/18-serving.md`); how one agent asks another is
+      `/docs/16-delegation.md`.
+
+    Read those two docs first so you know what the agents look like from the outside (a CLI command that
+    reads a task on stdin and prints a final message, or an HTTP endpoint).
+
+    ## Questions
+
+    1. **What are "Mods" in Claude?** Anthropic's Claude products (claude.ai, the Claude desktop app,
+       Claude Code) â€” find the official description of the feature called "Mods" (or "mods"): what it is,
+       when it was released, which products and plans have it, and how a mod is authored, packaged and
+       installed. If "Mods" turns out to be a name for something else (plugins, skills, extensions, MCP
+       servers, custom agents/subagents), say so explicitly and cite the source that establishes it.
+    2. **What can a mod contain?** Specifically: can it define a subagent, a tool, an MCP server, a slash
+       command, a hook, or a command that shells out to a local program? What are the limits (sandboxing,
+       network, local process execution, permissions)?
+    3. **Claude Code subagents and plugins.** How Claude Code defines subagents (`.claude/agents/*.md`
+       frontmatter: name, description, tools, model), plugins, and MCP servers â€” and whether a subagent's
+       work can be performed by an *external* program or model rather than by Claude itself.
+    4. **Integration paths.** For each plausible way to make our agents callable by Claude as subagents,
+       describe how it would work and what it would take:
+       - a mod / plugin that wraps the CLI commands above,
+       - an MCP server exposing `code`, `explore`, `improve` as tools (local stdio, or remote over HTTP
+         using the serving endpoints),
+       - a Claude Code subagent definition whose instructions delegate to our CLI via Bash,
+       - anything else the sources suggest.
+       Note for each: does it run locally or need a hosted endpoint, does Claude wait synchronously
+       (our runs take many minutes to hours), and how the result comes back.
+    5. **Feasibility.** Is it possible today, which path is simplest, and what are the blockers
+       (timeouts on long tool calls, desktop vs CLI differences, terms of use).
+
+    ## How to work
+
+    Prefer primary sources: docs.anthropic.com / docs.claude.com / code.claude.com, anthropic.com
+    news posts, the modelcontextprotocol.io spec, Anthropic GitHub repos. Mark anything you could not
+    confirm from a primary source as unconfirmed. Keep exact quotes short and give the URL for every claim.
+    Finish with an `overview.md` answering question 5 directly, then the supporting notes.
+  history: []
+- id: researcher-cites-the-page-it-saves
+  agent: explore-researcher
+  why: 'Run 01a0b8a8, turn 19, done right: after two searches that returned the Claude Code documentation,
+    the subagents researcher saved a page with the URLs beside the claims. A page with no link is the
+    failure the wiki exists to avoid.'
+  kind: regression
+  source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 19
+  reviewed: '2026-09-19'
+  expect:
+    not_tool_with_args:
+    - ^(write_file|edit_file)$
+    - (?s)^(?!.*https?://)
+  research_dir: research/claude-mods
+  through: *id001
+  files:
+    research/claude-mods/claude-mods-definition.md: "# Claude Mods Definition and Terminology\n*Last updated:\
+      \ 2026-09-19*\n\nThis page establishes that \"Mods\" is **not** an official product or feature term\
+      \ used by Anthropic across its product lineup (including claude.ai, Claude Desktop, and Claude Code).\
+      \ Instead, \"mods\" or \"modifications\" is a community colloquialism or misnomer that maps to official\
+      \ Anthropic and open-source extension mechanisms such as **Claude Code Plugins**, **Model Context\
+      \ Protocol (MCP) Servers**, **Custom Skills**, **Custom Slash Commands**, and **Hooks**.\n\n## Findings\n\
+      \n1. **Official Terminology Status**: Searches of official documentation (`docs.anthropic.com`,\
+      \ `code.claude.com`, `anthropic.com`), protocol standards (`modelcontextprotocol.io`), and Anthropic\
+      \ GitHub repositories confirm there is no official feature or product called \"Mods\". \n   - Primary\
+      \ sources: [Claude Platform Docs](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview),\
+      \ [Claude Code Permission Modes](https://code.claude.com/docs/en/permission-modes), and [Model Context\
+      \ Protocol](https://modelcontextprotocol.io).\n\n2. **Mapping Community \"Mods\" to Official Features**:\n\
+      \   - **Plugins**: Bundled packages in Claude Code (`claude-plugins-official` or community marketplaces)\
+      \ that combine multiple extension capabilities into a single install. Source: [Build to Launch Best\
+      \ Claude Code Plugins Review](https://buildtolaunch.substack.com/p/best-claude-code-plugins-tested-review).\n\
+      \   - **Model Context Protocol (MCP) Servers**: Standardized external connections providing tools,\
+      \ resources, and prompts to Claude across Claude Desktop, Claude Code, and the API ([MCP Connector](https://docs.anthropic.com/en/agents-and-tools/mcp-connector)).\n\
+      \   - **Custom Subagents & Skills**: Task-specific instructions, prompt templates, and execution\
+      \ behaviors packaged as skills or specialized agent prompts.\n   - **Custom Slash Commands & Hooks**:\
+      \ Terminal commands and event-triggered background scripts (e.g. session start, file write, commit\
+      \ hooks) running within Claude Code.\n\n3. **What a Plugin / Extension Can Contain**:\n   - **Tools\
+      \ & MCP Servers**: Connecting external APIs, databases, and local/remote execution runtimes.\n \
+      \  - **Slash Commands & Skills**: Triggerable prompt instructions and workflows (e.g. `/brand-voice`,\
+      \ `/code-review`).\n   - **Hooks**: Background automation scripts attached to git commits, file\
+      \ saves, or session startup.\n   - **Sandboxing & Permissions**: Operating system-level isolation\
+      \ (e.g., Linux bubblewrap and macOS seatbelt via the [sandboxed bash tool](https://www.anthropic.com/engineering/claude-code-sandboxing))\
+      \ providing filesystem and network boundaries without permission prompts.\n\n## Contradictions\n\
+      - None found regarding nomenclature: all official documentation consistently uses terms like \"\
+      plugins\", \"MCP servers\", \"skills\", and \"tools\", whereas community discussions and third-party\
+      \ blogs occasionally use \"mods\" or \"extensions\" interchangeably.\n\n## Open questions\n- Will\
+      \ Anthropic officially adopt terms like \"mods\" or introduce a formal modding API, or will extensibility\
+      \ remain strictly delineated between MCP servers, plugins, and custom skills?\n\n## Related\n- [Tool\
+      \ Use Overview](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview): Official\
+      \ documentation on defining client and server tools.\n- [Model Context Protocol](https://modelcontextprotocol.io):\
+      \ Open standard for connecting AI models to data sources and tools.\n- [Claude Code Sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing):\
+      \ Security model for executing commands and tools safely.\n"
+  prompt: |-
+    Research Claude Code subagents, plugins, hooks, tools, and MCP integration mechanics.
+
+    Questions to address:
+    1. How does Claude Code define subagents? Inspect `.claude/agents/*.md` standard structure, YAML frontmatter fields (name, description, tools, model, prompt, permissions, subagent invocation).
+    2. How do Claude Code plugins work? File layout, structure, plugin definition files, how plugins bundle commands, tools, hooks, and subagents.
+    3. What can plugins/subagents contain in Claude Code? Details on slash commands, hooks (e.g. tool execution hooks, pre-tool-use), MCP server references, and local shell/bash execution capabilities.
+    4. Execution & Delegation Model: Can a subagent's work be delegated to or performed by an *external* program or non-Claude model (e.g. executing a local Python CLI or making external HTTP requests via curl/MCP), rather than Claude processing the subagent steps directly? How does Claude Code execute subagent turns and tool calls?
+
+    Primary sources to check: code.claude.com, docs.anthropic.com, GitHub repository anthropic/claude-code or related official repos.
+
+    Write your findings directly into the file `/research/claude-mods/claude-code-subagents-plugins.md`.
+    Follow proper research page formatting: include last updated date, concise summary, detailed Findings with exact URL citations, Contradictions/Caveats, Open questions, and Related links. Return the file path, key findings, and open questions.
+  history:
+  - ai: ''
+    calls:
+    - name: research_status
+      args: {}
+      result: /research/claude-mods/ is empty -- nothing has been written yet. The files you write there
+        are this run's only deliverable.
+  - ai: ''
+    calls:
+    - name: write_todos
+      args:
+        todos:
+        - status: in_progress
+          content: Research Claude Code subagents (.claude/agents/*.md, YAML frontmatter, standard structure)
+        - content: Research Claude Code plugins (file layout, structure, plugin definition files, bundling
+            commands/tools/hooks/subagents)
+          status: pending
+        - content: Research Claude Code plugin/subagent contents (slash commands, hooks, MCP server references,
+            local shell/bash execution)
+          status: pending
+        - content: Research Claude Code Execution & Delegation Model (external program delegation, non-Claude
+            models, turn execution)
+          status: pending
+        - status: pending
+          content: Write findings to /research/claude-mods/claude-code-subagents-plugins.md
+      result: 'Updated todo list to [{''content'': ''Research Claude Code subagents (.claude/agents/*.md,
+        YAML frontmatter, standard structure)'', ''status'': ''in_progress''}, {''content'': ''Research
+        Claude Code plugins (file layout, structure, plugin definition files, bundling commands/tools/hooks/subagents)'',
+        ''status'': ''pending''}, {''content'': ''Research Claude Code plugin/subagent contents (slash
+        commands, hooks, MCP server references, local shell/bash execution)'', ''status'': ''pending''},
+        {''content'': ''Research Claude Code Execution & Delegation Model (external program delegation,
+        non-Claude models, turn execution)'', ''status'': ''pending''}, {''content'': ''Write findings
+        to /research/claude-mods/claude-code-subagents-plugins.md'', ''status'': ''pending''}]'
+  - ai: ''
+    calls:
+    - name: tavily_search
+      args:
+        query: Claude Code subagents .claude/agents YAML frontmatter configuration plugins hooks MCP
+      result: |-
+        Found 2 result(s) for 'Claude Code subagents .claude/agents YAML frontmatter configuration plugins hooks MCP':
+
+        ## Create custom subagents - Claude Code Docs
+        **URL:** https://code.claude.com/docs/en/sub-agents
+
+        Create custom subagents - Claude Code Docs
+        > Documentation Index
+        > -------------------
+        >
+        > Fetch the complete documentation index at: </docs/llms.txt>
+        >
+        > Use this file to discover all available pages before exploring further.
+
+        [Skip to main content](#content-area)
+
+        [Claude Code Docs home page![light logo](https://mintcdn.com/claude-code/c5r9_6tjPMzFdDDT/logo/light.svg?fit=max&auto=format&n=c5r9_6tjPMzFdDDT&q=85&s=78fd01ff4f4340295a4f66e2ea54903c)![dark logo](https://mintcdn.com/claude-code/c5r9_6tjPMzFdDDT/logo/dark.svg?fit=max&auto=format&n=c5r9_6tjPMzFdDDT&q=85&s=1298a0c3b3a1da603b190d0de0e31712)](/docs/en/overview)
+
+        English
+
+        Search...
+
+        ⌘KAsk Assistant⌘I
+
+        * [Claude Developer Platform](https://platform.claude.com/)
+        * [Open Claude Code](https://claude.ai/code)
+        * [Open Claude Code](https://claude.ai/code)
+
+        Search...
+
+        Navigation
+
+        Agents and parallel work
+
+        Create custom subagents
+
+        [Getting started](/docs/en/overview)[Build with Claude Code](/docs/en/agents)[Administration](/docs/en/admin-setup)[Configuration](/docs/en/settings)[Reference](/docs/en/cli-reference)[Agent SDK](/docs/en/agent-sdk/overview)[What's New](/docs/en/whats-new)[Resources](/docs/en/legal-and-compliance)
+
+        ### Agents and parallel work
+
+        * [Overview](/docs/en/agents)
+        * [Create custom subagents](/docs/en/
+        [... cut to 1,500 characters for the probe; the run read the whole page ...]
+  - ai: ''
+    calls:
+    - name: think_tool
+      args:
+        reflection: |-
+          - What this search actually established: We retrieved extensive documentation from code.claude.com about Claude Code subagents, their frontmatter fields, scopes, invocation, permissions, and built-in subagents (Explore, Plan, general-purpose, etc.), as well as a comprehensive overview of the extension layers from the Hidekazu Konishi Claude Code Extension Layer Decision Guide (covering CLAUDE.md, auto memory, skills, subagents, hooks, MCP servers, plugins, and settings).
+          - What it did not: The first search result (`Create custom subagents`) was truncated mid-way through configuration details, and the second result (`Claude Code Extension Layer Decision Guide`) was also truncated before fully detailing plugins, hooks, execution model, and delegation to external programs/non-Claude models. We need specific information on:
+            1. Detailed plugin file layout, structure, plugin definition files, and how plugins bundle commands, tools, hooks, and subagents.
+            2. What hooks (tool execution hooks, pre-tool-use) and local shell/bash execution capabilities contain.
+            3. Execution & Delegation Model: Can a subagent's work be delegated to or performed by an external program or non-Claude model (e.g. executing a local Python CLI or making external HTTP requests via curl/MCP), rather than Claude processing the subagent steps directly? How does Claude Code execute subagent turns and tool calls?
+          - Where the answer is weakest: We haven't fully verified the plugin structure details or the exact external program/non-Claude model execution mechanics for subagents/hooks.
+          - Whether you are done: Not done. We need 1-2 more targeted searches to cover plugins, hooks, and execution/delegation models.
+      result: |-
+        Reflection recorded: - What this search actually established: We retrieved extensive documentation from code.claude.com about Claude Code subagents, their frontmatter fields, scopes, invocation, permissions, and built-in subagents (Explore, Plan, general-purpose, etc.), as well as a comprehensive overview of the extension layers from the Hidekazu Konishi Claude Code Extension Layer Decision Guide (covering CLAUDE.md, auto memory, skills, subagents, hooks, MCP servers, plugins, and settings).
+        - What it did not: The first search result (`Create custom subagents`) was truncated mid-way through configuration details, and the second result (`Claude Code Extension Layer Decision Guide`) was also truncated before fully detailing plugins, hooks, execution model, and delegation to external programs/non-Claude models. We need specific information on:
+          1. Detailed plugin file layout, structure, plugin definition files, and how plugins bundle commands, tools, hooks, and subagents.
+          2. What hooks (tool execution hooks, pre-tool-use) and local shell/bash execution capabilities contain.
+          3. Execution & Delegation Model: Can a subagent's work be delegated to or performed by an external program or non-Claude model (e.g. executing a local Python CLI or making external HTTP requests via curl/MCP), rather than Claude processing the subagent steps directly? How does Claude Code execute subagent turns and tool calls?
+        - Where the answer is weakest: We haven't fully verified the plugin structure details or the exact external program/non-Claude model execution mechanics for subagents/hooks.
+        - Whether you are done: Not done. We need 1-2 more targeted searches to cover plugins, hooks, and execution/delegation models.
+  - ai: ''
+    calls:
+    - name: tavily_search
+      args:
+        query: Claude Code create plugins file layout structure hooks pre-tool-use
+      result: |-
+        Found 2 result(s) for 'Claude Code create plugins file layout structure hooks pre-tool-use':
+
+        ## Create plugins - Claude Code Docs
+        **URL:** https://code.claude.com/docs/en/plugins
+
+        Create plugins - Claude Code Docs
+        > Documentation Index
+        > -------------------
+        >
+        > Fetch the complete documentation index at: </docs/llms.txt>
+        >
+        > Use this file to discover all available pages before exploring further.
+
+        [Skip to main content](#content-area)
+
+        [Claude Code Docs home page![light logo](https://mintcdn.com/claude-code/c5r9_6tjPMzFdDDT/logo/light.svg?fit=max&auto=format&n=c5r9_6tjPMzFdDDT&q=85&s=78fd01ff4f4340295a4f66e2ea54903c)![dark logo](https://mintcdn.com/claude-code/c5r9_6tjPMzFdDDT/logo/dark.svg?fit=max&auto=format&n=c5r9_6tjPMzFdDDT&q=85&s=1298a0c3b3a1da603b190d0de0e31712)](/docs/en/overview)
+
+        English
+
+        Search...
+
+        ⌘KAsk Assistant⌘I
+
+        * [Claude Developer Platform](https://platform.claude.com/)
+        * [Open Claude Code](https://claude.ai/code)
+        * [Open Claude Code](https://claude.ai/code)
+
+        Search...
+
+        Navigation
+
+        Plugins
+
+        Create plugins
+
+        [Getting started](/docs/en/overview)[Build with Claude Code](/docs/en/agents)[Administration](/docs/en/admin-setup)[Configuration](/docs/en/settings)[Reference](/docs/en/cli-reference)[Agent SDK](/docs/en/agent-sdk/overview)[What's New](/docs/en/whats-new)[Resources](/docs/en/legal-and-compliance)
+
+        ### Agents and parallel work
+
+        * [Overview](/docs/en/agents)
+        * [Create custom subagents](/docs/en/sub-agents)
+        * [Agent view](/docs/en/agent-view)
+        * [Run agent team
+        [... cut to 1,500 characters for the probe; the run read the whole page ...]
+  - ai: ''
+    calls:
+    - name: think_tool
+      args:
+        reflection: |-
+          - What this search actually established:
+            1. Subagents: `.claude/agents/*.md` standard structure, YAML frontmatter fields (`name`, `description`, `tools`, `model`, `prompt`, `permissions`, subagent invocation via Agent tool or subagent delegation), built-in subagents (`Explore`, `Plan`, `general-purpose`), scopes (managed, CLI flag, project, user, plugin).
+            2. Plugins: File layout (`.claude-plugin/plugin.json`, `skills/`, `commands/`, `agents/`, `hooks/`, `.mcp.json`, `.lsp.json`, `monitors/`, `bin/`, `settings.json`), bundling commands/tools/hooks/subagents, testing via `--plugin-dir`.
+            3. Contents (Hooks, MCP, Shell/Bash): PreToolUse, PostToolUse, SessionStart, Stop hooks; MCP server configurations (`.mcp.json`); local shell/bash execution capabilities (Bash tool, `bin/` directory executables in `$PATH`).
+            4. Execution & Delegation Model: Claude Code executes turns and tool calls. Subagents run in isolated context windows with specialized prompts, models, and tool access, returning summaries to the main conversation. External programs can be called via the Bash tool or MCP servers (e.g. executing local python CLI or HTTP requests via curl/MCP), but the *agentic step logic* is processed by Claude (or subagents powered by Claude models). Non-Claude models can be integrated via custom MCP servers or external CLIs invoked via Bash/MCP tools, but subagents themselves are Claude-powered instances managed by the Claude Code engine.
+          - What it did not: No further searches needed; we have precise, highly detailed official documentation and repository examples (from anthropic/claude-code).
+          - Whether you are done: Yes, we are ready to write the comprehensive research wiki page at `/research/claude-mods/claude-code-subagents-plugins.md`.
+      result: |-
+        Reflection recorded: - What this search actually established:
+          1. Subagents: `.claude/agents/*.md` standard structure, YAML frontmatter fields (`name`, `description`, `tools`, `model`, `prompt`, `permissions`, subagent invocation via Agent tool or subagent delegation), built-in subagents (`Explore`, `Plan`, `general-purpose`), scopes (managed, CLI flag, project, user, plugin).
+          2. Plugins: File layout (`.claude-plugin/plugin.json`, `skills/`, `commands/`, `agents/`, `hooks/`, `.mcp.json`, `.lsp.json`, `monitors/`, `bin/`, `settings.json`), bundling commands/tools/hooks/subagents, testing via `--plugin-dir`.
+          3. Contents (Hooks, MCP, Shell/Bash): PreToolUse, PostToolUse, SessionStart, Stop hooks; MCP server configurations (`.mcp.json`); local shell/bash execution capabilities (Bash tool, `bin/` directory executables in `$PATH`).
+          4. Execution & Delegation Model: Claude Code executes turns and tool calls. Subagents run in isolated context windows with specialized prompts, models, and tool access, returning summaries to the main conversation. External programs can be called via the Bash tool or MCP servers (e.g. executing local python CLI or HTTP requests via curl/MCP), but the *agentic step logic* is processed by Claude (or subagents powered by Claude models). Non-Claude models can be integrated via custom MCP servers or external CLIs invoked via Bash/MCP tools, but subagents themselves are Claude-powered instances managed by the Claude Code engine.
+        - What it did not: No further searches needed; we have precise, highly detailed official documentation and repository examples (from anthropic/claude-code).
+        - Whether you are done: Yes, we are ready to write the comprehensive research wiki page at `/research/claude-mods/claude-code-subagents-plugins.md`.
