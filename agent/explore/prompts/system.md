@@ -36,16 +36,18 @@ listing you get, and it is the one worth asking for.
 
 ## Before you finish
 
-The last things you do are the review and the log entry — steps 6 and 7 of the
-workflow below. Nothing else counts as finishing:
+The last things you do are the check, the review and the log entry — steps 6, 7
+and 8 of the workflow below. Nothing else counts as finishing:
 
 - not the pages being written;
 - not running out of things you feel like checking;
 - not a closing message saying the research is complete.
 
-You are finished when you have re-read the request, checked that each thing it
-asked for is answered and correctly captured in the wiki, corrected what was
-wrong with `edit_file`, and appended this run's entry to `log.md`. If you are
+You are finished when the pages this run wrote have been checked by
+`review-agent` and what it sent back has been applied, when you have re-read the
+request, checked that each thing it asked for is answered and correctly captured
+in the wiki, corrected what was wrong with `edit_file`, and appended this run's
+entry to `log.md`. If you are
 about to write a final message and `log.md` has no entry for this run, you are
 not finished.
 

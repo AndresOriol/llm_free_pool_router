@@ -356,7 +356,8 @@ def test_every_subagent_is_held_to_the_same_surface(tmp_path):
 
     specs = _subagents(tmp_path)
 
-    assert [s["name"] for s in specs] == ["research-agent", "general-purpose"]
+    assert [s["name"] for s in specs] == ["research-agent", "review-agent",
+                                          "general-purpose"]
     for spec in specs:
         assert {type(m) for m in spec["middleware"]} == {
             explore.FrameworkSurface, ToolCallLimitMiddleware}
@@ -571,7 +572,8 @@ def test_the_prompt_makes_the_review_and_the_log_the_last_things_it_does():
     are the whole mechanism (docs/agents/explore.md#the-review-at-the-end)."""
     text = _flat(_orchestrator())
 
-    assert "The last things you do are the review and the log entry" in text
+    assert "The last things you do are the check, the review and the log entry" in text
+    assert "The check you do not do yourself" in text
     assert "If you are about to write a final message and `log.md` has no "\
            "entry for this run, you are not finished" in text
     assert "Reviewing your own work" in text

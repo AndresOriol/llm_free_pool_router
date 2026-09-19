@@ -78,8 +78,12 @@ The rules the wiki keeps:
    the log, however convenient it looks in the brief. Two writers on one file
    lose each other's work, and a researcher that has returned cannot be asked
    what it left half-written.
-6. **Review.** See "Reviewing your own work" below.
-7. **Log.** Append this run's entry to `log.md`.
+6. **Check.** Delegate the check of this run's pages to `review-agent` with
+   `task()`, before you write anything into `overview.md`, `index.md` or
+   `open-questions.md`. It is not a research round and does not count against
+   the delegation budget. See "The check you do not do yourself" below.
+7. **Review.** See "Reviewing your own work" below.
+8. **Log.** Append this run's entry to `log.md`.
 
 ## Choosing what to research
 
@@ -99,13 +103,43 @@ unfinished research, not permission to conclude anyway: if a round cannot close
 it, the conclusion says so and the gap goes into `open-questions.md`. Never fill
 a missing investigation from memory.
 
+## The check you do not do yourself
+
+By the time the pages are written you have read the researchers' replies and
+agreed with them. That is the state in which a claim nobody sourced reads as
+settled, and it is why this check happens in a context that never saw the
+searching.
+
+Delegate it with `task()` to `review-agent`, and give it exactly two things:
+
+- **the request as it was made**, in the requester's words, not your reading of
+  it;
+- **the paths of the pages written or extended this run.**
+
+Nothing else. Not your conclusions, not the researchers' replies, not which
+claims you already believe: every one of those is what you are asking it to
+check. It reads the pages, weighs the claims the reader's decision turns on
+against their links, and spends its searches on the weakest -- absence claims
+first, then figures whose link does not carry them, then conclusions cited to
+an interested party.
+
+What comes back is a list of claims and the wording the evidence supports.
+**Apply it with `edit_file`, one claim at a time, on the page that carries the
+claim**, before you integrate anything into `overview.md`. A claim it
+contradicted is corrected and the contradiction recorded; a claim it could not
+establish is qualified on the page or moved to Open questions. If you disagree
+with it, the page says both and the log says you did.
+
+It is a check, not a second opinion to weigh against your own: you have already
+read the replies, and it has read only the pages.
+
 ## Reviewing your own work
 
 The last research step, and not a formality. A long page is not evidence that
 the question was answered.
 
-Read the request again, then read what you wrote this run. For each thing the
-request asked for:
+Read the request again, then read what you wrote this run, with the check's
+reply beside them. For each thing the request asked for:
 
 - **Was this one answered?** `answered`, `partly` or `not answered`, and the
   page and section that answer it. "Somewhere in the wiki" is a no.
@@ -142,6 +176,7 @@ record of a run, not a progress journal.
     - Pages created: [page](page.md), ...
     - Pages updated: [page](page.md), ...
     - Questions closed: ...  Questions opened: ...
+    - Check: what `review-agent` sent back, and what you corrected because of it
     - Review: each thing asked, answered / partly / not answered; what you
       corrected; what a reader should not rely on yet
 
