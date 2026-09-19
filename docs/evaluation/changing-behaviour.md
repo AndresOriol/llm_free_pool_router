@@ -98,7 +98,8 @@ right regression check.
 
 | Dataset | Topic |
 | --- | --- |
-| `probes-code-editing` | How the coding agent changes a repository: reading first and not twice, the shell and workspace it has (no git where there is no repository), tests it must not rewrite |
+| `probes-code-editing` | How the coding agent changes a repository: reading first and not twice, the shell and workspace it has (no git where there is no repository), recovering from a refused call |
+| `probes-code-scope` | What the task allows the coding agent to change: a stale page the task's own source overrides, against a guarantee someone else relies on (the Contradicted Requests section) |
 | `probes-improve-diagnosis` | How the improvement agent diagnoses: the ledger before the traces, a diagnosis before any delegation or edit |
 | `probes-explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, claims that something does not exist |
 
