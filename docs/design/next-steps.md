@@ -57,3 +57,61 @@ checkpointing, streaming and HITL approval — most of what our three
 `__main__.py` do. But it is **not installed and not a declared dependency**, and
 model resolution is the pool's whole job here, so the part that would carry the
 most weight is the part that fits worst.
+
+## Our agents as Claude Code subagents, through Claude Mods
+
+*Benched 2026-09-19. Come back once Mods leave early access.*
+
+**The goal.** Run `agent/code`, `agent/explore` and `agent/improve` as Claude Code subagents. While
+one of them works, its tool calls should be visible live in Claude Code, the way a Claude
+subagent's are.
+
+**Warning: this API is in early access.** Claude Mods (function hooks) load only with
+`CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`, and Anthropic says the API may change between releases
+without notice. Everything below was checked on 2026-09-19. Re-read the type declarations before
+building on any of it: event names, the 10 s hook budget and the 10 min cap on `$.process.run` may
+all have changed.
+
+**Where the research is**, in [research/claude-mods/](../../research/claude-mods/):
+- [verification.md](../../research/claude-mods/verification.md): the API checked by hand against
+  Anthropic's source, three integration paths and a verdict. Start here.
+- `postmortem.md`: why the explorer wrongly concluded that Mods do not exist.
+- The explorer's own notes: its general notes on subagents, plugins and MCP are usable; its
+  "Mods do not exist" finding is wrong.
+
+**References:**
+- [anthropics/claude-code/mods](https://github.com/anthropics/claude-code/tree/main/mods): the
+  official source, including the three built-in mods. The whole API is declared in
+  `mods/types/claude-code.d.ts`. Look for `turn.step`, `agent.register`, `agent.spawn`,
+  `tool.register`, `tool.call`, `$.process.run`, `$.http.fetch` and `HookBudget`.
+- [FazalAAli/pi-agent-for-claude](https://github.com/FazalAAli/pi-agent-for-claude) (MIT): a
+  working example. It runs the [pi](https://pi.dev) CLI as a native subagent type. A `turn.step`
+  hook replaces the subagent's model requests with a detached `pi --mode json` run. pi's text and
+  thinking are streamed back, and each pi tool call appears as a `▸ tool: args` line. A no-op
+  `pi_progress` tool chains the steps so the 10 s hook budget is never exceeded.
+  `hooks/register.ts` is the file to adapt.
+- Secondary write-ups: [Wavect](https://wavect.io/blog/claude-mods-function-hooks/) and
+  [aitmpl](https://www.aitmpl.com/mods/).
+- Our side: [18. Serving](../18-serving.md), which returns 202 and a task id, then polls, and
+  [16. Delegation](../16-delegation.md).
+
+**Paths, simplest first:**
+1. **No mod.** A skill or `.claude/agents/*.md` that runs `python -m agent.<name>` with Bash
+   `run_in_background`. This works today. It gives no live view, only the result.
+2. **Copy pi-agent-for-claude.** Swap `pi --mode json` for our agent, emitting one JSONL event
+   per tool start. The trace writer already has these events. This gets the live view, but only
+   as text lines: no real tool rows, no results, and it bypasses Claude Code's permission
+   prompts.
+3. **Swap the model, not the agent.** A `turn.step` hook answers a registered agent type's model
+   requests from the pool. Claude Code runs the tools, so they appear as real tool rows, which is
+   exactly the goal. The cost: the router needs an HTTP chat endpoint, and the agent doing the
+   work is Claude Code's harness rather than `agent/code`. That goes against "the agent is not
+   bespoke" in CLAUDE.md, so it would have to be an experiment compared against the baseline.
+4. **Tools only.** `tool.register` and `tool.call` submit to `agent/serve` and poll it. This is
+   the simplest mod, but it has no live view.
+
+**Blockers found:**
+- pi-agent-for-claude is macOS/Linux only. It uses `sh`, `nohup`, `/tmp`, `ps` and `pkill`, and
+  this machine runs Windows. Use WSL or port those calls.
+- It needs Claude Code 2.1.275 or later.
+- It relies on undocumented engine behaviour, so any Claude Code update can break it.

@@ -31,8 +31,11 @@ dataset is a projection of it ([10.7](../docs/10-metrics.md)).
 
 from __future__ import annotations
 
+import datetime
+import json
 import logging
 import re
+import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,16 +46,42 @@ import yaml
 logger = logging.getLogger("evals.probes")
 
 PROBES_DIR = Path(__file__).parent / "probes"
+REPO = Path(__file__).resolve().parents[1]
 
-# The agents a probe can be posed to, and how to build one. Each entry is
-# (module path, builder) resolved lazily -- importing all three would pull in
-# the web tools and the Tavily pool to run a coding probe.
-AGENTS = ("code", "improve")
+# What a probe is for. A `failure` guards a decision a recorded run got wrong; a
+# `regression` pins a decision the agent already gets right, so a fix for one
+# failure cannot quietly break the normal path (docs/21-changing-behaviour.md).
+KINDS = ("failure", "regression")
+
+# What an agent's behaviour is made of: its own package, what every agent
+# shares that the model reads (prompts, the tool surface, the file tools), and
+# which models serve it. A commit touching any of these after a probe's
+# `reviewed` date may have moved the agent off the path the probe's situation
+# assumes. Router internals -- retries, logging, quota -- are left out: they
+# change who answers when, not what the agent is shown.
+SHARED = ("agent/utils/prompts", "agent/utils/prompts.py",
+          "agent/utils/surface.py", "agent/utils/file_tools.py",
+          "llm_router/config.yaml")
+SURFACES = {"code": ("agent/code", *SHARED),
+            "improve": ("agent/improve", *SHARED),
+            "explore": ("agent/explore", *SHARED),
+            "explore-researcher": ("agent/explore", *SHARED)}
+
+# The agents a probe can be posed to; `_build` resolves each lazily, since
+# importing the explorer would pull in the web tools to run a coding probe.
+# `explore-researcher` is the explorer's research sub-agent, taken compiled out
+# of the explorer itself rather than rebuilt beside it.
+AGENTS = ("code", "improve", "explore", "explore-researcher")
 
 # How many supersteps a probe may take before it is abandoned. Two, because the
 # first is the decision and the second is only ever reached when the first
 # produced no tool call at all.
 MAX_STEPS = 2
+
+# How many turns a probe will let the agent spend on its `through` tools --
+# calls with no effect beyond the conversation, like a reflection -- before the
+# decision it is judged on. Bounded, so a probe stays a few calls.
+MAX_THROUGH = 3
 
 
 @dataclass
@@ -61,10 +90,24 @@ class Probe:
 
     id: str
     agent: str = "code"
+    dataset: str = ""                           # from the file: its topic
+    kind: str = "failure"
+    source: str = ""                            # the run and turn it came from
+    reviewed: str = ""                          # when the situation was last checked
     prompt: str = ""
     files: dict = field(default_factory=dict)   # a tiny tree to decide against
     expect: dict = field(default_factory=dict)
     why: str = ""                               # what failure this guards
+    # The conversation already had, after `prompt`: the recorded run up to the
+    # decision point. A failure that happens mid-run -- a review that signs off
+    # what it should have questioned -- cannot be reached from a first message.
+    history: list = field(default_factory=list)
+    # The explorer's research directory, when the recorded run named one.
+    research_dir: str = ""
+    # Tools the agent may call and carry on past: the judged decision is its
+    # first call outside them. The baseline run of the explorer probes passed
+    # three times on `think_tool` without ever reaching the write they test.
+    through: list = field(default_factory=list)
 
     @property
     def problems(self) -> list:
@@ -75,8 +118,19 @@ class Probe:
             found.append(f"agent must be one of {', '.join(AGENTS)}")
         if not self.prompt.strip():
             found.append("a probe needs a prompt")
+        try:
+            messages(self)
+        except (TypeError, ValueError, KeyError, AttributeError) as exc:
+            found.append(f"history does not parse: {exc}")
         if not self.expect:
             found.append("a probe with no expectation asserts nothing")
+        if self.kind not in KINDS:
+            found.append(f"kind must be one of {', '.join(KINDS)}")
+        try:
+            datetime.date.fromisoformat(self.reviewed)
+        except ValueError:
+            found.append("reviewed must be the date the situation was last "
+                         "checked, as YYYY-MM-DD")
         unknown = set(self.expect) - set(CHECKS)
         if unknown:
             found.append(f"unknown expectation(s): {', '.join(sorted(unknown))}")
@@ -93,20 +147,140 @@ def load(directory: Path = PROBES_DIR) -> list:
     found = []
     for path in sorted(directory.glob("*.yaml")):
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        # One file is one topic is one dataset: the grouping is reviewed in the
+        # same diff as the probes it groups.
+        dataset = str(raw.get("dataset") or "")
+        if not dataset:
+            raise ValueError(f"{path.name}: a probe file names its dataset")
         for entry in (raw.get("probes") or []):
             probe = Probe(
                 id=str(entry.get("id", "")),
                 agent=str(entry.get("agent", "code")),
+                dataset=dataset,
+                kind=str(entry.get("kind", "failure")),
+                source=str(entry.get("source") or ""),
+                reviewed=str(entry.get("reviewed") or ""),
                 prompt=str(entry.get("prompt", "")),
                 files={str(k): str(v) for k, v in (entry.get("files") or {}).items()},
                 expect=dict(entry.get("expect") or {}),
-                why=str(entry.get("why", "")))
+                why=str(entry.get("why", "")),
+                history=list(entry.get("history") or []),
+                research_dir=str(entry.get("research_dir") or ""),
+                through=[str(t) for t in (entry.get("through") or [])])
             problems = probe.problems
             if problems:
                 raise ValueError(f"{path.name}: probe {probe.id!r} — "
                                  + "; ".join(problems))
             found.append(probe)
     return found
+
+
+def messages(probe: Probe) -> list:
+    """The conversation the probe starts from: its prompt, then its history.
+
+    History entries are `{user: text}` or `{ai: text, calls: [...]}`, where
+    each call is `{name, args, result}` and becomes the tool call and the tool
+    message answering it -- so a recorded turn is written once, as it read.
+    """
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    found = [HumanMessage(probe.prompt)]
+    for index, entry in enumerate(probe.history):
+        if "user" in entry:
+            found.append(HumanMessage(str(entry["user"])))
+            continue
+        if "ai" not in entry:
+            raise ValueError(f"history entry {index} is neither user nor ai")
+        calls = entry.get("calls") or []
+        ids = [f"call_{index}_{n}" for n in range(len(calls))]
+        found.append(AIMessage(str(entry["ai"] or ""), tool_calls=[
+            {"name": str(c["name"]), "args": dict(c.get("args") or {}), "id": i}
+            for c, i in zip(calls, ids)]))
+        found += [ToolMessage(str(c.get("result", "")), tool_call_id=i,
+                              name=str(c["name"])) for c, i in zip(calls, ids)]
+    return found
+
+
+def stale(probes: list) -> list:
+    """`(probe, [commits])` for every probe its agent has changed under.
+
+    A probe freezes a situation: a conversation that reached a decision. Once
+    the agent changes, it may never reach that point again, and the probe keeps
+    testing a path nobody takes. That is not detectable from the probe, so the
+    rule is a review, and this is what says which ones are due.
+    """
+    due = []
+    for probe in probes:
+        paths = SURFACES.get(probe.agent, ())
+        log = subprocess.run(
+            ["git", "log", f"--after={probe.reviewed}T23:59:59",
+             "--format=%h %cs %s", "--", *paths],
+            cwd=REPO, capture_output=True, text=True, check=False).stdout
+        commits = [line for line in log.splitlines() if line.strip()]
+        if commits:
+            due.append((probe, commits))
+    return due
+
+
+def from_run(record: Path, turn: int, agent: str, probe_id: str = "",
+             limit: int = 8000) -> dict:
+    """A probe skeleton for the decision at `turn` of a recorded run.
+
+    The run record (`agent/utils/run_tree`) keeps every model call with the
+    conversation it was sent. The one at `turn` is the situation: its first
+    human message is the prompt, the rest is the history. Pages written by
+    `write_file` before that turn become the files. What the probe expects is
+    left for a person to write -- that is the part that needs judgement.
+    """
+    data = json.loads(Path(record).read_text(encoding="utf-8"))
+    turns = {t["n"]: t for t in data["turns"]}
+    sent = turns[turn]["input"]
+    human = [m for m in sent if m.get("role") == "human"]
+    if not human:
+        raise ValueError(f"turn {turn} carries no human message")
+
+    def cut(text) -> str:
+        text = str(text)
+        return text if len(text) <= limit else (
+            text[:1500] + "\n[... cut to 1,500 characters for the probe; "
+            "the run read the whole of it ...]")
+
+    results = {m.get("tool_call_id"): m.get("text", "") for m in sent
+               if m.get("role") == "tool"}
+    history = []
+    for message in sent[sent.index(human[0]) + 1:]:
+        if message.get("role") == "human":
+            history.append({"user": message.get("text", "")})
+        elif message.get("role") == "ai":
+            calls = message.get("tool_calls") or []
+            history.append({"ai": message.get("text") or "", "calls": [
+                {"name": c["name"], "args": c.get("args") or {},
+                 "result": cut(results.get(c.get("id"), ""))} for c in calls]})
+
+    files = {}
+    for t in data["turns"]:
+        if t["n"] >= turn:
+            break
+        for call in (t.get("output") or {}).get("tool_calls") or []:
+            if call.get("name") == "write_file":
+                files[call["args"]["file_path"].lstrip("/")] = call["args"]["content"]
+
+    decided = (turns[turn].get("output") or {}).get("tool_calls") or []
+    trace = (data.get("meta") or {}).get("trace_id", Path(record).stem)
+    probe = {"id": probe_id or f"TODO-name-the-decision-at-turn-{turn}",
+             "agent": agent, "kind": "failure",
+             "source": f"run {trace}, turn {turn}",
+             "reviewed": datetime.date.today().isoformat(),
+             "why": (f"TODO: what went wrong at turn {turn}. The run did: "
+                     + (", ".join(c["name"] for c in decided) or "no tool")),
+             "expect": {"TODO": "what must hold of the next decision"}}
+    research_dir = (data.get("meta") or {}).get("research_dir")
+    if research_dir:
+        probe["research_dir"] = research_dir
+    if files:
+        probe["files"] = files
+    probe.update(prompt=human[0].get("text", ""), history=history)
+    return probe
 
 
 # -- running one probe -----------------------------------------------------
@@ -137,12 +311,32 @@ PROBE_PEERS = ("code",)
 
 def _build(probe: Probe, workdir: Path, model, floor: int, members: int):
     """The real compiled agent for this probe's target."""
+    if probe.agent in ("explore", "explore-researcher"):
+        from agent.explore.agent import build_agent
+        agent = build_agent(workdir, model, floor=floor, members=members,
+                            **({"research_dir": probe.research_dir}
+                               if probe.research_dir else {}))
+        return agent if probe.agent == "explore" else _researcher(agent)
     if probe.agent == "improve":
         from agent.improve.agent import build_agent
         return build_agent(workdir, model, floor=floor, members=members,
                            peers=PROBE_PEERS)
     from agent.code.agent import build_agent
     return build_agent(workdir, model, floor=floor, members=members)
+
+
+def _researcher(explorer):
+    """The research sub-agent as the explorer compiled it.
+
+    deepagents keeps the compiled sub-agents only in the `task` tool's closure.
+    Reaching in is fragile against an upstream change -- and loudly so, which is
+    the point: rebuilding the researcher here would drift from the real one
+    without anything failing (tests/evals/test_probes.py).
+    """
+    task = explorer.nodes["tools"].bound.tools_by_name["task"]
+    function = task.func or task.coroutine
+    cells = dict(zip(function.__code__.co_freevars, function.__closure__ or ()))
+    return cells["subagent_graphs"].cell_contents["research-agent"]
 
 
 def first_decision(probe: Probe, model, *, floor: int, members: int,
@@ -153,29 +347,43 @@ def first_decision(probe: Probe, model, *, floor: int, members: int,
     stopping is what keeps this one call rather than a session: the graph is the
     real one and would happily keep going.
     """
-    from langchain_core.messages import AIMessage, HumanMessage
+    from langchain_core.messages import AIMessage
 
     with tempfile.TemporaryDirectory(prefix="probe-") as tmp:
         workdir = _materialize(probe, Path(root or tmp))
         agent = _build(probe, workdir, model, floor, members)
 
+        start = messages(probe)
         seen, text = [], ""
         try:
-            for state in agent.stream({"messages": [HumanMessage(probe.prompt)]},
-                                      {"recursion_limit": MAX_STEPS},
+            # Middleware nodes count as steps too, so the passes are counted
+            # below rather than inferred from the recursion limit.
+            limit = MAX_STEPS + (10 * MAX_THROUGH if probe.through else 0)
+            passed = 0
+            for state in agent.stream({"messages": start},
+                                      {"recursion_limit": limit},
                                       stream_mode="values"):
-                messages = (state or {}).get("messages") or []
-                for message in messages:
+                # Only what the agent said after the recorded history: a call
+                # in the history is the situation, not the decision.
+                said = ((state or {}).get("messages") or [])[len(start):]
+                passed = 0
+                for message in said:
                     if not isinstance(message, AIMessage):
                         continue
                     calls = getattr(message, "tool_calls", None) or []
+                    if calls and all(c.get("name") in probe.through
+                                     for c in calls):
+                        passed += 1  # the decision is still ahead
+                        continue
                     if calls:
                         seen = [{"name": c.get("name", "?"),
                                  "args": c.get("args", {})} for c in calls]
-                    elif not seen:
-                        text = _text(message) or text
+                        break
+                    text = _text(message) or text
                 if seen:
                     break  # it has decided; nothing later is the first decision
+                if passed > MAX_THROUGH:
+                    break
         except Exception as exc:  # noqa: BLE001 - a probe reports, never raises
             # The recursion limit is a normal end here, not a failure: it means
             # the agent produced no tool call within its two supersteps, which
@@ -184,6 +392,12 @@ def first_decision(probe: Probe, model, *, floor: int, members: int,
                 logger.warning(f"{probe.id}: {exc!r}")
                 return {"tools": seen, "text": text, "error": repr(exc)}
 
+        if probe.through and not seen and not text:
+            # Out of passes with nothing decided is not a pass: the baseline
+            # scored three of these green on negative expectations.
+            return {"tools": [], "text": "", "error":
+                    f"no decision within {MAX_THROUGH} turns of "
+                    f"{', '.join(probe.through)}"}
         return {"tools": seen, "text": text, "error": ""}
 
 
@@ -268,6 +482,12 @@ def _check_text_matches(want, decision) -> tuple:
     return bool(re.search(str(want), text, re.I)), f"said {text[:200] or 'nothing'!r}"
 
 
+def _check_text_not_matches(want, decision) -> tuple:
+    """It answered, and did not say this -- a reply is a decision too."""
+    text = decision.get("text") or ""
+    return not re.search(str(want), text), f"said {text[:200] or 'nothing'!r}"
+
+
 def _check_no_tool(want, decision) -> tuple:
     called = bool(decision.get("tools"))
     return (not called) == bool(want), f"first tool was {_first_name(decision) or 'none'}"
@@ -277,7 +497,8 @@ CHECKS = {"tool": _check_tool, "tool_in": _check_tool_in,
           "not_tool": _check_not_tool, "args_match": _check_args_match,
           "args_not_match": _check_args_not_match,
           "not_tool_with_args": _check_not_tool_with_args,
-          "text_matches": _check_text_matches, "no_tool": _check_no_tool}
+          "text_matches": _check_text_matches,
+          "text_not_matches": _check_text_not_matches, "no_tool": _check_no_tool}
 
 
 def score(probe: Probe, decision: dict) -> dict:

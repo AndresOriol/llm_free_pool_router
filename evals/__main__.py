@@ -5,7 +5,9 @@
     run --config NAME [...]                   execute runs and record them
     show [--config NAME]                      summarize recorded runs
     bundle [--config NAME] [--out FILE]       collect a batch's evidence for J2
-    probes [--agent A] [--list] [--push]      one agent, one situation, one
+    probes [--dataset D] [--list] [--push] [--experiment] [--stale]
+           [--from-run RECORD --turn N --agent A]
+                                             one agent, one situation, one
                                              decision -- the small tests
     mine --out DIR [--sessions DIR]           recorded sessions -> scenario material
 
@@ -260,32 +262,62 @@ def cmd_probes(args) -> int:
     """One agent, one situation, one decision — the small end of the harness."""
     from evals import probes as probes_mod
 
+    if args.from_run:
+        # A skeleton to edit, printed rather than written: which dataset it
+        # belongs to and what it expects are decisions, not extraction.
+        import yaml
+        if not (args.turn and args.agent):
+            sys.exit("--from-run needs --turn and --agent")
+        skeleton = probes_mod.from_run(Path(args.from_run), args.turn,
+                                       args.agent, (args.id or [""])[0])
+        sys.stdout.reconfigure(encoding="utf-8")  # run records carry any text
+        print(yaml.safe_dump([skeleton], allow_unicode=True, sort_keys=False,
+                             width=100))
+        return 0
+
     try:
         found = probes_mod.load(Path(args.dir) if args.dir
                                 else probes_mod.PROBES_DIR)
     except ValueError as exc:
         sys.exit(str(exc))
     if args.agent:
-        found = [p for p in found if p.agent == args.agent]
+        # `explore` includes `explore-researcher`: an agent and its sub-agents.
+        found = [p for p in found if p.agent == args.agent
+                 or p.agent.startswith(args.agent + "-")]
+    if args.dataset:
+        found = [p for p in found if p.dataset == args.dataset]
     if args.id:
         found = [p for p in found if p.id in args.id]
     if not found:
         sys.exit("No probes matched.")
+    datasets = sorted({p.dataset for p in found})
 
     if args.list:
         for probe in found:
-            print(f"{probe.id}  ({probe.agent})  "
-                  f"{', '.join(f'{k}={v!r}' for k, v in probe.expect.items())}")
+            print(f"{probe.dataset}  {probe.id}  ({probe.agent}, {probe.kind}, "
+                  f"reviewed {probe.reviewed})")
         return 0
+
+    if args.stale:
+        due = probes_mod.stale(found)
+        for probe, commits in due:
+            print(f"{probe.dataset}  {probe.id}  reviewed {probe.reviewed}; "
+                  f"{probe.agent} changed since:")
+            for commit in commits:
+                print(f"    {commit}")
+        print(f"{len(due)} of {len(found)} probe(s) due for review.")
+        return 1 if due else 0
 
     if args.push:
         from evals import probe_dataset
-        try:
-            pushed = probe_dataset.push(found, args.dataset)
-        except probe_dataset.NoLangSmith as exc:
-            sys.exit(str(exc))
-        print(f"{pushed['examples']} example(s) -> dataset "
-              f"{pushed['dataset']!r} ({pushed['id']})")
+        for name in datasets:
+            try:
+                pushed = probe_dataset.push(found, name)
+            except probe_dataset.NoLangSmith as exc:
+                sys.exit(str(exc))
+            print(f"{pushed['examples']} example(s) -> dataset {name!r} "
+                  f"({pushed['created']} new, {pushed['updated']} updated, "
+                  f"{pushed['deleted']} deleted)")
         if not args.run:
             return 0
 
@@ -306,15 +338,18 @@ def cmd_probes(args) -> int:
                                 floor, strict=True)
 
     if args.experiment:
+        # A whole dataset per experiment: the failures a change targets and
+        # the regressions beside them are one topic, and are judged together.
         from evals import probe_dataset
-        try:
-            done = probe_dataset.evaluate(found, model, floor=floor,
-                                          members=members,
-                                          dataset=args.dataset)
-        except probe_dataset.NoLangSmith as exc:
-            sys.exit(str(exc))
-        print(f"Experiment recorded against {done['dataset']!r}: "
-              f"{done['experiment']}")
+        for name in datasets:
+            try:
+                done = probe_dataset.evaluate(found, model, floor=floor,
+                                              members=members, dataset=name,
+                                              experiment=args.name or name,
+                                              repetitions=args.repetitions)
+            except probe_dataset.NoLangSmith as exc:
+                sys.exit(str(exc))
+            print(f"Experiment recorded against {name!r}: {done['experiment']}")
         return 0
 
     # Serial, for the reason every batch here is serial: the probes share one
@@ -395,7 +430,7 @@ def main() -> int:
 
     probes = sub.add_parser(
         "probes", help="one agent, one situation, one decision")
-    probes.add_argument("--agent", default="", help="code | improve")
+    probes.add_argument("--agent", default="", help="code | improve | explore | explore-researcher")
     probes.add_argument("--id", nargs="*", help="only these probe ids")
     probes.add_argument("--dir", default="", help="where the yaml lives")
     probes.add_argument("--list", action="store_true",
@@ -408,7 +443,18 @@ def main() -> int:
                         help="run them through LangSmith, recording an "
                              "experiment against the dataset")
     probes.add_argument("--dataset", default="",
-                        help="dataset name; default free_coding_agent-probes")
+                        help="only this dataset (a probe file's topic)")
+    probes.add_argument("--stale", action="store_true",
+                        help="list probes whose agent changed since review")
+    probes.add_argument("--from-run", default="",
+                        help="a run record: print a probe skeleton from it")
+    probes.add_argument("--turn", type=int, default=0,
+                        help="with --from-run, the decision to stop at")
+    probes.add_argument("--name", default="",
+                        help="with --experiment, the experiment's name prefix")
+    probes.add_argument("--repetitions", type=int, default=1,
+                        help="with --experiment, runs per probe: one model "
+                             "call is one sample from a pool that changes")
     probes.set_defaults(func=cmd_probes)
 
     args = parser.parse_args()

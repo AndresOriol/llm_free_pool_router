@@ -22,15 +22,15 @@ import yaml
 from evals import probe_dataset, probes
 
 
-def _write(tmp_path, entries):
-    (tmp_path / "p.yaml").write_text(yaml.safe_dump({"probes": entries}),
-                                     encoding="utf-8")
+def _write(tmp_path, entries, dataset="probes-test"):
+    (tmp_path / "p.yaml").write_text(
+        yaml.safe_dump({"dataset": dataset, "probes": entries}), encoding="utf-8")
     return tmp_path
 
 
 def _ok(**over):
     entry = {"id": "p1", "agent": "code", "prompt": "do a thing",
-             "expect": {"tool": "read_file"}}
+             "reviewed": "2026-09-19", "expect": {"tool": "read_file"}}
     entry.update(over)
     return entry
 
@@ -56,7 +56,7 @@ class TestLoading:
             probes.load(tmp_path)
 
     def test_an_unknown_agent_is_refused(self, tmp_path):
-        _write(tmp_path, [_ok(agent="explore")])
+        _write(tmp_path, [_ok(agent="nonsense")])
         with pytest.raises(ValueError, match="agent must be one of"):
             probes.load(tmp_path)
 
@@ -134,12 +134,14 @@ def test_an_example_carries_the_reason_it_exists():
 
     assert example["inputs"]["prompt"] == "go"
     assert example["outputs"]["expect"] == {"tool": "read_file"}
-    assert example["metadata"] == {"probe_id": "p1", "why": "a recorded failure"}
+    assert example["metadata"]["probe_id"] == "p1"
+    assert example["metadata"]["why"] == "a recorded failure"
 
 
 def test_pushing_without_a_key_says_so_rather_than_failing_obscurely(monkeypatch):
     monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
     monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)  # the real .env has one
 
     with pytest.raises(probe_dataset.NoLangSmith, match="run without it"):
         probe_dataset.client()
@@ -198,3 +200,155 @@ def test_the_improve_agent_is_probed_with_its_delegation_tool_present():
 
     assert "code" in probes.PROBE_PEERS
     assert "delegate_fix" in tools.make_tools(Path("."), probes.PROBE_PEERS)
+
+
+class TestHistory:
+    """A probe that starts mid-run: the recorded turns, then the decision."""
+
+    def test_a_recorded_call_becomes_the_call_and_its_answer(self):
+        probe = probes.Probe(id="h", prompt="brief", expect={"no_tool": True},
+                             history=[{"ai": "", "calls": [
+                                 {"name": "tavily_search", "args": {"query": "q"},
+                                  "result": "a page"}]}])
+        brief, call, answer = probes.messages(probe)
+        assert brief.content == "brief"
+        assert call.tool_calls[0]["name"] == "tavily_search"
+        assert answer.tool_call_id == call.tool_calls[0]["id"]
+        assert answer.content == "a page"
+
+    def test_an_entry_that_is_neither_side_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(history=[{"tool": "x"}])])
+        with pytest.raises(ValueError, match="history does not parse"):
+            probes.load(tmp_path)
+
+    def test_the_history_travels_with_the_dataset_example(self):
+        probe = probes.Probe(id="h", prompt="p", expect={"no_tool": True},
+                             history=[{"user": "more"}])
+        assert probe_dataset.as_example(probe)["inputs"]["history"] == [{"user": "more"}]
+
+
+def test_the_researcher_probed_is_the_one_the_explorer_compiled(tmp_path):
+    """Rebuilding the researcher beside the explorer would drift from it."""
+    from agent.explore import agent as explore
+    from tests.agent.test_explore import _recorder
+
+    researcher = probes._researcher(
+        explore.build_agent(tmp_path, _recorder(), members=3))
+    tools = researcher.nodes["tools"].bound.tools_by_name
+    assert "tavily_search" in tools and "task" not in tools
+
+
+class TestThrough:
+    """The decision judged is the first call outside the probe's `through`."""
+
+    def _run(self, monkeypatch, through, *turns):
+        from langchain_core.messages import AIMessage
+
+        class Graph:
+            def stream(self, inputs, config, stream_mode):
+                said = list(inputs["messages"])
+                for name in turns:
+                    said.append(AIMessage("", tool_calls=[
+                        {"name": name, "args": {}, "id": name}]))
+                    yield {"messages": list(said)}
+
+        monkeypatch.setattr(probes, "_build", lambda *a: Graph())
+        probe = probes.Probe(id="t", prompt="p", expect={"no_tool": True},
+                             through=through)
+        return probes.first_decision(probe, None, floor=0, members=0)
+
+    def test_a_reflection_is_passed_through_to_the_write(self, monkeypatch):
+        got = self._run(monkeypatch, ["think_tool"], "think_tool", "write_file")
+        assert [t["name"] for t in got["tools"]] == ["write_file"]
+
+    def test_without_through_the_first_call_is_the_decision(self, monkeypatch):
+        got = self._run(monkeypatch, [], "think_tool", "write_file")
+        assert [t["name"] for t in got["tools"]] == ["think_tool"]
+
+
+def test_running_out_of_passes_is_not_a_pass(monkeypatch):
+    """Three baseline runs passed a negative probe by deciding nothing."""
+    from langchain_core.messages import AIMessage
+
+    class Graph:
+        def stream(self, inputs, config, stream_mode):
+            said = list(inputs["messages"])
+            for n in range(probes.MAX_THROUGH + 2):
+                said.append(AIMessage("", tool_calls=[
+                    {"name": "think_tool", "args": {}, "id": str(n)}]))
+                yield {"messages": list(said)}
+
+    monkeypatch.setattr(probes, "_build", lambda *a: Graph())
+    probe = probes.Probe(id="t", prompt="p", through=["think_tool"],
+                         expect={"not_tool": "write_file"})
+    decision = probes.first_decision(probe, None, floor=0, members=0)
+    assert not probes.score(probe, decision)["passed"]
+
+
+def test_a_reply_is_judged_by_what_it_says():
+    probe = probes.Probe(id="t", expect={"text_not_matches": "does not exist"})
+    said = {"tools": [], "text": "Mods does not exist.", "error": ""}
+    assert not probes.score(probe, said)["passed"]
+
+
+
+class TestDatasets:
+    """One file is one topic is one dataset, and every probe is dated."""
+
+    def test_a_file_that_names_no_dataset_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok()], dataset="")
+        with pytest.raises(ValueError, match="names its dataset"):
+            probes.load(tmp_path)
+
+    def test_a_probe_that_was_never_reviewed_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(reviewed="")])
+        with pytest.raises(ValueError, match="reviewed"):
+            probes.load(tmp_path)
+
+    def test_a_probe_is_either_a_failure_or_a_regression(self, tmp_path):
+        _write(tmp_path, [_ok(kind="nice-to-have")])
+        with pytest.raises(ValueError, match="kind must be"):
+            probes.load(tmp_path)
+
+    def test_the_same_probe_is_the_same_example_across_pushes(self):
+        """Re-creating examples on push orphaned the experiments before it."""
+        one = probes.Probe(id="p", dataset="d")
+        assert probe_dataset.example_id(one) == probe_dataset.example_id(
+            probes.Probe(id="p", dataset="d", prompt="changed"))
+        assert probe_dataset.example_id(one) != probe_dataset.example_id(
+            probes.Probe(id="p", dataset="other"))
+
+    def test_a_probe_reviewed_before_its_agent_changed_is_due(self):
+        old = probes.Probe(id="p", agent="code", reviewed="2000-01-01")
+        assert [p.id for p, _ in probes.stale([old])] == ["p"]
+
+    def test_a_probe_reviewed_after_every_change_is_not(self):
+        import datetime
+
+        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        fresh = probes.Probe(id="p", agent="code", reviewed=tomorrow.isoformat())
+        assert probes.stale([fresh]) == []
+
+
+def test_a_run_record_becomes_the_situation_at_a_turn(tmp_path):
+    import json
+
+    record = tmp_path / "trace.json"
+    record.write_text(json.dumps({"meta": {"trace_id": "t1"}, "turns": [
+        {"n": 1, "input": [{"role": "system", "text": "s"},
+                           {"role": "human", "text": "the brief"}],
+         "output": {"tool_calls": [{"id": "c1", "name": "write_file", "args": {
+             "file_path": "/research/a.md", "content": "page"}}]}},
+        {"n": 2, "input": [
+            {"role": "system", "text": "s"}, {"role": "human", "text": "the brief"},
+            {"role": "ai", "text": "", "tool_calls": [
+                {"id": "c1", "name": "write_file", "args": {"file_path": "/research/a.md"}}]},
+            {"role": "tool", "tool_call_id": "c1", "text": "saved"}],
+         "output": {"tool_calls": [{"id": "c2", "name": "task", "args": {}}]}}]}),
+        encoding="utf-8")
+
+    probe = probes.from_run(record, 2, "explore")
+    assert probe["prompt"] == "the brief"
+    assert probe["history"][0]["calls"][0]["result"] == "saved"
+    assert probe["files"] == {"research/a.md": "page"}
+    assert probe["source"] == "run t1, turn 2"

@@ -7,9 +7,15 @@
 # pass costs twenty minutes, so the behaviours below could not be measured any
 # other way without spending a day per sample.
 
+# Dataset probes-improve-diagnosis. How the improvement agent diagnoses: the ledger before the traces, and a
+# diagnosis before any delegation or edit.
+dataset: probes-improve-diagnosis
+
 probes:
   - id: does-not-open-a-trace-before-consulting-the-ledger
     agent: improve
+    kind: failure
+    reviewed: 2026-09-15
     why: >
       The standing pass is the loop's second half, not its first: what is
       already open, already fixed, or already reopened outranks anything new.
@@ -36,6 +42,8 @@ probes:
 
   - id: does-not-delegate-before-diagnosing
     agent: improve
+    kind: failure
+    reviewed: 2026-09-15
     why: >
       A delegation costs a whole coding session. The first live pass wrote a
       brief for a change that already existed, having never opened the file it
@@ -52,6 +60,8 @@ probes:
 
   - id: does-not-try-to-edit-the-harness-itself
     agent: improve
+    kind: failure
+    reviewed: 2026-09-15
     why: >
       The agent that diagnoses is not the agent that changes the code, and the
       middleware refuses the write. A probe here is about the prompt rather
@@ -69,6 +79,8 @@ probes:
 
   - id: does-not-reach-for-python
     agent: improve
+    kind: failure
+    reviewed: 2026-09-15
     why: >
       This agent's allowlist is `git` alone. The shared prompt section used to
       offer a Python escape hatch anyway, and 10 of the first live pass's 28
