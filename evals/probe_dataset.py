@@ -21,12 +21,12 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger("evals.probes")
 
-DEFAULT_DATASET = "free_coding_agent-probes"
 
 
 class NoLangSmith(RuntimeError):
@@ -51,6 +51,16 @@ def client():
     return Client()
 
 
+def example_id(probe) -> str:
+    """A probe's example id: the same probe is the same example across pushes.
+
+    Experiments point at example ids. Deleting and re-creating examples on
+    every push orphaned the earlier experiments of the explorer probes, which is
+    the comparison a behaviour change is judged on.
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"probe:{probe.dataset}:{probe.id}"))
+
+
 def as_example(probe) -> dict:
     """One probe as a dataset example.
 
@@ -60,46 +70,58 @@ def as_example(probe) -> dict:
     failing example whose reason has to be looked up elsewhere gets dismissed.
     """
     return {
+        "id": example_id(probe),
         "inputs": {"agent": probe.agent, "prompt": probe.prompt,
                    "files": probe.files, "history": probe.history,
                    "research_dir": probe.research_dir,
                    "through": probe.through},
         "outputs": {"expect": probe.expect},
-        "metadata": {"probe_id": probe.id, "why": probe.why.strip()},
+        "metadata": {"probe_id": probe.id, "why": probe.why.strip(),
+                     "kind": probe.kind, "source": probe.source,
+                     "reviewed": probe.reviewed},
     }
 
 
-def push(probes: list, dataset: str = DEFAULT_DATASET) -> dict:
-    """Create or refresh the dataset from the probes on disk.
+def push(probes: list, dataset: str) -> dict:
+    """Make the dataset match the probes on disk that belong to it.
 
-    Examples are replaced wholesale rather than diffed. A probe's id is stable
-    and its expectation is not, so matching on id and updating in place would
-    leave a dataset whose examples silently disagree with the files they came
-    from — which is the one failure this module is arranged to prevent.
+    Every example is rewritten whole from its file -- inputs, expectation and
+    metadata -- under an id derived from the probe's, so nothing in the dataset
+    can disagree with the files, and experiments keep pointing at the same
+    examples. Examples whose probe is gone are deleted. LangSmith versions the
+    dataset on each change, so an old experiment still shows what it ran.
     """
     ls = client()
+    mine = [p for p in probes if p.dataset == dataset]
+    if not mine:
+        raise ValueError(f"no probe on disk belongs to dataset {dataset!r}")
     if ls.has_dataset(dataset_name=dataset):
-        existing = ls.read_dataset(dataset_name=dataset)
-        stale = list(ls.list_examples(dataset_id=existing.id))
-        if stale:
-            ls.delete_examples(example_ids=[e.id for e in stale])
-        target = existing
-        logger.info(f"Refreshing dataset {dataset!r} ({len(stale)} replaced)")
+        target = ls.read_dataset(dataset_name=dataset)
     else:
         target = ls.create_dataset(
             dataset_name=dataset,
             description=("First-decision probes for the free_coding_agent "
-                         "agents. Generated from evals/probes/*.yaml — edit "
+                         "agents. Generated from evals/probes/*.yaml -- edit "
                          "the files, not this dataset."))
         logger.info(f"Created dataset {dataset!r}")
 
-    made = [as_example(p) for p in probes]
-    ls.create_examples(dataset_id=target.id, examples=made)
-    return {"dataset": dataset, "id": str(target.id), "examples": len(made)}
+    made = [as_example(p) for p in mine]
+    there = {str(e.id) for e in ls.list_examples(dataset_id=target.id)}
+    new = [e for e in made if e["id"] not in there]
+    kept = [e for e in made if e["id"] in there]
+    gone = there - {e["id"] for e in made}
+    if kept:
+        ls.update_examples(dataset_id=target.id, updates=kept)
+    if new:
+        ls.create_examples(dataset_id=target.id, examples=new)
+    if gone:
+        ls.delete_examples(example_ids=sorted(gone))
+    return {"dataset": dataset, "id": str(target.id), "examples": len(made),
+            "created": len(new), "updated": len(kept), "deleted": len(gone)}
 
 
 def evaluate(probes: list, model, *, floor: int, members: int,
-             dataset: str = DEFAULT_DATASET,
+             dataset: str,
              experiment: Optional[str] = None,
              repetitions: int = 1) -> dict:
     """Run the probes as a LangSmith experiment. Returns a summary.

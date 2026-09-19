@@ -22,15 +22,15 @@ import yaml
 from evals import probe_dataset, probes
 
 
-def _write(tmp_path, entries):
-    (tmp_path / "p.yaml").write_text(yaml.safe_dump({"probes": entries}),
-                                     encoding="utf-8")
+def _write(tmp_path, entries, dataset="probes-test"):
+    (tmp_path / "p.yaml").write_text(
+        yaml.safe_dump({"dataset": dataset, "probes": entries}), encoding="utf-8")
     return tmp_path
 
 
 def _ok(**over):
     entry = {"id": "p1", "agent": "code", "prompt": "do a thing",
-             "expect": {"tool": "read_file"}}
+             "reviewed": "2026-09-19", "expect": {"tool": "read_file"}}
     entry.update(over)
     return entry
 
@@ -134,7 +134,8 @@ def test_an_example_carries_the_reason_it_exists():
 
     assert example["inputs"]["prompt"] == "go"
     assert example["outputs"]["expect"] == {"tool": "read_file"}
-    assert example["metadata"] == {"probe_id": "p1", "why": "a recorded failure"}
+    assert example["metadata"]["probe_id"] == "p1"
+    assert example["metadata"]["why"] == "a recorded failure"
 
 
 def test_pushing_without_a_key_says_so_rather_than_failing_obscurely(monkeypatch):
@@ -288,3 +289,66 @@ def test_a_reply_is_judged_by_what_it_says():
     probe = probes.Probe(id="t", expect={"text_not_matches": "does not exist"})
     said = {"tools": [], "text": "Mods does not exist.", "error": ""}
     assert not probes.score(probe, said)["passed"]
+
+
+
+class TestDatasets:
+    """One file is one topic is one dataset, and every probe is dated."""
+
+    def test_a_file_that_names_no_dataset_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok()], dataset="")
+        with pytest.raises(ValueError, match="names its dataset"):
+            probes.load(tmp_path)
+
+    def test_a_probe_that_was_never_reviewed_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(reviewed="")])
+        with pytest.raises(ValueError, match="reviewed"):
+            probes.load(tmp_path)
+
+    def test_a_probe_is_either_a_failure_or_a_regression(self, tmp_path):
+        _write(tmp_path, [_ok(kind="nice-to-have")])
+        with pytest.raises(ValueError, match="kind must be"):
+            probes.load(tmp_path)
+
+    def test_the_same_probe_is_the_same_example_across_pushes(self):
+        """Re-creating examples on push orphaned the experiments before it."""
+        one = probes.Probe(id="p", dataset="d")
+        assert probe_dataset.example_id(one) == probe_dataset.example_id(
+            probes.Probe(id="p", dataset="d", prompt="changed"))
+        assert probe_dataset.example_id(one) != probe_dataset.example_id(
+            probes.Probe(id="p", dataset="other"))
+
+    def test_a_probe_reviewed_before_its_agent_changed_is_due(self):
+        old = probes.Probe(id="p", agent="code", reviewed="2000-01-01")
+        assert [p.id for p, _ in probes.stale([old])] == ["p"]
+
+    def test_a_probe_reviewed_after_every_change_is_not(self):
+        import datetime
+
+        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        fresh = probes.Probe(id="p", agent="code", reviewed=tomorrow.isoformat())
+        assert probes.stale([fresh]) == []
+
+
+def test_a_run_record_becomes_the_situation_at_a_turn(tmp_path):
+    import json
+
+    record = tmp_path / "trace.json"
+    record.write_text(json.dumps({"meta": {"trace_id": "t1"}, "turns": [
+        {"n": 1, "input": [{"role": "system", "text": "s"},
+                           {"role": "human", "text": "the brief"}],
+         "output": {"tool_calls": [{"id": "c1", "name": "write_file", "args": {
+             "file_path": "/research/a.md", "content": "page"}}]}},
+        {"n": 2, "input": [
+            {"role": "system", "text": "s"}, {"role": "human", "text": "the brief"},
+            {"role": "ai", "text": "", "tool_calls": [
+                {"id": "c1", "name": "write_file", "args": {"file_path": "/research/a.md"}}]},
+            {"role": "tool", "tool_call_id": "c1", "text": "saved"}],
+         "output": {"tool_calls": [{"id": "c2", "name": "task", "args": {}}]}}]}),
+        encoding="utf-8")
+
+    probe = probes.from_run(record, 2, "explore")
+    assert probe["prompt"] == "the brief"
+    assert probe["history"][0]["calls"][0]["result"] == "saved"
+    assert probe["files"] == {"research/a.md": "page"}
+    assert probe["source"] == "run t1, turn 2"

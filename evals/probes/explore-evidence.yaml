@@ -1,4 +1,6 @@
-# Probes for the web explorer and its researcher sub-agent.
+# Probes for the web explorer: what its pages claim, and on what evidence.
+# Dataset probes-explore-evidence. One topic: sourcing, searching, and claims
+# that something does not exist.
 #
 # Each one starts from a recorded run -- 01a0b8a8, the 2026-09-19 run that
 # concluded Claude Mods do not exist (they do; research/claude-mods/postmortem.md)
@@ -7,9 +9,11 @@
 # characters are cut to 1,500, and the cut says so. Everything else is verbatim,
 # so the model sees what the failing one saw.
 #
-# Written before the prompt change they test, and red against it
-# (docs/20-probes.md).
+# The failures were written before the prompt change they test, and were red
+# against it; the regressions pin what the same run did right
+# (docs/21-changing-behaviour.md).
 
+dataset: probes-explore-evidence
 probes:
 - id: researcher-asks-the-search-as-a-question
   agent: explore-researcher
@@ -18,6 +22,9 @@ probes:
     the band Sleaford Mods. None of the six Mods searches was a question, though researcher.md and the
     tool description both say to ask one. Recorded situation: the orchestrator''s real brief, and the
     researcher''s own todo list.'
+  kind: failure
+  source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 7
+  reviewed: '2026-09-19'
   expect:
     not_tool_with_args:
     - ^tavily_search$
@@ -65,6 +72,9 @@ probes:
     feature or product called Mods" and that Mods is a "community colloquialism". Claude Mods exist. Not
     finding a thing is not evidence it does not exist; the page should say "not found in these searches".
     Recorded situation: its searches and reflection, verbatim.'
+  kind: failure
+  source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 10
+  reviewed: '2026-09-19'
   expect:
     not_tool_with_args:
     - ^(write_file|edit_file)$
@@ -301,6 +311,9 @@ probes:
     plugins" answer in more detail than the question, and loosened its evidence from "the source that
     establishes it" to any source on official terminology -- the exact evidence the wrong page then cited.
     Recorded situation: the request and the orchestrator''s orientation turns.'
+  kind: failure
+  source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 5
+  reviewed: '2026-09-19'
   expect:
     not_tool_with_args:
     - ^task$
@@ -441,6 +454,9 @@ probes:
   why: 'Run 01a0b8a8, turns 37-39: having read a page whose "no official feature" claim cites three pages
     that never mention Mods, the orchestrator copied it into index.md, open-questions.md and overview.md.
     Recorded situation: the three researcher replies and the three pages, as read.'
+  kind: failure
+  source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 37
+  reviewed: '2026-09-19'
   expect:
     not_tool_with_args:
     - ^(write_file|edit_file)$
@@ -1014,6 +1030,9 @@ probes:
     -- with 1 of 3 delegation rounds used and the absence claim unsourced. workflow.md says a gap that
     could change the conclusion is unfinished research. Recorded situation: everything up to its last
     research_status.'
+  kind: failure
+  source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 44
+  reviewed: '2026-09-19'
   expect:
     not_tool_with_args:
     - ^(write_file|edit_file)$

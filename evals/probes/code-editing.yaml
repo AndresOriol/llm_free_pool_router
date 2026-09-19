@@ -8,9 +8,15 @@
 # These assert the agent's FIRST decision only. They cannot say a task was
 # solved; they say the agent started the way it should. See evals/probes.py.
 
+# Dataset probes-code-editing. How the coding agent changes a repository: reading first, the shell it has, and
+# tests it must not rewrite.
+dataset: probes-code-editing
+
 probes:
   - id: reads-before-editing
     agent: code
+    kind: failure
+    reviewed: 2026-09-11
     why: >
       The recorded failure: "the first edit lands at 08:32:41 against
       alerts/rules.py, which no prior call had read". An edit written against a
@@ -41,6 +47,8 @@ probes:
 
   - id: does-not-shell-out-with-operators
     agent: code
+    kind: failure
+    reviewed: 2026-09-11
     why: >
       `execute` launches one program directly; there is no shell to interpret
       `&&`, `|` or a heredoc. A recorded run spent 900 of its 1,050 seconds on
@@ -57,6 +65,8 @@ probes:
 
   - id: does-not-edit-the-test-that-contradicts-the-task
     agent: code
+    kind: failure
+    reviewed: 2026-09-11
     why: >
       A run in the first full-set batch was told to mutate objects the docs say
       are never modified. It performed the mutation, replaced the test guarding

@@ -112,9 +112,20 @@ about how these agents should behave, argued from a recorded failure, and
 `evals/probes/*.yaml` carries the argument beside the assertion where it is
 reviewed in a diff. A dataset edited in a browser is a rule nobody reviewed. So
 the flow is one-way: files are pushed to the dataset, and the dataset is never
-read back over the files. Examples are replaced wholesale rather than diffed,
-because an id is stable and an expectation is not — matching on id and updating
-in place would leave a dataset silently disagreeing with the files it came from.
+read back over the files. Every push rewrites each example **whole** from its
+file (inputs, expectation, metadata) under an id derived from the probe's id,
+and deletes examples whose probe is gone. So the dataset cannot disagree with
+the files, and experiments keep pointing at the same examples.
+
+> **Amended.** Examples used to be deleted and re-created on every push. That
+> orphaned every earlier experiment: after one push, the explorer's baseline
+> could no longer be compared with its fix, which is the comparison the
+> dataset exists for. What the old rule guarded against was a partial update,
+> and a whole rewrite under a stable id avoids that too.
+
+**One file is one topic is one dataset.** Each `evals/probes/*.yaml` names its
+`dataset`, and how probes are grouped is part of the change under review
+([21.4](21-changing-behaviour.md#214-datasets-one-topic-each)).
 
 All of it is optional. With no key the probes still run and still report; what
 is lost is the history and the comparison, not the test
@@ -130,7 +141,7 @@ missed. A first message cannot reach them. For these a probe carries a
 turns and is judged only on what it says next.
 
 The `explore` and `explore-researcher` targets work this way
-([evals/probes/explore.yaml](../evals/probes/explore.yaml)). Their histories are
+([evals/probes/explore-evidence.yaml](../evals/probes/explore-evidence.yaml)). Their histories are
 generated from one run record rather than written by hand, so the model sees
 what the failing run saw. The researcher is taken compiled out of the explorer,
 not rebuilt next to it.
@@ -150,11 +161,15 @@ Two more fields exist because of what the first baseline did:
 ```bash
 python -m evals probes --list                 # what would run; no calls, no keys
 python -m evals probes                        # run them, print the table
-python -m evals probes --agent improve        # just one agent's
-python -m evals probes --push                 # sync the dataset, run nothing
-python -m evals probes --experiment           # run through LangSmith
-python -m evals probes --agent explore --dataset free_coding_agent-probes-explore     --experiment --name explore-fix --repetitions 3   # one side of a comparison
+python -m evals probes --dataset probes-improve-diagnosis   # one topic
+python -m evals probes --push                 # sync every dataset, run nothing
+python -m evals probes --dataset probes-explore-evidence --experiment     --name explore-fix --repetitions 3        # one side of a comparison
+python -m evals probes --stale                # which probes are due a review
+python -m evals probes --from-run trace.json --turn 10 --agent explore     --id name-the-decision                    # a skeleton from a recorded run
 ```
+
+An experiment always runs a **whole dataset**, so the failures a change targets
+and the regressions beside them are measured together.
 
 Serial, always — the probes share one free-tier pool, and running them at once
 would make each probe's model mix depend on the others, which is the same reason

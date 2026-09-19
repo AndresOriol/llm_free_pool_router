@@ -31,8 +31,11 @@ dataset is a projection of it ([10.7](../docs/10-metrics.md)).
 
 from __future__ import annotations
 
+import datetime
+import json
 import logging
 import re
+import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,6 +46,26 @@ import yaml
 logger = logging.getLogger("evals.probes")
 
 PROBES_DIR = Path(__file__).parent / "probes"
+REPO = Path(__file__).resolve().parents[1]
+
+# What a probe is for. A `failure` guards a decision a recorded run got wrong; a
+# `regression` pins a decision the agent already gets right, so a fix for one
+# failure cannot quietly break the normal path (docs/21-changing-behaviour.md).
+KINDS = ("failure", "regression")
+
+# What an agent's behaviour is made of: its own package, what every agent
+# shares that the model reads (prompts, the tool surface, the file tools), and
+# which models serve it. A commit touching any of these after a probe's
+# `reviewed` date may have moved the agent off the path the probe's situation
+# assumes. Router internals -- retries, logging, quota -- are left out: they
+# change who answers when, not what the agent is shown.
+SHARED = ("agent/utils/prompts", "agent/utils/prompts.py",
+          "agent/utils/surface.py", "agent/utils/file_tools.py",
+          "llm_router/config.yaml")
+SURFACES = {"code": ("agent/code", *SHARED),
+            "improve": ("agent/improve", *SHARED),
+            "explore": ("agent/explore", *SHARED),
+            "explore-researcher": ("agent/explore", *SHARED)}
 
 # The agents a probe can be posed to; `_build` resolves each lazily, since
 # importing the explorer would pull in the web tools to run a coding probe.
@@ -67,6 +90,10 @@ class Probe:
 
     id: str
     agent: str = "code"
+    dataset: str = ""                           # from the file: its topic
+    kind: str = "failure"
+    source: str = ""                            # the run and turn it came from
+    reviewed: str = ""                          # when the situation was last checked
     prompt: str = ""
     files: dict = field(default_factory=dict)   # a tiny tree to decide against
     expect: dict = field(default_factory=dict)
@@ -97,6 +124,13 @@ class Probe:
             found.append(f"history does not parse: {exc}")
         if not self.expect:
             found.append("a probe with no expectation asserts nothing")
+        if self.kind not in KINDS:
+            found.append(f"kind must be one of {', '.join(KINDS)}")
+        try:
+            datetime.date.fromisoformat(self.reviewed)
+        except ValueError:
+            found.append("reviewed must be the date the situation was last "
+                         "checked, as YYYY-MM-DD")
         unknown = set(self.expect) - set(CHECKS)
         if unknown:
             found.append(f"unknown expectation(s): {', '.join(sorted(unknown))}")
@@ -113,10 +147,19 @@ def load(directory: Path = PROBES_DIR) -> list:
     found = []
     for path in sorted(directory.glob("*.yaml")):
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        # One file is one topic is one dataset: the grouping is reviewed in the
+        # same diff as the probes it groups.
+        dataset = str(raw.get("dataset") or "")
+        if not dataset:
+            raise ValueError(f"{path.name}: a probe file names its dataset")
         for entry in (raw.get("probes") or []):
             probe = Probe(
                 id=str(entry.get("id", "")),
                 agent=str(entry.get("agent", "code")),
+                dataset=dataset,
+                kind=str(entry.get("kind", "failure")),
+                source=str(entry.get("source") or ""),
+                reviewed=str(entry.get("reviewed") or ""),
                 prompt=str(entry.get("prompt", "")),
                 files={str(k): str(v) for k, v in (entry.get("files") or {}).items()},
                 expect=dict(entry.get("expect") or {}),
@@ -156,6 +199,88 @@ def messages(probe: Probe) -> list:
         found += [ToolMessage(str(c.get("result", "")), tool_call_id=i,
                               name=str(c["name"])) for c, i in zip(calls, ids)]
     return found
+
+
+def stale(probes: list) -> list:
+    """`(probe, [commits])` for every probe its agent has changed under.
+
+    A probe freezes a situation: a conversation that reached a decision. Once
+    the agent changes, it may never reach that point again, and the probe keeps
+    testing a path nobody takes. That is not detectable from the probe, so the
+    rule is a review, and this is what says which ones are due.
+    """
+    due = []
+    for probe in probes:
+        paths = SURFACES.get(probe.agent, ())
+        log = subprocess.run(
+            ["git", "log", f"--after={probe.reviewed}T23:59:59",
+             "--format=%h %cs %s", "--", *paths],
+            cwd=REPO, capture_output=True, text=True, check=False).stdout
+        commits = [line for line in log.splitlines() if line.strip()]
+        if commits:
+            due.append((probe, commits))
+    return due
+
+
+def from_run(record: Path, turn: int, agent: str, probe_id: str = "",
+             limit: int = 8000) -> dict:
+    """A probe skeleton for the decision at `turn` of a recorded run.
+
+    The run record (`agent/utils/run_tree`) keeps every model call with the
+    conversation it was sent. The one at `turn` is the situation: its first
+    human message is the prompt, the rest is the history. Pages written by
+    `write_file` before that turn become the files. What the probe expects is
+    left for a person to write -- that is the part that needs judgement.
+    """
+    data = json.loads(Path(record).read_text(encoding="utf-8"))
+    turns = {t["n"]: t for t in data["turns"]}
+    sent = turns[turn]["input"]
+    human = [m for m in sent if m.get("role") == "human"]
+    if not human:
+        raise ValueError(f"turn {turn} carries no human message")
+
+    def cut(text) -> str:
+        text = str(text)
+        return text if len(text) <= limit else (
+            text[:1500] + "\n[... cut to 1,500 characters for the probe; "
+            "the run read the whole of it ...]")
+
+    results = {m.get("tool_call_id"): m.get("text", "") for m in sent
+               if m.get("role") == "tool"}
+    history = []
+    for message in sent[sent.index(human[0]) + 1:]:
+        if message.get("role") == "human":
+            history.append({"user": message.get("text", "")})
+        elif message.get("role") == "ai":
+            calls = message.get("tool_calls") or []
+            history.append({"ai": message.get("text") or "", "calls": [
+                {"name": c["name"], "args": c.get("args") or {},
+                 "result": cut(results.get(c.get("id"), ""))} for c in calls]})
+
+    files = {}
+    for t in data["turns"]:
+        if t["n"] >= turn:
+            break
+        for call in (t.get("output") or {}).get("tool_calls") or []:
+            if call.get("name") == "write_file":
+                files[call["args"]["file_path"].lstrip("/")] = call["args"]["content"]
+
+    decided = (turns[turn].get("output") or {}).get("tool_calls") or []
+    trace = (data.get("meta") or {}).get("trace_id", Path(record).stem)
+    probe = {"id": probe_id or f"TODO-name-the-decision-at-turn-{turn}",
+             "agent": agent, "kind": "failure",
+             "source": f"run {trace}, turn {turn}",
+             "reviewed": datetime.date.today().isoformat(),
+             "why": (f"TODO: what went wrong at turn {turn}. The run did: "
+                     + (", ".join(c["name"] for c in decided) or "no tool")),
+             "expect": {"TODO": "what must hold of the next decision"}}
+    research_dir = (data.get("meta") or {}).get("research_dir")
+    if research_dir:
+        probe["research_dir"] = research_dir
+    if files:
+        probe["files"] = files
+    probe.update(prompt=human[0].get("text", ""), history=history)
+    return probe
 
 
 # -- running one probe -----------------------------------------------------
