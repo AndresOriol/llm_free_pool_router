@@ -13,7 +13,7 @@ its findings were re-verified against this tree and two of them had changed.*
 Five scenarios exist. Four are a broken seed plus a hidden test that pins the
 fix; the fifth is a `feature` in name whose shape is still "make these six
 assertions flip". Of the eight categories
-[9.6](../09-scenarios.md#96-categories-to-cover) names, **five have never been
+[Categories to cover](../evaluation/scenarios.md#categories-to-cover) names, **five have never been
 written** — `tests`, `refactor`, `long-context`, `ambiguous`, and the one this
 note adds.
 
@@ -35,7 +35,7 @@ the gold patch touches" — is meaningless when the files do not exist yet.
 
 **Why this matters beyond coverage.** The one load-bearing result the project
 has is that **every recorded failure is `reasoning`** — 12 of 13, zero
-`retrieval`, zero `tooling` ([11.3](../11-eval-status.md#113-where-the-numbers-stand)).
+`retrieval`, zero `tooling` ([Where the numbers stand](../status.md#where-the-numbers-stand)).
 That was measured entirely on repair tasks where the agent was handed the file
 or a failing test naming it. It is a statement about this set, not about the
 agent, and it is exactly the statement a generative set would test.
@@ -94,8 +94,8 @@ self-inconsistency on repeated identical grading, self-preference bias, and
 prompt-perturbation swings in human correlation of up to 0.2 *for smaller
 models* — which is precisely the model class a free pool can afford. A judge on
 this pool would also spend the quota the agent needs
-([13.3](../13-roadmap.md#133-known-constraints-that-shape-the-roadmap)). The judge
-(P2) stays where [11.5](../11-eval-status.md#115-what-to-do-next) put it: a
+([Known constraints that shape the roadmap](../status.md#known-constraints-that-shape-the-roadmap)). The judge
+(P2) stays where [What to do next](../status.md#what-to-do-next) put it: a
 diagnostic, never a gate.
 
 ---
@@ -129,7 +129,7 @@ this note.
 A free-tier pool asked to build something from scratch will fail the behavioural
 suite for months. A column that reads `0/0/0/0` across every configuration
 carries no information — the same argument
-[9.7](../09-scenarios.md#97-the-difficulty-ladder) makes about difficulty,
+[The difficulty ladder](../evaluation/scenarios.md#the-difficulty-ladder) makes about difficulty,
 applied to the oracle itself. So a generative run is scored on an ordered
 ladder, each rung a separate recorded field:
 
@@ -278,15 +278,15 @@ Four hold, two changed, and one is worse than it was described.
 | Deletions vanish from `files_touched` | **holds** | Reproduced on a real `git diff --no-index` deletion: `files_touched: 0`. But `classify_failure` tests retrieval *before* `touched`, so `stopping` only follows when `_read_gold` passes — otherwise it reads `retrieval`. The `/dev/null` guard at [metrics.py:43](../../evals/metrics.py) is unreachable dead code: `^\+\+\+ b/` cannot match `+++ /dev/null`. 8 of 69 recorded runs already carry `files_touched == 0`. |
 | Retrieval matches on basename | **holds, understated** | It is not a basename compare — it is a **substring test against the raw serialized args**. A `grep` pattern merely containing the characters `__init__.py` satisfies retrieval. |
 | `self_corrected` fires on `error` | **holds, broader** | The condition is `"fail" in output or "error" in output`, so `1 xfailed` and `failed=0` both trip it, and the flag is never cleared — one match at step 1 makes every later edit count. 6 of 69 runs report it; none is trustworthy. |
-| `bad_tool_calls` rests on prose | **holds, and it is the worst of the six** | Measured over the recorded corpus: **0 hits against 94 error-shaped outputs across 1,093 `tool_end` events**, and `bad_tool_calls == 0` in all 69 `run.json`. Two causes: [tools.py](../../agent/utils/tools.py) returns lowercase `error:` against a case-sensitive `startswith("Error")`, and deepagents tools return a `ToolMessage` whose repr starts `content=`. **The fix is upstream, not in the metric**: [trace.py:159](../../agent/utils/trace.py) hardcodes `ok=True` on every `tool_end`, discarding a `status` field the tool already sets. Record the status and the metric follows. |
+| `bad_tool_calls` rests on prose | **holds, and it is the worst of the six** | Measured over the recorded corpus: **0 hits against 94 error-shaped outputs across 1,093 `tool_end` events**, and `bad_tool_calls == 0` in all 69 `run.json`. Two causes: `tools.py` (since deleted) returns lowercase `error:` against a case-sensitive `startswith("Error")`, and deepagents tools return a `ToolMessage` whose repr starts `content=`. **The fix is upstream, not in the metric**: [trace.py:159](../../agent/utils/trace.py) hardcodes `ok=True` on every `tool_end`, discarding a `status` field the tool already sets. Record the status and the metric follows. |
 | The stubs are dead code | **changed** | Nothing *automated* runs them, and there is no CI — but they are documented in [CONFIGS.md](../../evals/CONFIGS.md), have four recorded runs, and **work today**: all five produce their intended outcome and failure class, offline, in under a second. They are a ready-made regression suite, not an unfinished one. |
 | `code.yaml` pins a stale branch | **changed — worse** | `harness/deepagents` does not resolve on this clone, so `agent_config.load` **raises** and `--config code` cannot start at all; same for `code-peers` on `harness/agent-protocol`. Both branches were merged into `master` and deleted locally. Not a footgun — a hard stop, and it means no eval run of the shipping agent could have been attempted. **Fixed on this branch**: both now pin `master`. |
 
 Two findings the plan did not have:
 
 - **`input_tokens` did not exist.** [CLAUDE.md](../../CLAUDE.md),
-  [6](../06-agent.md), [11](../11-eval-status.md), [13](../13-roadmap.md),
-  [16](../16-delegation.md), `CONFIGS.md` and both agent configs named
+  [The coding agent](../agents/code.md), [Status and roadmap](../status.md), [Status and roadmap](../status.md),
+  [Delegation](../agents/delegation.md), `CONFIGS.md` and both agent configs named
   `input_tokens` as the column to read first on every batch. The key
   `metrics.py` emits is **`tokens_in`**, so anyone — or any agent — following
   the documented instruction got nothing. Renamed across all nine places on this
@@ -318,7 +318,7 @@ metric defects on the day they were written.
 | The tier ladder and `solution_alt` | none | Schema and offline arithmetic; blocks the first generative scenario |
 | **First generative scenario, strip-to-stubs from this repo** | authoring only | Proves the pipeline; the first thing the set has that is not repair |
 | Exploit audit on it | one strong-model run | Before it is trusted, not after |
-| `long-context` | new runs | Still the largest architectural gap ([11.4](../11-eval-status.md#114-blockers)) |
+| `long-context` | new runs | Still the largest architectural gap ([Blockers](../status.md#blockers)) |
 
 ---
 
@@ -333,4 +333,4 @@ metric defects on the day they were written.
 - **Blame-style sourcing from this repo's history.** Needs sessions logged
   beside their diffs. Roadmap, not next step.
 - **Collapsing the tiers into a score.** They are columns. Ranking stays
-  lexicographic ([10.5](../10-metrics.md#105-ranking-is-lexicographic-not-weighted)).
+  lexicographic ([Ranking is lexicographic, not weighted](../evaluation/metrics.md#ranking-is-lexicographic-not-weighted)).

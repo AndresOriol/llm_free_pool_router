@@ -9,23 +9,23 @@ Three properties, and each is forced by something already established:
    --task "..."` and keeps what it printed. There is no in-process handler and
    no protocol object, because an agent is already a command and a caller that
    is not a person at a terminal needs a queue and an id, not a vocabulary
-   ([16. Delegation](../../docs/16-delegation.md)).
+   ([Delegation](../../docs/agents/delegation.md)).
 
 2. **Concurrency is one.** Not a performance choice and not a default to tune:
    the usage ledger is a JSONL file appended from the process, and cooldown
    lives on the provider object and is not shared between processes
-   ([13.3](../../docs/13-roadmap.md#133-known-constraints-that-shape-the-roadmap)).
+   ([Known constraints that shape the roadmap](../../docs/status.md#known-constraints-that-shape-the-roadmap)).
    Two agent processes at once make both load-bearing in a way neither is built
-   for ([17.6](../../docs/17-deployment.md#176-what-has-to-change-first)). Tasks
+   for ([What has to change first](../../docs/operations/deployment.md#what-has-to-change-first)). Tasks
    queue. The ceiling is the pool's day anyway -- ~42 minutes of flat-out
    routing across every account
-   ([17.4](../../docs/17-deployment.md#174-the-ceiling-is-the-pool-not-the-compute))
+   ([The ceiling is the pool, not the compute](../../docs/operations/deployment.md#the-ceiling-is-the-pool-not-the-compute))
    -- so a second worker would not buy throughput, it would buy 429s.
 
 3. **Submission does not block.** A run lasts hours
-   ([17.2](../../docs/17-deployment.md#172-what-the-workload-actually-is)) and
+   ([What the workload actually is](../../docs/operations/deployment.md#what-the-workload-actually-is)) and
    every hosting platform in front of this kills a request in seconds or
-   minutes ([17.3](../../docs/17-deployment.md#173-why-requestresponse-platforms-cannot-host-it)).
+   minutes ([Why request/response platforms cannot host it](../../docs/operations/deployment.md#why-requestresponse-platforms-cannot-host-it)).
    So `submit` returns a queued task immediately and the caller polls.
 """
 
@@ -237,5 +237,5 @@ def _check_pool(floor: int) -> tuple:
                                            or None)
     if not providers:
         raise SystemExit("No providers loaded. Set your keys in the "
-                         "environment (see docs/18-serving.md).")
+                         "environment (see docs/operations/serving.md).")
     return len(providers), check_floor(AutonomousLLMRouter(providers), floor)

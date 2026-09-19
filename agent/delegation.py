@@ -6,7 +6,7 @@ on stdout. The coding agent already has `execute`. So delegation needs no
 protocol, no registry, no transport and no tool: it needs the agent to *know*
 those commands exist, which is a paragraph of prose, and it needs one caller in
 `agent/improve` to be able to launch one, which is `subprocess.run`. That is
-this file, and it replaced 700 lines of A2A ([16. Delegation](../docs/16-delegation.md)).
+this file, and it replaced 700 lines of A2A ([Delegation](../docs/agents/delegation.md)).
 
 **What the subprocess costs.** A second interpreter builds its own router, so a
 delegate does *not* share its caller's cooldown: an account the caller has
@@ -27,7 +27,7 @@ not get it back through a session someone else delegated.
 Availability is a probe, not a declaration: `explore` is offered only if the
 search pool can really be reached, because an agent that is advertised and then
 fails costs the caller a whole session to discover it
-([15.2.1](../docs/15-explorer.md#1521-a-capability-is-a-fact-to-probe-not-to-infer)).
+([A capability is a fact to probe, not to infer](../docs/agents/explore.md#a-capability-is-a-fact-to-probe-not-to-infer)).
 """
 
 from __future__ import annotations
@@ -47,14 +47,14 @@ HARNESS_ROOT = Path(__file__).resolve().parents[1]
 
 # Which peers to offer. Default on, so this stays a configuration that can be
 # measured against a baseline rather than a feature nobody exercises
-# ([13.7](../docs/13-roadmap.md#137-how-to-propose-a-change)). AGENT_PEERS=
+# ([How to propose a change](../docs/evaluation/method.md#how-to-propose-a-change)). AGENT_PEERS=
 # (empty) runs the agent alone.
 PEERS_ENV = "AGENT_PEERS"
 DEFAULT_PEERS = ("explore",)
 
 # Where the eval scenarios live. A separate repository on purpose, so they
 # survive branch switching in this one
-# ([8.3](../docs/08-evaluation-method.md#83-where-things-live)) -- which also
+# ([Where things live](../docs/evaluation/method.md#where-things-live)) -- which also
 # means a coding agent jailed to this repo cannot reach them, and `scenarios`
 # is the second binding that lets an agent here build one.
 SCENARIOS_ENV = "EVAL_SCENARIOS"
@@ -122,7 +122,7 @@ def available(peers: Optional[Sequence[str]] = None) -> list:
     improvement agent passes `("code", "scenarios")` because what it delegates
     is a fix or a scenario, and being able to ask for research instead would
     just be a second way to spend the day
-    ([19](../docs/19-improvement-agent.md)).
+    ([The improvement agent](../docs/agents/improve.md)).
     """
     wanted = tuple(peers) if peers is not None else requested()
     if not wanted:
@@ -184,7 +184,7 @@ def prompt_section(names: Sequence[str]) -> str:
     agent already has `execute`, and what it was missing was the knowledge that
     these commands exist. That is tokens and not only tidiness -- tool schemas
     are 91% of what a step spends
-    ([6.4](../docs/06-agent.md#64-why-it-is-shaped-this-way)), and a `delegate`
+    ([Why it is shaped this way](../docs/agents/code.md#why-it-is-shaped-this-way)), and a `delegate`
     tool was charged on *every* step of *every* run to describe a directory
     that changes once at startup.
 
@@ -192,7 +192,7 @@ def prompt_section(names: Sequence[str]) -> str:
     delivers, how to brief one and how to read what comes back were a paragraph
     on every call of every run, and most runs never delegate. All of it is in
     the `delegate` skill now; what is left here is the sentence that sends the
-    agent there ([16.2.2](../docs/16-delegation.md#1622-the-roster-and-the-how-to-are-a-skill)).
+    agent there ([The roster and the how-to are a skill](../docs/agents/delegation.md#the-roster-and-the-how-to-are-a-skill)).
     """
     if not names:
         return ""
@@ -209,7 +209,7 @@ def skill_values(names: Sequence[str], workdir) -> dict:
     `description`: it is the only part of the skill the model sees until it
     decides to read the body, which makes it the gate. A gate that does not say
     when it applies is a skill that never opens
-    ([6.6.1](../docs/06-agent.md#661-the-description-is-the-gate)).
+    ([The description is the gate](../docs/agents/code.md#the-description-is-the-gate)).
     """
     return {"description": _skill_description(names),
             "roster": _skill_roster(names, workdir)}
@@ -251,7 +251,7 @@ def child_env(name: str) -> dict:
     `EVAL_TRACE_FILE` is deliberately left alone: it is the flat JSONL every
     metric is summed over, it is appended to rather than replaced, and a
     delegation's cost belongs inside the totals of the run that asked for it
-    ([10. Metrics](../docs/10-metrics.md)).
+    ([Metrics](../docs/evaluation/metrics.md)).
     """
     env = dict(os.environ)
     env[PEERS_ENV] = ",".join(p for p in requested() if p != name)

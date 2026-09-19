@@ -8,7 +8,7 @@ configuration:
     python -m agent.code     ./project < brief.md      # build, reads /research
 
 **This command is also how the coding agent delegates research**: it runs this
-with `execute` and reads what is printed below (docs/16-delegation.md).
+with `execute` and reads what is printed below (docs/agents/delegation.md).
 
 `--research-dir` is where the notes go, relative to the workdir; it defaults to
 `research`. Name one per investigation to keep them apart, and name an existing

@@ -1,39 +1,39 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 20. Probes — the small tests
+# Probes
 
 *One agent, one situation, one decision. What a probe can prove, what it cannot,
 and why the files rather than the dataset are the source of truth.*
 
-## 20.1 The problem: one test, and it is a blunt one
+## The problem: one test, and it is a blunt one
 
 Until now this project had exactly one way to test an agent: run a scenario.
 Materialise a repository, run the agent for minutes, and take the single bit the
-hidden tests return ([8](08-evaluation-method.md)).
+hidden tests return ([Evaluation method](method.md)).
 
 That bit is the right *acceptance contract* and a poor *instrument*:
 
 - It costs real free-tier quota per sample, so samples are scarce.
 - It is noisy at the sample sizes a free tier affords — one configuration scored
   3/3 and 1/3 on consecutive batches of the same scenario
-  ([6.4.2](06-agent.md#642-the-pass-column-is-noise)).
+  ([The pass column is noise](../agents/code.md#the-pass-column-is-noise)).
 - When it says `fail`, it does not say where. The taxonomy exists precisely
   because "it failed" was not actionable
-  ([10.3](10-metrics.md#103-failure-taxonomy)).
+  ([Failure taxonomy](metrics.md#failure-taxonomy)).
 
 Meanwhile the failures that recur are mostly *small and specific*: an edit
 written against a file the agent never read, a shell operator the backend
 refuses, a test deleted because it contradicted the task. Each is a single
 decision, and a whole scenario run is a very expensive way to observe one.
 
-## 20.2 What a probe is
+## What a probe is
 
 A probe puts the **real** agent in front of one situation and stops at its
 **first decision**.
 
 Real means real: the system prompt, the tools and the jail come from the
 agent's own `build_agent`, and the graph is the compiled one. The probe simply stops reading after the first tool call
-([evals/probes.py](../evals/probes.py)). Nothing is reconstructed — a probe that
+([evals/probes.py](../../evals/probes.py)). Nothing is reconstructed — a probe that
 tested a hand-built copy of the agent would drift from it silently, which is the
 failure this design is arranged to avoid rather than to have.
 
@@ -57,18 +57,18 @@ failure this design is arranged to avoid rather than to have.
 
 One model call instead of a session.
 
-## 20.3 What it can and cannot say
+## What it can and cannot say
 
 **A probe cannot tell you an agent solves a problem.** It sees one decision, and
 a good first move is not a good run. Nothing here replaces a scenario, and a
 promotion decision still rests on the hidden tests
-([8.7](08-evaluation-method.md#87-the-promotion-rule)).
+([The promotion rule](method.md#the-promotion-rule)).
 
 **What it can tell you is whether the agent starts the way it should** — and
 that is where the recorded failures live. It is also the only instrument in this
 project that can be aimed at the improvement agent's own judgement, whose entire
 evidence base is one live pass that got the answer wrong
-([19.9](19-improvement-agent.md#199-what-the-first-live-pass-showed)). A full
+([What it costs, and what is unmeasured](../agents/improve.md#what-it-costs-and-what-is-unmeasured)). A full
 pass costs twenty minutes; four probes cost four calls.
 
 **Every probe cites the failure it guards.** The `why` field is not
@@ -76,7 +76,7 @@ documentation, it is the entry condition: a probe with no recorded failure
 behind it is a preference, and preferences do not belong in a suite that gates
 anything. The test suite asserts that every probe on disk has one.
 
-## 20.4 The expectations
+## The expectations
 
 Seven, and mostly negative — because the failures this project records are
 things the agent should not have done, and a suite that could only assert the
@@ -101,7 +101,7 @@ time. `expect: {tool_name: read_file}` would otherwise pass forever, and a suite
 whose count quietly stops covering what its name says is worse than no suite.
 A malformed probe raises rather than being skipped, for the same reason.
 
-## 20.5 LangSmith holds the runs; git holds the claims
+## LangSmith holds the runs; git holds the claims
 
 A probe run belongs in a LangSmith dataset: a versioned set of examples, an
 experiment per run, and a UI where two runs are compared example by example.
@@ -125,13 +125,13 @@ the files, and experiments keep pointing at the same examples.
 
 **One file is one topic is one dataset.** Each `evals/probes/*.yaml` names its
 `dataset`, and how probes are grouped is part of the change under review
-([21.4](21-changing-behaviour.md#214-datasets-one-topic-each)).
+([Datasets: one topic each](changing-behaviour.md#datasets-one-topic-each)).
 
 All of it is optional. With no key the probes still run and still report; what
 is lost is the history and the comparison, not the test
-([evals/probe_dataset.py](../evals/probe_dataset.py)).
+([evals/probe_dataset.py](../../evals/probe_dataset.py)).
 
-### 20.5.1 Starting mid-run
+### Starting mid-run
 
 Some failures only happen deep in a run. A review signs off a claim it should
 have questioned, or a researcher writes a conclusion after five searches that
@@ -141,7 +141,7 @@ missed. A first message cannot reach them. For these a probe carries a
 turns and is judged only on what it says next.
 
 The `explore` and `explore-researcher` targets work this way
-([evals/probes/explore-evidence.yaml](../evals/probes/explore-evidence.yaml)). Their histories are
+([evals/probes/explore-evidence.yaml](../../evals/probes/explore-evidence.yaml)). Their histories are
 generated from one run record rather than written by hand, so the model sees
 what the failing run saw. The researcher is taken compiled out of the explorer,
 not rebuilt next to it.
@@ -156,7 +156,7 @@ Two more fields exist because of what the first baseline did:
   within the allowance satisfies every negative expectation, and scoring it
   as a pass is how the same probe turned green without testing anything.
 
-## 20.6 Running them
+## Running them
 
 ```bash
 python -m evals probes --list                 # what would run; no calls, no keys
@@ -173,7 +173,7 @@ and the regressions beside them are measured together.
 
 Serial, always — the probes share one free-tier pool, and running them at once
 would make each probe's model mix depend on the others, which is the same reason
-eval runs are serial ([evals/run.py](../evals/run.py)).
+eval runs are serial ([evals/run.py](../../evals/run.py)).
 
 It exits non-zero on a failure, so it is usable as a gate. Whether it *should*
 gate anything is not settled: a probe is one model call against a pool that
@@ -181,7 +181,7 @@ changes members between calls, so a single failure is weaker evidence than a
 green suite is reassurance. Treat a new failure as a question, not a verdict,
 until there is enough history to say how often one flips on its own.
 
-## 20.7 What the first two live runs showed
+## What the first two live runs showed
 
 Seven probes, run twice. **6/7 both times, and a different probe failed each
 time — and neither failure was the agent's.**

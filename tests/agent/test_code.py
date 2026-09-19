@@ -251,7 +251,7 @@ def test_a_skill_is_readable_from_a_workspace_that_is_not_this_repository(tmp_pa
 def test_skills_cost_no_tool():
     """Progressive disclosure is a prompt section and `read_file`. If a skill
     ever arrived as a tool it would be charged on every step of every run
-    ([6.4](../../docs/06-agent.md#64-why-it-is-shaped-this-way))."""
+    ([Why it is shaped this way](../../docs/agents/code.md#why-it-is-shaped-this-way))."""
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
     built = code.build_agent(".", FakeListChatModel(responses=["x"]),
@@ -392,7 +392,7 @@ def test_a_workspace_with_neither_is_told_nothing_about_memory(tmp_path: Path):
 def test_the_memory_section_is_ours_not_the_frameworks(tmp_path: Path):
     """deepagents' default is ~4,500 characters about a user to ask, to learn
     preferences from and to be interrupted by. Nobody is watching this run, and
-    it is charged on every call ([6.6](../../docs/06-agent.md#66-skills) makes
+    it is charged on every call ([Skills](../../docs/agents/code.md#skills) makes
     the same argument for the skills section)."""
     (tmp_path / "AGENTS.md").write_text("Never touch vendor/.\n", encoding="utf-8")
 

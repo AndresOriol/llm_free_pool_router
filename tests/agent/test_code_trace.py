@@ -317,7 +317,7 @@ def test_a_refused_call_contributes_no_tokens_and_one_bounce():
     The provider refuses a 429 or a 404 at the gate, so `llm_error` carries no
     token count -- checked across 40 runs, 247 bounces, none of them with one.
     Reporting bounces in the same breath as `tokens_in` invited exactly the
-    wrong reading (docs/06-agent.md#611).
+    wrong reading (docs/agents/code.md#the-arm-that-was-deleted).
     """
     from evals import metrics
 

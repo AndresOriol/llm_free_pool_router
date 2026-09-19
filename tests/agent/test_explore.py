@@ -128,7 +128,7 @@ def test_the_explorer_still_reads_and_writes_files():
 
 
 # --- what the command reports ------------------------------------------------
-# The explorer is reached by running it (docs/16-delegation.md), so its stdout
+# The explorer is reached by running it (docs/agents/delegation.md), so its stdout
 # is what a caller -- a person, or the coding agent that ran the command --
 # reads back. The one piece of logic that is the explorer's own lives here:
 # deciding which notes *this* run wrote.
@@ -196,7 +196,7 @@ def test_a_rewritten_note_counts_as_this_runs_work(capsys, tmp_path):
 
 def test_a_run_that_wrote_nothing_says_so_loudly(capsys, tmp_path):
     """Silence here reads as success and is not: the run spent quota and left
-    nothing behind (docs/15-explorer.md#151-what-it-is-for)."""
+    nothing behind (docs/agents/explore.md#what-it-is-for)."""
     out = _report(capsys, tmp_path, {}, reply="I researched it thoroughly.")
 
     assert "notes written by this run: none" in out
@@ -568,7 +568,7 @@ def test_the_prompt_makes_the_review_and_the_log_the_last_things_it_does():
     """There is no code behind this. The system prompt says a run is not
     finished until the request has been read back and the log entry written, and
     the workflow says what the review has to establish -- so these sentences
-    are the whole mechanism (docs/15-explorer.md#1554-the-review-at-the-end)."""
+    are the whole mechanism (docs/agents/explore.md#the-review-at-the-end)."""
     text = _flat(_orchestrator())
 
     assert "The last things you do are the review and the log entry" in text

@@ -17,7 +17,7 @@ belt-and-braces against symlinks, which a name rule cannot see.
 
 The mount is the whole story for "bind to a filesystem": the operator maps a
 host directory in, and every child of it is an addressable workspace
-([18.4](../../docs/18-serving.md#184-binding-an-agent-to-a-repository-or-a-filesystem)).
+([Binding an agent to a repository or a filesystem](../../docs/operations/serving.md#binding-an-agent-to-a-repository-or-a-filesystem)).
 `ensure` also clones for the "bind to a repository" half, but only into a
 workspace that does not exist yet -- cloning over a directory that already has
 work in it is how an unattended run destroys the thing it was asked to improve.

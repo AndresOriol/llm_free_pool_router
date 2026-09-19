@@ -11,11 +11,11 @@
 # Why this lives in the harness repo and not agent_evals:
 # The gate must be computable from recorded run.json files when the scenario repo
 # is not on disk at all, and the split is part of the method, which
-# /docs/08-evaluation-method.md §8.3 keeps in this repo with the code it measures.
+# docs/evaluation/method.md#where-things-live keeps in this repo with the code it measures.
 
 train:
   http-headers:
-    reason: "L0, exhausted as an instrument (docs/11 §11.4); 39 of 105 recorded runs"
+    reason: "L0, exhausted as an instrument (docs/status.md#blockers); 39 of 105 recorded runs"
     scenarios:
       - retry-after-case
   alerts:

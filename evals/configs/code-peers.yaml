@@ -4,12 +4,12 @@
 # runs with `execute`. Delegation is a command, not a tool, so the tool set is
 # exactly `code`'s and everything else -- jail, floor, middleware, subagent --
 # is identical. That is what makes the pair a clean A/B
-# (docs/16-delegation.md#166).
+# (docs/agents/delegation.md#what-this-costs-and-what-is-unmeasured).
 #
 # The agent behind that command is LangChain's deep-research agent, ported: an
 # orchestrator over a research sub-agent, a `tavily_search` that returns whole
 # pages rather than a summary of them, and a `think_tool` after every search
-# (docs/15-explorer.md#158-the-deep-research-port).
+# (docs/agents/explore.md#the-deep-research-port).
 #
 # **This used to be two configurations.** `code-peers-deep` was the deep-research
 # arm and `code-peers` the grounded-Gemini one; the latter is deleted, so they
@@ -38,7 +38,7 @@
 # check the credit balance before a batch.
 #
 # Nothing enforces a per-delegation budget yet, deliberately: the number would
-# be invented rather than observed (docs/16-delegation.md#165).
+# be invented rather than observed (docs/agents/delegation.md#what-a-delegation-costs).
 #
 # Interleaved against `code`, never alone -- running a configuration on its own
 # is what left `harness-v8-session` with no verdict (evals/CONFIGS.md).

@@ -1,18 +1,18 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 10. Metrics
+# Metrics
 
 *What gets measured, what each number is for, and why they're never collapsed
 into one score.*
 
-## 10.1 The axes
+## The axes
 
 Metrics are grouped by the question they answer. Keeping the grouping explicit
 is what stops a comparison from being read as "number went up".
 
 | Axis | Metrics | What it's for |
 | --- | --- | --- |
-| **Task success** | `verified`, `f2p_ratio`, `p2p_ratio` | The only gating axis. `verified` is the *capability* half of `outcome`, and it is what the results table counts — see 10.1.1. |
+| **Task success** | `verified`, `f2p_ratio`, `p2p_ratio` | The only gating axis. `verified` is the *capability* half of `outcome`, and it is what the results table counts — see [Why the ledger counts `verified`](#why-the-ledger-counts-verified-and-not-outcome). |
 | **Diagnosis** | `failure_class` | What to actually work on next. |
 | **Autonomy** | `ran_own_tests`, `self_corrected` | Closing its own loop is the difference between an agent and a code generator. |
 | **Efficiency** | `provider_calls`, `failover_bounces`, `tokens_*` | On a free pool this *is* the cost model. A run that passes but drains the pool is a weak pass. |
@@ -20,7 +20,7 @@ is what stops a comparison from being read as "number went up".
 | **Integrity** | `tampered`, `extended_files` | Non-negotiable, tracked separately so it can never be averaged away. Only a *weakening* counts; strengthening a protected suite is the second column. |
 | **Quality** | Judge scores | Right for the right reason, and in the right scope. |
 
-### 10.1.1 Why the ledger counts `verified` and not `outcome`
+### Why the ledger counts `verified` and not `outcome`
 
 `outcome` is one label over two questions that do not share a scale — *did it
 solve the task*, and *did it respect what it was told not to touch*. A run that
@@ -54,7 +54,7 @@ Two things the same tables now refuse to average:
   measurement. Cost means are taken over the traced runs only, and the count of
   the rest is printed beside them.
 
-## 10.2 Automatic metrics
+## Automatic metrics
 
 Token totals exclude a router wrapper's usage only when the corresponding
 provider usage is also present: the wrapper repeats the provider's metadata.
@@ -64,7 +64,7 @@ Recompute older totals from their JSONL before comparing costs; existing stored
 run summaries and historical reports are not rewritten by this correction.
 
 Every one is a count or sum over `trace.jsonl`, the diff, and the verification
-output ([7.3](07-observability.md#73-the-local-trace)).
+output ([The local trace](observability.md#the-local-trace)).
 
 | Metric | Definition |
 | --- | --- |
@@ -76,29 +76,29 @@ output ([7.3](07-observability.md#73-the-local-trace)).
 | `provider_calls` | LLM calls, including failover retries |
 | `failover_bounces` | Transient failures before a step succeeded — wasted quota |
 | `tokens_in` / `tokens_out` | Summed where the provider reports usage |
-| `tokens_per_call` | `tokens_in` over provider calls — what one step costs. Separates a long run from an expensive one, which `tokens_in` alone cannot ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)) |
+| `tokens_per_call` | `tokens_in` over provider calls — what one step costs. Separates a long run from an expensive one, which `tokens_in` alone cannot ([The arm that was deleted](../agents/code.md#the-arm-that-was-deleted)) |
 | `edited_nothing` | No edit tool was called all run. See 10.2.4 |
 | `stub` | Was this a stub rather than an agent — stubs are excluded from the ledger |
 | `traced` | Did `trace.jsonl` arrive. Everything summed over the trace reads 0 when it did not, which is indistinguishable from a measurement |
 | `bounce_models` | Bounces per model — which member is spending the pool's time |
 | `retired_models` | Members dropped mid-run because they are gone upstream. See 10.2.3 |
 | `bounces_per_call` | Failover bounces over provider calls. A quota and latency figure, **not** a cost one: a refused call carries no input tokens |
-| `tampered_files` | Protected files the agent weakened — see [8.5](08-evaluation-method.md) for what makes a change a weakening |
+| `tampered_files` | Protected files the agent weakened — see [The run lifecycle](method.md#the-run-lifecycle) for what makes a change a weakening |
 | `broken_files` | Protected files the run left unrunnable — it removed nothing, it wrote something that does not run. Classified `tooling`, never integrity |
-| `lost_invariants` | Documented guarantees the run deleted — `"<page>: <phrase>"`, declared per scenario in `doc_invariants` ([9.6.1](09-scenarios.md)) |
+| `lost_invariants` | Documented guarantees the run deleted — `"<page>: <phrase>"`, declared per scenario in `doc_invariants` ([`immutable` or `doc_invariants`?](scenarios.md#immutable-or-doc_invariants)) |
 | `extended_files` | Protected files it changed *without* weakening: it appended to a suite it was told not to break, and the original assertions still hold. Recorded, never scored |
-| `bad_tool_calls` | Invalid tool name, failed `edit_file`, malformed args |
+| `bad_tool_calls` | Invalid tool name, failed `edit_file`, malformed args. **Reads zero on every run today** — the trace discards the tool's status ([Blockers](../status.md#blockers)) |
 | `models_used` | Distinct models that served a step, and the per-model call mix |
 | `ran_own_tests` | Did the agent invoke `execute` on the test command itself |
-| `added_tests` | Test functions the run added that nothing asked for — see 10.2.2 |
+| `added_tests` | Test functions the run added that nothing asked for — see [Unprompted tests](#unprompted-tests) |
 | `wrote_account` | Did the run append to the project's `NOTES.md` — `null` where the scenario ships none. See 10.2.1 |
 | `self_corrected` | Did a failing `execute` get followed by another edit |
 | `files_touched` / `diff_lines` | Change size, vs the reference solution's size |
 | `wall_time_s` | End to end |
 
-### 10.2.1 The account, and why it is only counted
+### The account, and why it is only counted
 
-[R7](design/long-run-harness.md) is *"notes in, notes out: the session reads the
+[R7](../design/long-run-harness.md) is *"notes in, notes out: the session reads the
 project's feedback file and appends its account to it. This is the whole human
 interface."* Phase 2's north star is an agent that writes an account a human
 reviews instead of the code, and until now nothing recorded whether one existed.
@@ -122,7 +122,7 @@ expectation, and closing that gap is a prompt change to be measured like any
 other rather than a scoring change to be imposed. Nothing gates on this metric —
 it exists so the question has a number attached before anyone argues about it.
 
-### 10.2.2 Unprompted tests
+### Unprompted tests
 
 `added_tests` counts `def test_…` lines the diff **adds**, and only inside a file
 pytest would collect — a test moved between files is not a new test, and one
@@ -133,13 +133,13 @@ written into a module that never runs is not a test at all.
 bug and the invariant under test.
 
 This is the behaviour a standing maintainer most needs, it happens in roughly
-two runs out of three, and until [8.5](08-evaluation-method.md) learned to tell
+two runs out of three, and until [The run lifecycle](method.md#the-run-lifecycle) learned to tell
 a strengthened protected file from a weakened one, the only thing the harness
 ever did with it was score it as tampering. Recorded, not scored: a count of
 tests says nothing about whether they assert anything, and rewarding the number
 is how you buy assertions of `True`.
 
-### 10.2.3 Reading `failover_bounces`
+### Reading `failover_bounces`
 
 The number alone says the run was long. It was recorded and never read, and what
 it hid was worth reading: in a 40-run batch, **135 of 247 bounces were one model
@@ -158,7 +158,7 @@ count, because that column is the only place this can surface.
 A bounce is a **quota and latency** figure, never a cost one. A refused call
 carries no input tokens: the provider turns a 429 or a 404 away at the gate.
 
-### 10.2.4 The run that changed nothing and said otherwise
+### The run that changed nothing and said otherwise
 
 Three recorded runs finished with an **empty diff** and a closing message
 reporting the work as done:
@@ -177,7 +177,7 @@ so the one check that could have caught it confirmed it instead.
 This is the only failure in the set that **reads as a success**. An over-decline
 leaves an empty diff and a refusal, and a refusal looks like one. This leaves an
 empty diff and a competent-sounding report of work, which is
-[C4](design/long-run-harness.md) exactly: *the review surface is the agent's own
+[C4](../design/long-run-harness.md) exactly: *the review surface is the agent's own
 account of itself*, and a confidently wrong rationale reads exactly like a
 correct one. Under Phase 2, where a human reviews prose, it passes.
 
@@ -191,7 +191,7 @@ in the evidence, where the reader is.
 Five of the eight empty-diff runs recorded so far were ordinary `stopping`
 failures that claimed nothing. The flag is a prompt to look, not a verdict.
 
-## 10.3 Failure taxonomy
+## Failure taxonomy
 
 **This is the highest-leverage metric in the set.** A pass rate tells you a
 configuration is worse; it doesn't tell you what to fix. Since we know which
@@ -209,7 +209,7 @@ automatically from the trace — no transcript reading.
 **Why it matters most here specifically.** On small models the `tooling` class
 is likely to dominate. Groq already returns `tool_use_failed` carrying the
 model's raw malformed output, which the router surfaces today
-([4.7](04-failover.md#47-making-a-reroute-visible)). If the taxonomy shows a
+([Making a reroute visible](../pool/failover.md#making-a-reroute-visible)). If the taxonomy shows a
 large share of failures are malformed edits rather than wrong reasoning, then
 **changing the edit tool's format is a bigger win than any model or prompt
 change** — and that is not a conclusion you would reach by staring at a pass
@@ -218,7 +218,7 @@ rate.
 It also answers the "bad retrieval vs. bad editing" question that normally
 requires trajectory inspection — cheaply, for every run.
 
-## 10.4 The judge
+## The judge
 
 `claude -p` against a fixed rubric. The judge sees: the task prompt,
 `diff.patch`, the verification output, `evaluation/solution.patch`, and
@@ -243,17 +243,17 @@ The judge is deliberately **not** shown the agent's transcript. The model that
 writes a convincing narrative and the model that writes a correct patch are not
 the same model, and we're grading the patch.
 
-Status: not yet built ([11.2](11-eval-status.md#112-whats-built)). Quality
+Status: not yet built ([What's built](../status.md#whats-built)). Quality
 scoring is manual until then.
 
-## 10.5 Ranking is lexicographic, not weighted
+## Ranking is lexicographic, not weighted
 
 > success rate → integrity clean → judge quality → provider calls
 
 Collapsing these into one number requires inventing weights, and the weights
 would be doing the deciding. Keep the columns visible.
 
-## 10.6 What a run leaves behind
+## What a run leaves behind
 
 ```
 evals/results/runs/<run_id>/
@@ -270,14 +270,10 @@ evals/results/runs/<run_id>/
 Each directory is self-contained and carries every field a leaderboard needs, so
 a summary is a glob rather than a query against a shared file — and merging a
 configuration branch can never conflict over results
-([8.3](08-evaluation-method.md#83-where-things-live)).
+([Where things live](method.md#where-things-live)).
 
 It also keeps the *evidence* behind each row, which is the part hosted tracing
 loses. It is gitignored — an artifact of a run, kept on the machine that made
 it. What goes in the repo is the writing over it: conclusions in
 `evals/results/reports/<date>-<topic>.md`, citing runs by id, and the one-line
-verdict in the ledger, [evals/CONFIGS.md](../evals/CONFIGS.md).
-
----
-
-**Previous:** [← 9. Scenarios](09-scenarios.md) · **Next:** [11. Evaluation status →](11-eval-status.md)
+verdict in the ledger, [evals/CONFIGS.md](../../evals/CONFIGS.md).

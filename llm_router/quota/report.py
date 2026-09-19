@@ -5,7 +5,7 @@ Everything is derived from `ledger.jsonl` -- nothing is fetched, so the ledger's
 blind spot is the report's: a key used outside this router is under-counted.
 
 Two assumptions carry the arithmetic, both argued in
-[14. Quota panel](../../docs/14-quota-panel.md):
+[Quota panel](../../docs/pool/quota.md):
 
 - a window is a bucket on the *vendor's* clock -- Gemini's day ends at midnight
   Pacific, its minute when the wall clock's does ([windows.py](windows.py),
@@ -397,7 +397,7 @@ def build_report(calls: List[dict], pool: Optional[dict],
         # Rolled up per account -- and only within one account, because that is
         # where a free tier's budget lives. Groq meters one org-wide request
         # pool across every model on the account, so the per-model rows flatter
-        # it (docs/03-pool-model.md#34-priority-tiers); two accounts on the same
+        # it (docs/pool/model.md#priority-tiers); two accounts on the same
         # platform share nothing at all.
         key = f"{row.platform}/{row.account}"
         summary = accounts.setdefault(key, AccountSummary(row.account, row.platform))

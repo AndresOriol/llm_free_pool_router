@@ -17,7 +17,7 @@ This file is the whole harness. Read top to bottom:
 
 What the agent *does* is in the text, not here. Change a behaviour by editing a
 Markdown file; the reasons for each setting are in
-[6. The coding agent](../../docs/06-agent.md).
+[The coding agent](../../docs/agents/code.md).
 
 ## How context reaches the model
 
@@ -65,7 +65,7 @@ Three things follow from that, and they are the whole of `render_skills()`:
 
 The split with `prompts/` is what changes and when: a prompt section is on every
 call and holds what is always true; a skill body is read on demand and holds a
-procedure most runs never need ([6.6](../../docs/06-agent.md#66-skills)).
+procedure most runs never need ([Skills](../../docs/agents/code.md#skills)).
 
 ## Ported from deepagents-code
 
@@ -116,7 +116,7 @@ HERE = Path(__file__).parent
 # Supersteps, not agent turns, and a *budget*, not a loop guard: a recorded run
 # reached 120 in 220 seconds of productive work -- reading a directory, writing
 # five files, installing a toolchain and compiling it. Spending it all is an
-# ordinary way for a run to end (docs/06-agent.md).
+# ordinary way for a run to end (docs/agents/code.md).
 RECURSION_LIMIT = 400
 
 # Held back from that budget, so a run that spends it is told so and still has
@@ -130,7 +130,7 @@ WRAP_UP_RESERVE = 40
 # workspace the run is rooted at. deepagents' `SkillsMiddleware` puts the name
 # and description in the prompt and nothing else; the model reads the body only
 # if it decides the skill applies -- progressive disclosure, and no tool
-# ([6.6](../../docs/06-agent.md#66-skills)).
+# ([Skills](../../docs/agents/code.md#skills)).
 SKILLS_DIR = HERE / "skills"
 SKILLS_ROOT = "/skills/"
 
@@ -191,7 +191,7 @@ def render_skills(peers: Sequence[str], workdir) -> Optional[tempfile.TemporaryD
     With no peers the skill is not written at all, and nothing is mounted. That
     is what keeps `AGENT_PEERS=` an arm with no delegation in it rather than one
     that reads how to delegate and then fails
-    ([16.2.2](../../docs/16-delegation.md#1622-the-roster-and-the-how-to-are-a-skill)).
+    ([The roster and the how-to are a skill](../../docs/agents/delegation.md#the-roster-and-the-how-to-are-a-skill)).
 
     The caller keeps the returned object: the directory is deleted when it is.
     """
@@ -227,7 +227,7 @@ def descriptions() -> dict:
     Only `write_todos` has one: it is the framework tool whose use the traced
     runs got wrong, listing the prompt's phases instead of the task's
     requirements and ticking them in a batch at the end
-    ([6.5.3](../../docs/06-agent.md#653-what-each-call-carries)).
+    ([What each call carries](../../docs/agents/code.md#what-each-call-carries)).
     """
     return {path.stem: fill(path, {})
             for path in sorted((HERE / "tool_descriptions").glob("*.md"))}
@@ -362,10 +362,10 @@ def local_shell(workdir: Path):
     - `virtual_mode=True` roots the *file tools* at the workspace, which is what
       `prompts/working_dir.md` describes and what `CompositeBackend` needs in
       order to route a path. It does not confine `execute`, which is the host
-      shell ([6.2](../../docs/06-agent.md#62-the-blast-radius)).
+      shell ([The blast radius](../../docs/agents/code.md#the-blast-radius)).
     - `inherit_env` plus `PYTHONPATH` is what lets a delegated
       `python -m agent.<name>` build a router and import this repository from
-      whatever workspace the run is in ([16. Delegation](../../docs/16-delegation.md)).
+      whatever workspace the run is in ([Delegation](../../docs/agents/delegation.md)).
     - `timeout` is the ceiling on one command. The library's 120s is sized for
       `ls`; a test run on a cold toolchain needs more. A delegated session needs
       an hour and asks for it per call (`skills/delegate/SKILL.md`).
@@ -390,7 +390,7 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
 
     `peers` names the other agents this one may run. It costs a paragraph in the
     prompt and no tool: they are commands, and the agent already has `execute`
-    ([16. Delegation](../../docs/16-delegation.md)).
+    ([Delegation](../../docs/agents/delegation.md)).
     """
     from deepagents import create_deep_agent
     from deepagents.backends.composite import CompositeBackend
@@ -417,7 +417,7 @@ def build_agent(workdir: Path, model, *, floor: int = CONTEXT_FLOOR,
     # the host shell and is not confined by it. `env` is layered over the
     # inherited environment so a delegated `python -m agent.<name>` can import
     # this repository from whatever workspace the run is in
-    # ([16. Delegation](../../docs/16-delegation.md)). Sub-agents share it.
+    # ([Delegation](../../docs/agents/delegation.md)). Sub-agents share it.
     shell = local_shell(workdir)
 
     # A skill is only usable if `read_file` can reach the path the middleware
@@ -551,6 +551,6 @@ def run(model, task: str, workdir: Path, config=None,
         collected.traced_runs, trace_path,
         # Delegation spends quota outside this conversation, so the record says
         # which agents this one was allowed to run
-        # ([16](../../docs/16-delegation.md)).
+        # ([Delegation](../../docs/agents/delegation.md)).
         run_tree.about(workdir, "code", floor, members, peers=list(peers or [])))
     return final, written

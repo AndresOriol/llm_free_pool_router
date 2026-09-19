@@ -1,14 +1,14 @@
 """One served run: what was asked, where, and what came back.
 
 A run outlives its request -- hours against a platform that kills a connection
-in minutes ([17.3](../../docs/17-deployment.md#173-why-requestresponse-platforms-cannot-host-it))
+in minutes ([Why request/response platforms cannot host it](../../docs/operations/deployment.md#why-requestresponse-platforms-cannot-host-it))
 -- so submitting has to answer immediately with an id the caller polls. That is
 the only reason this type exists: something has to hold the run between the two
 requests.
 
 It is deliberately not a protocol. There was one here -- A2A's `Task`, `Message`
 and `Artifact`, with a card per agent and a handler beside every session -- and
-it is gone with the rest of it ([16. Delegation](../../docs/16-delegation.md)).
+it is gone with the rest of it ([Delegation](../../docs/agents/delegation.md)).
 An agent is a command; the server queues one, runs it, and keeps what it
 printed.
 """
@@ -50,7 +50,7 @@ class Task:
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     state: str = QUEUED
     # Everything the command printed, final message first
-    # ([16.5.1](../../docs/16-delegation.md#1651-the-verdict-comes-from-git-not-from-the-delegate)).
+    # ([The verdict comes from git, not from the delegate](../../docs/agents/delegation.md#the-verdict-comes-from-git-not-from-the-delegate)).
     # Not summarised here: the command already leads with its own answer, and a
     # server that paraphrased it would be one more thing to keep in step.
     output: str = ""
@@ -96,7 +96,7 @@ class TaskStore:
     an id for. On disk because a served run spends real free-tier quota
     unattended, and the account a human reads afterwards should say what was
     asked and what came back
-    ([7.6](../../docs/07-observability.md#76-the-record-one-run-tree)).
+    ([The record: one run tree](../../docs/evaluation/observability.md#the-record-one-run-tree)).
 
     The directory is the *record's*, never the workdir: the coding agent commits
     its workdir, and a server log committed into the project under review is

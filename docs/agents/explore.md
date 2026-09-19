@@ -1,16 +1,16 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 15. The web explorer
+# The web explorer
 
 *The second agent: one that reads the web instead of a repository, and leaves
 Markdown behind instead of a diff. Why the web is reachable at all on a free
 tier, why searching is a tool call rather than a bound tool, and why it runs no
 programs.*
 
-## 15.1 What it is for
+## What it is for
 
-[agent/explore/](../agent/explore/). The coding agent
-([6](06-agent.md)) is good at changing a project and has no way to find anything
+[agent/explore/](../../agent/explore/). The coding agent
+([The coding agent](code.md)) is good at changing a project and has no way to find anything
 out. Anything it needs from outside — an API's current limits, a library's
 actual signature, what a vendor charges this month — has to be typed into its
 brief by a human who looked it up.
@@ -29,50 +29,50 @@ hours apart, or to run the explorer once and the coding agent five times against
 what it found.
 
 That constraint is also why the prompt spends most of its length on the written
-record ([prompts/system.md](../agent/explore/prompts/system.md)). The explorer's
+record ([prompts/system.md](../../agent/explore/prompts/system.md)). The explorer's
 closing message is not the deliverable: it is printed for whoever ran the
 command, and says which files to open. The files are the deliverable, because the thing that reads them next is an agent that was not
 there.
 
 > **Amended.** *"They meet on disk"* used to read *"and nowhere else… no message
 > bus, no protocol to keep in step"*, and the coding agent can now ask the explorer for a report directly
-> ([16. Delegation](16-delegation.md)) — by running this command. What that adds is
+> ([Delegation](delegation.md)) — by running this command. What that adds is
 > the *request* and the *status*, never the deliverable: a research note is still
 > a file on disk that outlives the exchange, so everything above still holds. A
 > human sequencing the two runs by hand still works and is still the default way
 > to use the explorer alone.
 
-## 15.2 The web, on a free tier
+## The web, on a free tier
 
 Search is [Tavily](https://tavily.com): a search API built for agents, whose free
 tier is **1,000 credits a month** on a key you get by signing up. One
 `tavily_search` spends one credit for the URL discovery; fetching the pages costs
 nothing but the HTTP round trips, because the tool does that itself
-([TavilyPoolRouter.search](../llm_router/tavily_router.py), reached through
-[agent/explore/tools.py](../agent/explore/tools.py)).
+([TavilyPoolRouter.search](../../llm_router/tavily_router.py), reached through
+[agent/explore/tools.py](../../agent/explore/tools.py)).
 
 Held against everything else here, that budget is comfortable and genuinely
 scarce at the same time. Comfortable next to the *model* pool — twenty requests
 a day per flash model per account
-([5.4](05-providers.md#54-current-free-tier-limits)) — so searching is not what a
+([Current free-tier limits](../pool/providers.md#current-free-tier-limits)) — so searching is not what a
 research run exhausts first. Scarce in that credits do not refill until the month
 turns, and there is no cooldown to wait through: an exhausted key is exhausted.
 
 **So the pool pattern applies to search too.** `TavilyPoolRouter` holds one
 account per key and fails over on rate limits and errors, exactly as the model
-router does for providers ([3. The pool model](03-pool-model.md)). Keys are
+router does for providers ([The pool model](../pool/model.md)). Keys are
 `TAVILY_API_KEY_1`, `_2`, ... in `llm_router/.env` and are picked up without
 touching config.
 
 **Today the pool holds one account**, which means failover has nowhere to go. A
 run says so once at startup rather than letting you find out at the wall
-([TavilyPoolRouter.check](../llm_router/tavily_router.py), which
-[`connect()`](../agent/explore/agent.py) calls before the run).
+([TavilyPoolRouter.check](../../llm_router/tavily_router.py), which
+[`connect()`](../../agent/explore/agent.py) calls before the run).
 
-### 15.2.1 A capability is a fact to probe, not to infer
+### A capability is a fact to probe, not to infer
 
 The lesson worth keeping from the search this replaced
-([15.9](#159-what-the-grounded-gemini-search-was)), because it generalises past
+([What the grounded-Gemini search was](#what-the-grounded-gemini-search-was)), because it generalises past
 the code that taught it.
 
 That search ran inside the Gemini API, and which pool members could use it was
@@ -86,7 +86,7 @@ requests a day against the flash tier's twenty.
 Re-probe before widening any capability list. The failure mode is a member that
 `400`s every call and cools down an account that was never at fault.
 
-## 15.3 Why the search tool fetches the page
+## Why the search tool fetches the page
 
 `tavily_search` does not return search results. It asks Tavily for URLs, fetches
 each one over HTTP, converts it to markdown, and returns **that**. The model
@@ -98,12 +98,12 @@ had found, and opening the real page was a second tool the agent could choose to
 call. It never chose to: a recorded run made 13 searches and 0 reads, and wrote a
 report full of exact figures — instance counts, percentages, version numbers —
 not one of which had been traced to a source
-([15.7](#157-measured-against-a-reference-research-agent)).
+([Measured against a reference research agent](#measured-against-a-reference-research-agent)).
 
 **The fix is not a firmer instruction.** It is a tool that does not offer the
 failure. There is no longer a read step to skip.
 
-### 15.3.1 What that costs, and the two guards on it
+### What that costs, and the two guards on it
 
 A page is large. Returning them whole is what upstream does and it is not safe
 here, because the conversation carrying them is routed against a 128,000-token
@@ -115,14 +115,14 @@ already learned.
   appears to end mid-sentence.
 - **The orchestrator never searches.** Pages land in the researcher sub-agent's
   context, and what comes back to the orchestrator is its findings rather than
-  its raw fetches ([15.8](#158-the-deep-research-port)). That is what makes
+  its raw fetches ([The deep-research port](#the-deep-research-port)). That is what makes
   fetching whole pages affordable at all.
 
 A fetch that fails — a 403, a timeout, a paywall — comes back as readable text
 naming the error, with the URL and title intact. The agent can act on "this page
 will not open"; it cannot act on a traceback.
 
-## 15.4 Which account serves a search
+## Which account serves a search
 
 `TavilyPoolRouter` walks its accounts in order and returns the first one not in
 cooldown. A failure benches that account with exponential backoff capped at five
@@ -132,11 +132,11 @@ than failing the run.
 
 That is deliberately simpler than the model router, which sorts by a
 hand-assigned priority and filters by context size
-([4. Failover](04-failover.md)). Neither applies here: Tavily accounts are
+([Failover](../pool/failover.md)). Neither applies here: Tavily accounts are
 interchangeable, there is nothing to prefer between two keys, and a search has no
 context window. Ordering that carries no information is ordering to maintain.
 
-## 15.5 What it is allowed to do
+## What it is allowed to do
 
 Same jail as the coding agent, rooted at `workdir`, with one difference:
 **it runs no programs at all.**
@@ -151,13 +151,13 @@ Same jail as the coding agent, rooted at `workdir`, with one difference:
 
 The coding agent needs a shell to close its own loop — write a test, run it,
 react to the result. A researcher has no loop to close, so its backend is
-deepagents' plain [`FilesystemBackend`](../agent/explore/agent.py): it
+deepagents' plain [`FilesystemBackend`](../../agent/explore/agent.py): it
 implements no `execute`, and because it does not, the framework never offers
 the tool and never writes a prompt section about one. Nothing is lost.
 
 **This is the one agent here that still has a boundary.** The coding agent's
 `execute` is the host shell and confines nothing
-([6.2](06-agent.md#62-the-blast-radius)); the explorer genuinely cannot run a
+([The blast radius](code.md#the-blast-radius)); the explorer genuinely cannot run a
 program, so the blast radius of an unattended research run really is the files
 it writes under `virtual_mode`.
 
@@ -168,42 +168,42 @@ Markdown:
 
 | what | where |
 | --- | --- |
-| what the agent is for, what it cannot do, when it is finished | [prompts/system.md](../agent/explore/prompts/system.md) |
+| what the agent is for, what it cannot do, when it is finished | [prompts/system.md](../../agent/explore/prompts/system.md) |
 | the research method, ported from upstream | `prompts/workflow.md`, `delegation.md`, `researcher.md` |
 | what each tool is for, and how to use it | `tool_descriptions/<tool>.md`, one file per tool |
-| the budgets, the tools taken away, the framework prose removed, and the assembly | [agent.py](../agent/explore/agent.py), read top to bottom |
-| running it | [`__main__.py`](../agent/explore/__main__.py) |
+| the budgets, the tools taken away, the framework prose removed, and the assembly | [agent.py](../../agent/explore/agent.py), read top to bottom |
+| running it | [`__main__.py`](../../agent/explore/__main__.py) |
 
 Every Markdown file is a template filled from one dictionary
-(`template_values` in [agent.py](../agent/explore/agent.py)): the research
+(`template_values` in [agent.py](../../agent/explore/agent.py)): the research
 directory, the budgets, today's date, and the sections every agent shares
-([agent/utils/prompts/](../agent/utils/prompts/)). The Python left over is assembly: fill the files, filter a list,
+([agent/utils/prompts/](../../agent/utils/prompts/)). The Python left over is assembly: fill the files, filter a list,
 hand the result to `create_deep_agent`. Nothing in it decides what the agent *does*, and a
 change to how the agent works should be a change to a Markdown file. When a
 behaviour was implemented as code here it has been removed again — see the
-review in [15.5.4](#1554-the-review-at-the-end), which was a wrapper for one
+review in [The review at the end](#the-review-at-the-end), which was a wrapper for one
 commit and is now four sentences in the prompt.
 
-### 15.5.1 The surface is chosen, not inherited
+### The surface is chosen, not inherited
 
 *The rows marked — above are the change. Read after the first traces of the
-decision-led runs ([15.8.4](#1584-decision-led-research-candidate)): the agent
+decision-led runs ([Decision-led research candidate](#decision-led-research-candidate)): the agent
 had been handed a coding agent's tools and was using them as one.*
 
 `create_deep_agent` installs one suite on everything built with it —
 `write_todos`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`,
-`execute`, `task` — and that suite is shaped for the job [6](06-agent.md) does:
+`execute`, `task` — and that suite is shaped for the job [The coding agent](code.md) does:
 find your way around a repository you were dropped into, then change it. Three of
-them are removed here ([agent.py](../agent/explore/agent.py)) and the fourth is
+them are removed here ([agent.py](../../agent/explore/agent.py)) and the fourth is
 never offered, each for a reason about the same scarce thing, a model call
 against a per-day request budget:
 
 - **`ls`, `glob`, `grep` are repository discovery**, and this agent has two
   other sources of paths. `research_status` says what its own research holds
-  ([15.5.2](#1552-the-research-directory-and-how-to-see-it)), and a project file
+  ([The research directory, and how to see it](#the-research-directory-and-how-to-see-it)), and a project file
   worth reading is one the *request* named — the caller is
   usually the coding agent, which knows the repository already
-  ([16](16-agent-protocol.md)). Searching a repo with the research budget is
+  ([Delegation](delegation.md)). Searching a repo with the research budget is
   doing the other agent's job with the wrong account.
 - **`execute` used to be offered by the framework and refused by the backend**
   on every command. An always-refused tool can only ever cost a step to learn
@@ -214,7 +214,7 @@ against a per-day request budget:
   backend that can execute, so there is nothing left to hide.
 
 **The project tree went with them.** The coding agent's prompt opens with a
-depth-limited listing of the repository ([`project_section`](../agent/code/agent.py))
+depth-limited listing of the repository ([`project_section`](../../agent/code/agent.py))
 because two or three tool calls spent discovering the shape of a project are the
 most expensive calls in a run. That argument does not transfer: this agent is
 *given* its question, and a tree in its prompt is a hundred lines inviting
@@ -225,8 +225,8 @@ Four descriptions are rewritten for the same reason the tools are. Upstream's
 opens by telling the agent to prefer editing something that already exists; and
 `write_todos` closes by insisting the deliverable is the final message — which
 here is false, since the closing message only points its caller at the files
-([`__main__.py`](../agent/explore/__main__.py)) and the files are the deliverable
-([15.1](#151-what-it-is-for)). A tool description contradicting the system prompt
+([`__main__.py`](../../agent/explore/__main__.py)) and the files are the deliverable
+([What it is for](#what-it-is-for)). A tool description contradicting the system prompt
 is worse than a thin one.
 
 **Why a middleware rather than a `HarnessProfile`.** Upstream's documented way to
@@ -238,7 +238,7 @@ it. Filtering the request applies to exactly the agent it is installed on. The
 researcher sub-agent gets its own copy, because the framework hands it its own
 copy of the filesystem tools.
 
-### 15.5.2 The research directory, and how to see it
+### The research directory, and how to see it
 
 **Which directory is a parameter of the run**, not a constant:
 
@@ -256,7 +256,7 @@ extended and cited. The prompts and tool descriptions write the path as
 `/{research_dir}/`, filled in with every other template value.
 
 **What is in it comes from `research_status`**
-([agent.py](../agent/explore/agent.py)), a tool: every note's
+([agent.py](../../agent/explore/agent.py)), a tool: every note's
 path and size, asked for when the answer is wanted.
 
 That is a reversal. It was first built as a listing injected into the system
@@ -265,7 +265,7 @@ own output and therefore, unlike the coding agent's project tree, changes exactl
 when it starts mattering. The argument is still true and no longer decides it:
 the injection was paid for on every call including the great majority that never
 needed it, it fed the prompt this agent already had too much of
-([15.5.3](#1553-what-the-framework-says-that-is-not-true-here)), and it could
+([What the framework says that is not true here](#what-the-framework-says-that-is-not-true-here)), and it could
 only ever answer *what notes exist* — where the next question is always *what is
 in this one*, which is `read_file` and a path. A tool is asked, and it is the
 seam where "list the paths" becomes "say what state the research is in" without
@@ -273,7 +273,7 @@ touching a prompt.
 
 The reasons it exists at all are unchanged: the orchestrator has to know whether
 there is earlier research to continue before it writes
-([15.8.2](#1582-what-this-pool-forced-us-to-change)), parallel researchers must
+([What this pool forced us to change](#what-this-pool-forced-us-to-change)), parallel researchers must
 not choose the same filename, and after summarization a note written an hour
 ago is nowhere in the conversation but is still on disk.
 
@@ -282,7 +282,7 @@ question and leaves the next run nothing to extend but a file to overwrite. So
 the directory follows the
 [LLM-Wiki-Template](https://github.com/IvanKRZ/LLM-Wiki-Template) shape, cut to
 what an unattended agent with no `grep` can keep
-([prompts/workflow.md](../agent/explore/prompts/workflow.md)):
+([prompts/workflow.md](../../agent/explore/prompts/workflow.md)):
 
 | file | what it holds |
 | --- | --- |
@@ -301,9 +301,9 @@ a second run a continuation rather than a second report. A directory holding
 notes from before this shape is indexed first and kept as pages, not rewritten. An empty
 directory says so rather than returning nothing: "nothing is written yet" is the
 state in which a crash costs the whole run
-([15.8.3](#1583-what-it-costs-and-what-was-given-up)).
+([What it costs, and what was given up](#what-it-costs-and-what-was-given-up)).
 
-### 15.5.3 What the framework says that is not true here
+### What the framework says that is not true here
 
 Removing tools left the framework describing an agent this is not.
 `create_deep_agent` appends its own prompt sections, and after the filtering
@@ -313,19 +313,19 @@ above four of them were wrong in a way that costs more than tokens:
 | --- | --- | --- |
 | `FILESYSTEM_SYSTEM_PROMPT` | lists `ls`, `glob`, `grep` among the tools available | three of the six are not offered |
 | `TASK_SYSTEM_PROMPT` | 3,700 characters on when to spawn a sub-agent | the ported research workflow answers this three sections earlier |
-| `WRITE_TODOS_SYSTEM_PROMPT` | "write your final answer in the message AFTER your last `write_todos` call … The user wants the result" | the answer is a file; the closing message only points its caller at it ([`__main__.py`](../agent/explore/__main__.py)) |
+| `WRITE_TODOS_SYSTEM_PROMPT` | "write your final answer in the message AFTER your last `write_todos` call … The user wants the result" | the answer is a file; the closing message only points its caller at it ([`__main__.py`](../../agent/explore/__main__.py)) |
 | `BASE_AGENT_PROMPT` | "The user can see your responses and tool outputs in real time", plus progress updates and clarifying questions | nobody is watching, and the headless preamble says so two thousand characters earlier |
 
 The last two are the expensive ones. A run that recites its report into a reply
 pays for the report twice — once into the file that is the deliverable and once
 into a message whose reader is about to open the file anyway — and that is a measured behaviour of the runs in
-[15.8.4](#1584-decision-led-research-candidate), not a hypothetical. The same
+[Decision-led research candidate](#decision-led-research-candidate), not a hypothetical. The same
 correction is made on the researcher sub-agent, whose instructions now say the
 reply is a pointer to its note and cap it at 200 words.
 
 They are matched as the **imported constants**, so an upstream rewording makes
 the removal fail loudly rather than half-apply
-([agent.py](../agent/explore/agent.py)).
+([agent.py](../../agent/explore/agent.py)).
 
 **How the surface is applied.** Choosing the tools and describing them was
 middleware rewriting `request.tools` on every model call; it is now a
@@ -333,13 +333,13 @@ middleware rewriting `request.tools` on every model call; it is now a
 registered under `routerchatmodel:explore` and applied by the framework to this
 agent and its sub-agents alike. That key is what a per-agent profile needs and
 it did not exist until `RouterChatModel` carried an identifier
-([chat_model.py](../agent/utils/chat_model.py)): profiles are looked up as
+([chat_model.py](../../agent/utils/chat_model.py)): profiles are looked up as
 `provider:identifier`, and with no identifier all three agents resolved to one
 shared profile. A per-agent profile *merges* with the shared one, so the pool's
 `read_file` default survives underneath.
 
 Two things stayed behind in `FrameworkSurface`
-([surface.py](../agent/utils/surface.py), shared with the coding agent), and
+([surface.py](../../agent/utils/surface.py), shared with the coding agent), and
 both are library limits rather than preferences. The prompt sections above cannot be suppressed by
 configuration: `FilesystemMiddleware` and `SubAgentMiddleware` are required
 middleware, so `excluded_middleware` refuses to drop them, and dropping a
@@ -354,7 +354,7 @@ conversation: system prompt plus every tool schema is 26,864 characters, against
 47,187 for the same agent with the framework's suite and prose left as they
 come — a 43% cut, most of it text that described tools it does not have. Whether a shorter, truer
 prompt produces better research is exactly what
-[the v3 comparison](../evals/results/reports/2026-09-10-explore-machintl.md)
+[the v3 comparison](../../evals/results/reports/2026-09-10-explore-machintl.md)
 says has not been shown.
 
 **One hole this closed.** `create_deep_agent` adds a `general-purpose` sub-agent
@@ -362,13 +362,13 @@ whenever the caller declares none, and the default inherits the framework's
 filesystem tools *without* the middleware above — so an agent with no `grep`
 could delegate to one that had it, under no search budget either. It is declared
 explicitly now, with the same surface and the same limit
-([agent.py](../agent/explore/agent.py)). A tailoring that only holds for the
+([agent.py](../../agent/explore/agent.py)). A tailoring that only holds for the
 agent in front is not a tailoring.
 
 **Unmeasured.** All of this is argued from traces and from a deterministic
 character count, not from a result.
 
-### 15.5.4 The review at the end
+### The review at the end
 
 *Steps 6 and 7 of the workflow, and the only ones whose absence is invisible in
 the output: an unreviewed page reads exactly like a reviewed one.*
@@ -378,7 +378,7 @@ read the request again, read what it wrote, and answered **one question per
 thing the request asked for** — answered, partly, or not answered, naming the
 page and section that answers it — checked that the index and the links still
 hold, corrected what it found with `edit_file`, and appended that account to
-`log.md` ([prompts/workflow.md](../agent/explore/prompts/workflow.md)). The log
+`log.md` ([prompts/workflow.md](../../agent/explore/prompts/workflow.md)). The log
 entry is also where the request is kept: an earlier version saved the request
 and the review as files of their own, which a wiki visited by many runs would
 collect one pair of per run.
@@ -387,7 +387,7 @@ Three things about the shape of it:
 
 **It is asked against the request, not against the prose.** A long report is not
 evidence that the question was answered, and the failure this catches is the one
-the runs in [15.8.4](#1584-decision-led-research-candidate) actually made: a
+the runs in [Decision-led research candidate](#decision-led-research-candidate) actually made: a
 report that answers a neighbouring question well while the asked one goes
 untouched. The review is also where a decision-critical claim gets named as
 resting on a vendor's own page, a single source, or an inference — which is
@@ -398,7 +398,7 @@ could see.
 character report costs the whole report in output tokens and drops whatever the
 model does not retype. This is the job `edit_file` exists for, and until this
 step existed it had none — recorded runs called it zero times
-([15.5.1](#1551-the-surface-is-chosen-not-inherited)).
+([The surface is chosen, not inherited](#the-surface-is-chosen-not-inherited)).
 
 **Nothing in the harness makes it happen.** There was, for one commit: a
 wrapper that noticed a run ending without a review and asked once more. It is
@@ -412,17 +412,17 @@ So the system prompt says it instead, in the place a model reads before it
 decides it is finished: the review and the log entry are the last things you
 do, the pages being written is not the end, and *if you are about to write a
 final message and `log.md` has no entry for this run, you are not finished*
-([prompts/system.md](../agent/explore/prompts/system.md)).
+([prompts/system.md](../../agent/explore/prompts/system.md)).
 
 **And it is counted.** `research_trajectory` has one check for it: that the log
 was written to — or, in a trace from before the wiki, a review note
-([research_trajectory.py](../evals/research_trajectory.py)). That is the whole
+([research_trajectory.py](../../evals/research_trajectory.py)). That is the whole
 arrangement: **the prompt asks, and the eval counts.** If runs keep shipping
 without a review the check says so, and the answer is better words — or, if
 words demonstrably will not do it, a mechanism argued for by that evidence
 rather than by anticipation.
 
-### 15.5.5 What each call carries
+### What each call carries
 
 What the model sees is assembled, per call, from a few places, and knowing
 which is how to change what the agent does:
@@ -441,7 +441,7 @@ the sub-agent saved, and anything any agent needs later — the plan, the
 findings, the report, the review — is on disk, where `research_status` lists it
 and `read_file` opens it.
 
-## 15.6 What it costs a run
+## What it costs a run
 
 Per `tavily_search` call:
 
@@ -453,13 +453,13 @@ Per `tavily_search` call:
 
 `think_tool` costs a model call and nothing else. A whole run costs an
 orchestrator conversation plus one sub-agent conversation per topic, which is the
-trade [15.8.3](#1583-what-it-costs-and-what-was-given-up) is about and which
+trade [What it costs, and what was given up](#what-it-costs-and-what-was-given-up) is about and which
 nothing has measured yet.
 
 The scarce resource is still the model call that wraps the search rather than the
 search itself — the same shape as before, for a different reason.
 
-## 15.7 Measured against a reference research agent
+## Measured against a reference research agent
 
 *Written after the first live research run. It did not fail — it produced a
 27,000-word cited report that reads well — and it diverged from its own
@@ -476,7 +476,7 @@ makes it the honest thing to compare against rather than a blank page.
 | Topic isolation | one sub-agent per topic, fresh context each | one conversation across four topics |
 | Deliverable | `/research_request.md` + `/final_report.md`, numbered `### Sources` | one note per topic — **got one note for four topics** |
 
-### 15.7.1 What the divergences cost, and what was changed
+### What the divergences cost, and what was changed
 
 Three of the four were the prompt's own rules going unfollowed, so the fix was
 to make them checkable rather than to add new ones:
@@ -500,13 +500,13 @@ to make them checkable rather than to add new ones:
   offered `"gemini api google_search tool request format"` as the good example.
   All thirteen queries were keyword strings. The example was the bug.
 
-### 15.7.2 The one difference that was not copied, and then was
+### The one difference that was not copied, and then was
 
 **Their search tool reads the page; ours returned a summary and hoped.** Copying
 it was rejected first, on the grounds that every fetch here is a model call
 against a daily request budget and making each search cost two would halve the
 questions a run could ask. The prompt would carry the rule instead, and
-[research_trajectory](../evals/research_trajectory.py) would check whether it was
+[research_trajectory](../../evals/research_trajectory.py) would check whether it was
 followed — with the note that *if the check keeps failing, the prompt is the
 wrong instrument and the tool is the right one*.
 
@@ -514,28 +514,28 @@ wrong instrument and the tool is the right one*.
 fetch is an HTTP request rather than a model call and the doubling never
 happens. And the sub-agent split means the pages land somewhere that is thrown
 away, so paying for them in context is bounded
-([15.3.1](#1531-what-that-costs-and-the-two-guards-on-it)).
+([What that costs, and the two guards on it](#what-that-costs-and-the-two-guards-on-it)).
 
 Per-topic sub-agents were also rejected here and adopted in
-[15.8](#158-the-deep-research-port), for a reason that reads backwards until you
+[The deep-research port](#the-deep-research-port), for a reason that reads backwards until you
 see it: a sub-agent looked like pure added cost, and it is what makes fetching
 whole pages affordable.
 
-## 15.8 The deep-research port
+## The deep-research port
 
-*Branch `harness/deep-research`. [15.7](#157-measured-against-a-reference-research-agent)
+*Branch `harness/deep-research`. [Measured against a reference research agent](#measured-against-a-reference-research-agent)
 argued the explorer's method lost to LangChain's reference agent on every axis a
 run could measure. This is the branch that stops arguing and runs theirs.*
 
 The port is close to verbatim — `RESEARCH_WORKFLOW_INSTRUCTIONS`,
 `SUBAGENT_DELEGATION_INSTRUCTIONS` and `RESEARCHER_INSTRUCTIONS` from
 `langchain-ai/deepagents-quickstarts` (MIT), plus `tavily_search` and
-`think_tool` ([prompts/](../agent/explore/prompts/),
-[agent.py](../agent/explore/agent.py)). This repo already
+`think_tool` ([prompts/](../../agent/explore/prompts/),
+[agent.py](../../agent/explore/agent.py)). This repo already
 ports `deepagents-code`'s prompt for the coding agent; this is the same move on
 the research side.
 
-### 15.8.1 The three changes that matter
+### The three changes that matter
 
 | | Before | Now |
 | --- | --- | --- |
@@ -553,17 +553,18 @@ The third has a second benefit that is specific to this pool: the sub-agent's
 raw page dumps stay in the sub-agent's context. Fetching whole pages is only
 affordable because the orchestrator never sees them.
 
-### 15.8.2 What this pool forced us to change
+### What this pool forced us to change
 
-Each is marked `ADAPTED` in the prompt files, so the next reader can diff
-against the source rather than guess. The first four are forced by this pool:
+These are the deviations from upstream. The prompt files stopped marking them
+with `ADAPTED` comments on 2026-09-11, so diff against upstream to find them.
+The first four are forced by this pool:
 
 1. **`/research/` rather than the workdir root.** Upstream writes
    `/research_request.md` and `/final_report.md` at the root. Here the workdir is
    a project a coding agent then works in, and a report at the root lands in the
    diff it produces. The command's summary names the `/research/*.md` notes a
    run wrote, so this is also what makes a delegated report come back as one
-   ([16](16-delegation.md)).
+   ([Delegation](delegation.md)).
 2. **A pool, not a client.** Upstream builds one `TavilyClient`. Search here goes
    through `TavilyPoolRouter`, so an account at its monthly credit wall fails
    over instead of ending the run — the argument the model pool already rests on.
@@ -583,19 +584,19 @@ The rest were argued from this project's own runs:
    sub-agent; a pool bounded by requests per day is better served by an
    orchestrator that knows the numbers than by one left to infer them.
 6. **No `read_url`.** `tavily_search` returns the page, so there is no second
-   tool to skip ([15.7.2](#1572-the-one-difference-that-was-not-copied-and-then-was)).
+   tool to skip ([The one difference that was not copied, and then was](#the-one-difference-that-was-not-copied-and-then-was)).
 7. **Decision-led briefs and saved findings**
-   ([15.8.4](#1584-decision-led-research-candidate)).
+   ([Decision-led research candidate](#decision-led-research-candidate)).
 8. **A tool list that matches the tools.** Upstream's `ls /research` becomes
    `research_status`, and the researcher is told the tools it actually holds
-   ([15.5.1](#1551-the-surface-is-chosen-not-inherited)).
+   ([The surface is chosen, not inherited](#the-surface-is-chosen-not-inherited)).
 9. **A review step** after the report
-   ([15.5.4](#1554-the-review-at-the-end)).
+   ([The review at the end](#the-review-at-the-end)).
 10. **The reply is a pointer, not a second copy of the findings**, for the
     researcher and the orchestrator alike
-    ([15.5.3](#1553-what-the-framework-says-that-is-not-true-here)).
+    ([What the framework says that is not true here](#what-the-framework-says-that-is-not-true-here)).
 
-### 15.8.3 What it costs, and what was given up
+### What it costs, and what was given up
 
 A research task is now an orchestrator conversation **plus** a sub-agent
 conversation, where it used to be one. Against that, the sub-agent's context
@@ -608,12 +609,12 @@ went, so a run that died halfway left half its findings. The orchestrator
 synthesizes *after* its sub-agents return, so the report is necessarily the last
 thing written and a crash before it leaves only `research_request.md`. That is
 upstream's design rather than drift, so
-[research_trajectory](../evals/research_trajectory.py) records it instead of
+[research_trajectory](../../evals/research_trajectory.py) records it instead of
 failing the run for it — but it is a real regression in crash-resilience for an
 agent meant to run unattended, and it is the first thing to revisit if a long
 run dies late.
 
-### 15.8.4 Decision-led research candidate
+### Decision-led research candidate
 
 Branch `codex/improve-explore-research` adapts the workflow to the Machintl
 reference business-analysis session. Before delegation, the orchestrator saves
@@ -635,11 +636,11 @@ source links: the first candidate reused note-local citation numbers in the
 combined bibliography, binding industrial claims to retail sources. Three sources are sufficient only
 when they cover the assigned questions. These are instructions, not guarantees
 of citation quality or crash recovery. The
-[capability queue](../.codex/artifacts/2026-09-10-explore-capability-issues.md)
+[capability queue](../../.codex/artifacts/2026-09-10-explore-capability-issues.md)
 records the reference, live evidence and future eval contracts; no claim of
 parity with Claude follows from copying its method.
 
-The [live comparison](../evals/results/reports/2026-09-10-explore-machintl.md)
+The [live comparison](../../evals/results/reports/2026-09-10-explore-machintl.md)
 completed one control and two candidate reports. The revised candidate saved
 sector findings and corrected the date and citation-number collisions, but
 still made unsupported legal and commercial claims. It did not perform the
@@ -651,9 +652,9 @@ pass; they establish infrastructure behavior, not research quality.
 Reading those traces produced one further change, argued separately because it
 is about the agent's tools rather than its method: the surface it is offered is
 now chosen rather than inherited from the framework
-([15.5.1](#1551-the-surface-is-chosen-not-inherited)). Also unmeasured.
+([The surface is chosen, not inherited](#the-surface-is-chosen-not-inherited)). Also unmeasured.
 
-## 15.9 What the grounded-Gemini search was
+## What the grounded-Gemini search was
 
 *Deleted, and recorded here because the reasoning outlived the code and one of
 the lessons generalises.*
@@ -682,13 +683,9 @@ Three things it got right, and they are why the replacement had to keep them:
 
 **What it got wrong is the one thing that mattered.** What reached the model was
 a summary, and reading the real page was optional. The agent never took the
-option ([15.3](#153-why-the-search-tool-fetches-the-page)).
+option ([Why the search tool fetches the page](#why-the-search-tool-fetches-the-page)).
 
 It was kept for one commit as a fallback against Tavily's free tier running out,
 and then deleted: a fallback nobody should fall back to is a second prompt and a
 second tool set to keep true, in exchange for restoring a failure mode already
 measured once. `git log` has it.
-
----
-
-**Previous:** [← 14. Quota panel](14-quota-panel.md) · **Next:** [16. Delegation →](16-delegation.md)

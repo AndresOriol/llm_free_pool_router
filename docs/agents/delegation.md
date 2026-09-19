@@ -1,14 +1,14 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 16. Delegation
+# Delegation
 
 *How one agent asks another for work. Why it is a command rather than a
 protocol, what that costs, and why the deliverable is still a file on disk.*
 
-## 16.1 The problem: the human was the message bus
+## The problem: the human was the message bus
 
-Three agents exist ([6](06-agent.md), [15](15-explorer.md),
-[19](19-improvement-agent.md)) and they already share a workdir, a pool, a
+Three agents exist ([The coding agent](code.md), [The web explorer](explore.md),
+[The improvement agent](improve.md)) and they already share a workdir, a pool, a
 backend and a loop. What they did not share was a way for one to *ask* another for
 something. The handoff was a directory:
 
@@ -25,13 +25,13 @@ started.
 
 That is fine for two agents and a person watching. It is the wrong shape for
 Phase 2 — an agent working unattended for hours
-([design note](design/long-run-harness.md)) — and it does not survive a third
+([design note](../design/long-run-harness.md)) — and it does not survive a third
 agent at all, because the sequencing a human was doing by hand grows
 combinatorially and the human is asleep.
 
-### 16.1.1 This reopens a settled decision, and how much of it
+### This reopens a settled decision, and how much of it
 
-[15.1](15-explorer.md#151-what-it-is-for) says, in as many words: *no shared
+[What it is for](explore.md#what-it-is-for) says, in as many words: *no shared
 state, no message bus and no protocol to keep in step* — and gives a good reason,
 that the absence of one is what makes it safe to run the two agents hours apart
 or to run the explorer once against five coding sessions.
@@ -49,10 +49,10 @@ the *request* and the *status*: who asked, for what, and whether it worked.
 | Whether it worked | read the directory and guess | the command's exit code and its final message |
 
 An agent with no peers is byte-for-byte the agent that existed before
-([`AGENT_PEERS=`](#166-what-this-costs-and-what-is-unmeasured)), which is what
+([`AGENT_PEERS=`](#what-this-costs-and-what-is-unmeasured)), which is what
 makes the two comparable as configurations.
 
-## 16.2 Why a command, and not a protocol
+## Why a command, and not a protocol
 
 There was a protocol here, and it is gone. It was
 [A2A](https://a2a-protocol.org)'s data model — `AgentCard`, `Task`, `Message`,
@@ -70,23 +70,23 @@ python -m agent.improve .         --task "..."
 
 Same shape, same three arguments, one summary on stdout. And the coding agent
 already has `execute`, because it has to run its own tests
-([6.2](06-agent.md#62-the-blast-radius)). So delegation needs no transport, no
+([The blast radius](code.md#the-blast-radius)). So delegation needs no transport, no
 registry and no tool — it needs the agent to **know those commands exist**,
 which is a paragraph of prose, and it needs one caller in `agent/improve` to be
 able to launch one, which is `subprocess.run`. That is
-[agent/delegation.py](../agent/delegation.py), and it is a fifth the size of
+[agent/delegation.py](../../agent/delegation.py), and it is a fifth the size of
 what it replaced.
 
 The vocabulary argument for A2A was real and it still holds — for
-[serving](18-serving.md), where a caller is genuinely remote, a run outlives a
+[serving](../operations/serving.md), where a caller is genuinely remote, a run outlives a
 request, and something has to model a task with an id to poll. That is the only
 place the vocabulary survives, and it is the place it was designed for.
 
-### 16.2.1 What the prompt gains, and what it does not
+### What the prompt gains, and what it does not
 
 A `delegate` tool was a schema in front of the model on **every step of every
 run**, describing a directory that changes once at start-up. Tool schemas are
-91% of what a step spends ([6.4](06-agent.md#64-why-it-is-shaped-this-way)), so
+91% of what a step spends ([Why it is shaped this way](code.md#why-it-is-shaped-this-way)), so
 that is not a tidiness argument. The replacement is a prompt section, charged
 once, that names the command:
 
@@ -98,10 +98,10 @@ once, that names the command:
 
 The delegating configuration therefore differs from the baseline by a paragraph
 and **no tool at all** — asserted in
-[tests/agent/test_delegation.py](../tests/agent/test_delegation.py), because
+[tests/agent/test_delegation.py](../../tests/agent/test_delegation.py), because
 that is the property that makes `AGENT_PEERS=` a valid A/B arm.
 
-### 16.2.2 The roster and the how-to are a skill
+### The roster and the how-to are a skill
 
 The prompt section above did two jobs at two different rates. Which agents can
 be reached, and where each one runs, is decided when the run starts and differs
@@ -110,7 +110,7 @@ all, how to write a brief for someone who cannot see your conversation, why the
 closing summary is not the deliverable — is the same prose every time, and
 **most runs never delegate**.
 
-Both moved into `delegate`, a skill ([6.6](06-agent.md#66-skills)). The roster
+Both moved into `delegate`, a skill ([Skills](code.md#skills)). The roster
 goes with them: it is rendered into the skill per run rather than committed, so
 it still names only what was probed and found reachable. What is left in
 `system.md` is one sentence:
@@ -130,12 +130,12 @@ This does not change the property the A/B depends on. A skill is a prompt
 section and `read_file`; it is still **no tool**. And `AGENT_PEERS=` now removes
 more than it did: no roster, no skill, and no skills middleware at all, so the
 baseline prompt is byte-for-byte what it was
-([6.6.2](06-agent.md#662-rendered-per-run-not-committed)).
+([Rendered per run, not committed](code.md#rendered-per-run-not-committed)).
 
 **What this cost.** The prose that left the prompt was ~970 characters; the
 mechanism costs ~2,000, so the delegating arm's system prompt grew by about a
 thousand characters rather than shrinking. The saving arrives with the second
-and third skill ([6.6.5](06-agent.md#665-one-skill-does-not-pay-for-itself-yet)).
+and third skill ([One skill does not pay for itself yet](code.md#one-skill-does-not-pay-for-itself-yet)).
 
 **A bug this surfaced.** `AGENT_PEERS` was documented on `python -m agent.code`
 and read by nothing: the CLI called `run()` without `peers`, so every coding run
@@ -144,7 +144,7 @@ started from the command line was alone regardless of the setting. Only
 `delegation.available()` like they do — which means the numbers above are also
 the first ones measured on a CLI run that actually had peers.
 
-## 16.3 What a delegated child needs
+## What a delegated child needs
 
 The child is a real process, and three things it needs are not what a shell
 command ordinarily gets. Two come from the backend's environment and the third
@@ -153,13 +153,13 @@ the model asks for per call.
 | What | Where it comes from | Why |
 | --- | --- | --- |
 | The pool's API keys | `inherit_env=True` on the backend | a delegated session **is** the pool's consumer; without keys it dies at start-up with "no providers loaded" |
-| This repository on `PYTHONPATH` | `env=` on the backend ([`local_shell`](../agent/code/agent.py)) | the workspace is routinely some *other* project, where `import agent` does not resolve |
+| This repository on `PYTHONPATH` | `env=` on the backend ([`local_shell`](../../agent/code/agent.py)) | the workspace is routinely some *other* project, where `import agent` does not resolve |
 | An hour instead of 300s | the model passes `timeout=3600` on the `execute` call | an agent session is tens of minutes to hours; the ordinary ceiling would kill every delegation after the quota was already spent |
 
 The last one is prose, not Python. Nothing in the harness knows that one command
 is a delegation — an earlier version sniffed `argv` for `python -m agent.*` and
 granted the longer timeout itself — so the
-[`delegate` skill](../agent/code/skills/delegate/SKILL.md) tells the model to
+[`delegate` skill](../../agent/code/skills/delegate/SKILL.md) tells the model to
 ask for it, and 3600s is the most deepagents' `execute` accepts. A delegation
 killed at 300s has already spent its brief and some of its quota, so this is
 worth checking in a trace when one comes back empty.
@@ -167,13 +167,13 @@ worth checking in a trace when one comes back empty.
 **`--task` exists because the child gets no stdin**: `execute` runs its command
 with stdin at `/dev/null`, so the brief has to be sayable on the command line.
 
-## 16.4 Why a subprocess costs something real
+## Why a subprocess costs something real
 
 The old transport was in-process for two good reasons, and one of them is now
 genuinely lost.
 
 1. **Cooldown lives on the provider object, in one process**
-   ([13.3](13-roadmap.md#133-known-constraints-that-shape-the-roadmap)). A
+   ([Known constraints that shape the roadmap](../status.md#known-constraints-that-shape-the-roadmap)). A
    delegate in a second interpreter builds its own router, so an account the
    caller has already benched is one the delegate rediscovers — at the price of
    one refused request. **This is a real regression and it is not bought back.**
@@ -182,17 +182,17 @@ genuinely lost.
    append to stays a single writer at a time.
 2. **The delegate's calls landed in the caller's trace.** This one survives. The
    child inherits `EVAL_TRACE_FILE`, which is the flat JSONL every metric is
-   summed over ([10. Metrics](10-metrics.md)) and is appended to rather than
+   summed over ([Metrics](../evaluation/metrics.md)) and is appended to rather than
    replaced, so a delegation's cost is still inside the totals of the run that
    asked for it. `AGENT_TRACE_FILE` is *not* inherited: the run tree is one JSON
    file per run, and a child writing the parent's path would overwrite the
    record of the run that launched it.
 
-## 16.5 What a delegation costs
+## What a delegation costs
 
 **A whole agent session.** Not a call — a session: 14–21 model calls in the
 measured range, against a flash tier of twenty requests per day per model per
-account ([5.4](05-providers.md#54-current-free-tier-limits)). One delegation can
+account ([Current free-tier limits](../pool/providers.md#current-free-tier-limits)). One delegation can
 plausibly cost more than the coding turn that asked for it.
 
 `AGENT_DELEGATE_TIMEOUT` bounds the wall clock (four hours by default) and
@@ -205,11 +205,11 @@ plainly that a call is slow and spends a shared budget; the child's calls land
 in the caller's `EVAL_TRACE_FILE`; and the run record carries `peers`, so nobody
 reads a token count without knowing delegation was available.
 
-### 16.5.1 The verdict comes from git, not from the delegate
+### The verdict comes from git, not from the delegate
 
 A coding session's deliverable is a commit, so what a caller reads back leads
 with what the repository says and only then quotes what the session said about
-itself ([gitstate.py](../agent/utils/gitstate.py)):
+itself ([gitstate.py](../../agent/utils/gitstate.py)):
 
 ```
 **Nothing changed.** On `master`, no commit was made and the working tree is
@@ -219,16 +219,16 @@ message says it did, the repository disagrees.
 
 This is not hypothetical caution. The first delegation this project ever made
 came back describing three changes to `session.py` that the diff did not contain
-([19.9](19-improvement-agent.md#199-what-the-first-live-pass-showed)), and the
+([What it costs, and what is unmeasured](improve.md#what-it-costs-and-what-is-unmeasured)), and the
 evidence that would have settled it was already computed and being dropped on
 the floor. The same rule holds for the explorer, whose CLI ends by listing the
 notes it wrote — an empty list is the loudest thing it can print.
 
-## 16.6 What this costs, and what is unmeasured
+## What this costs, and what is unmeasured
 
 **This is a configuration and it has not been measured.** By this repo's own
 rule a harness change is decided by evaluation, not argument
-([13.7](13-roadmap.md#137-how-to-propose-a-change)), and what is written above is
+([How to propose a change](../evaluation/method.md#how-to-propose-a-change)), and what is written above is
 argument. Specifically unknown:
 
 - whether a coding agent that *can* delegate delegates when it should, or
@@ -241,7 +241,7 @@ argument. Specifically unknown:
 `AGENT_PEERS=` (empty) turns delegation off and restores the previous agent
 exactly, so the A/B is one environment variable.
 
-## 16.7 What is deliberately not built
+## What is deliberately not built
 
 - **A budget per delegation.** See above: no number until there is a
   distribution to read one off.
@@ -259,10 +259,10 @@ exactly, so the A/B is one environment variable.
   turned delegation off must not get it back through a session someone else
   delegated.
 
-## 16.8 Adding a fourth agent
+## Adding a fourth agent
 
 The point of the shape. `agent/code`, `agent/explore` and `agent/improve` do not
-import each other; [agent/delegation.py](../agent/delegation.py) is the only
+import each other; [agent/delegation.py](../../agent/delegation.py) is the only
 module that knows about all of them. A fourth agent is:
 
 1. a `__main__.py` in the same shape as the other three — workdir, `--task`,
@@ -278,9 +278,9 @@ Availability is still a *probe* rather than a declaration — `explore` is offer
 only if the pool can actually search, and `scenarios` only if that repository is
 really there, because an agent advertised and then unreachable costs the caller
 a whole session to discover
-([15.2.1](15-explorer.md#1521-a-capability-is-a-fact-to-probe-not-to-infer)).
+([A capability is a fact to probe, not to infer](explore.md#a-capability-is-a-fact-to-probe-not-to-infer)).
 
-## 16.9 What the first live delegation showed
+## What the first live delegation showed
 
 *One delegation, on the real pool, 2026-08-27, over the transport that has since
 been deleted. The coding agent was briefed to build an eval scenario adapted
@@ -295,21 +295,21 @@ The run then died on a bug unrelated to any of that, so what it settles is that
 the mechanism works, not what it costs. Three of the four findings below outlive
 the transport that produced them.
 
-### 16.9.1 Three bugs, one of them ours
+### Three bugs, one of them ours
 
 | Where | What | Fix |
 | --- | --- | --- |
 | the delegation handler | **Every delegated event was traced twice.** The handler added a tracer to the child config; the child already inherited the caller's handlers. The caller's own tools appeared once each and the delegate's `web_search` twenty times for ten searches. | The child got no callbacks of its own. Moot now — a subprocess cannot inherit them, and it appends to the same file instead. |
-| `deepagents` `FilesystemBackend` | `Path.resolve()` on Windows returns the `\?\` extended-length form when another process holds the file open, and the root was resolved once without it — so a write **inside** the workspace is refused as an escape. Three files into a directory, the fourth was refused, and it killed the session. | Was fixed by a subclass; **live again** since the harness moved to the stock backend ([6.2.1](06-agent.md#621-why-the-restrictions-went)). |
+| `deepagents` `FilesystemBackend` | `Path.resolve()` on Windows returns the `\?\` extended-length form when another process holds the file open, and the root was resolved once without it — so a write **inside** the workspace is refused as an escape. Three files into a directory, the fourth was refused, and it killed the session. | Was fixed by a subclass; **live again** since the harness moved to the stock backend ([Why the restrictions went](code.md#why-the-restrictions-went)). |
 | the old `RestrictedShellBackend` | The git allowlist denied `--delete` and `-D` and **not `-d`** — and the agent used `-d`. A list that claims to forbid deletion while permitting the spelling an agent reaches for first is worse than no list. | Moot: the allowlist is gone and `git` is unfiltered. |
 
 The first is the one worth dwelling on: it inflated `tokens_in`, the single
-number the whole comparison rests on ([10. Metrics](10-metrics.md)), and it did
+number the whole comparison rests on ([Metrics](../evaluation/metrics.md)), and it did
 it *only* for delegated work — so the configuration that delegates would have
 looked more expensive than it is, and the inflation would have been read as a
 property of delegation.
 
-### 16.9.2 A measurement gap, and a wrong conclusion it nearly produced
+### A measurement gap, and a wrong conclusion it nearly produced
 
 The tracer clipped every field to its first 2,000 characters. A `web_search`
 result carries its `Sources:` block **last**, so every recorded search looked
@@ -323,19 +323,15 @@ a tail as well as a head, for the same reason: a `write_file` carries the path
 *after* the file content, so the record could not say which file a run wrote
 either.
 
-### 16.9.3 Where both agents drifted without failing
+### Where both agents drifted without failing
 
 Neither agent failed at anything it was asked to do, and both left their
 instructions. The explorer's four divergences and what changed because of them
-are in [15.7](15-explorer.md#157-measured-against-a-reference-research-agent);
+are in [Measured against a reference research agent](explore.md#measured-against-a-reference-research-agent);
 the coding agent created a throwaway branch, deleted it, and committed an edit
 to a `README.md` that was not part of its brief and is shared across every
 scenario branch.
 
 **This is what the new checks are for.** A pass/fail metric moves on none of it
-([evals/research_trajectory.py](../evals/research_trajectory.py)), which is why
+([evals/research_trajectory.py](../../evals/research_trajectory.py)), which is why
 a research run needed its own instrument rather than the coding run's.
-
----
-
-**Previous:** [← 15. The web explorer](15-explorer.md) · **Next:** [17. Deployment →](17-deployment.md)

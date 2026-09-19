@@ -16,7 +16,7 @@ concurrency there is: the work itself is single-file behind the worker.
 which agent, which workspace, and the task as one string. There was a protocol
 here -- A2A's `AgentCard`, `Message` and `Task`, with a handler beside every
 agent -- and it is gone with the rest of it
-([16. Delegation](../../docs/16-delegation.md)). An agent is a command; this
+([Delegation](../../docs/agents/delegation.md)). An agent is a command; this
 queues one and hands back an id to poll, because a run outlives a request.
 
     GET  /health                    liveness, unauthenticated
@@ -30,7 +30,7 @@ queues one and hands back an id to poll, because a run outlives a request.
 **Everything but `/health` requires the bearer token.** This server runs a
 shell in a directory it will happily clone a repository into; an open port
 serving that is not a deployment, it is an incident
-([18.6](../../docs/18-serving.md#186-the-token-is-not-optional)). `/health` is
+([The token is not optional](../../docs/operations/serving.md#the-token-is-not-optional)). `/health` is
 exempt because a container healthcheck should not need a credential to ask
 whether the process is alive, and it answers nothing else.
 """
@@ -184,7 +184,7 @@ class _Handler(BaseHTTPRequestHandler):
             # Name, description, and the command it is. The command is the
             # point: a caller can run exactly the same thing locally, and does
             # not have to take this server's word for what it did
-            # ([16](../../docs/16-delegation.md)).
+            # ([Delegation](../../docs/agents/delegation.md)).
             return self._send(200, {"agents": [
                 {"name": name,
                  "description": delegation.AGENTS[name][1],

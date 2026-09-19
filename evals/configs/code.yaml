@@ -9,15 +9,15 @@
 #
 # The comparison this arm never won is still open. The conversational loop it
 # descends from spent 226,854 input tokens against the narrow-role harness's
-# 5,756 (docs/06-agent.md#641), and the first two runs of *this* configuration
+# 5,756 (docs/agents/code.md#the-cost-result-is-the-one-that-replicated), and the first two runs of *this* configuration
 # took 134,000-162,000. That baseline predates SummarizationMiddleware and ran
 # on a pool whose floor was 6,000 tokens, so it is a hypothesis rather than a
 # settled fact -- but nothing has closed it, and `tokens_in` is the column
-# to read first on every batch (docs/06-agent.md#611-the-arm-that-was-deleted).
+# to read first on every batch (docs/agents/code.md#the-arm-that-was-deleted).
 #
 # `HARNESS_SHELL` is gone: every arm now runs on deepagents' `LocalShellBackend`,
 # so the shell is unrestricted and there is no knob to set
-# (docs/06-agent.md#621-why-the-restrictions-went). Eval runs are not
+# (docs/agents/code.md#why-the-restrictions-went). Eval runs are not
 # containerized, so a scenario is running real commands on this machine.
 name: code
 repo: ../..

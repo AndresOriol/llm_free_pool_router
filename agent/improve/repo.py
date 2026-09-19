@@ -20,10 +20,10 @@ branch — not the checkout everything else uses.
 
 **Nothing here merges.** Nothing stops it either -- `git` is unfiltered since
 the harness moved to deepagents' own backend
-([6.2.1](../../docs/06-agent.md#621-why-the-restrictions-went)) -- so this is a
+([Why the restrictions went](../../docs/agents/code.md#why-the-restrictions-went)) -- so this is a
 line the code keeps rather than one the harness enforces: a branch plus a ledger
 entry is what a human reviews, and an unattended loop that merged its own work
-would have no reviewer at all ([19.3](../../docs/19-improvement-agent.md#193-it-cannot-change-the-harness-and-that-is-the-point)).
+would have no reviewer at all ([It cannot change the harness, and that is the point](../../docs/agents/improve.md#it-cannot-change-the-harness-and-that-is-the-point)).
 """
 
 from __future__ import annotations

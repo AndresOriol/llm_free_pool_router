@@ -2,12 +2,12 @@
 
 Two callers: the CLI's own summary, which is what anyone who ran
 `python -m agent.code` reads back, and the improvement agent checking a fix it
-delegated ([16. Delegation](../../docs/16-delegation.md)).
+delegated ([Delegation](../../docs/agents/delegation.md)).
 
 **The prose a session writes about itself is not evidence.** The first
 delegation this project ever made came back describing three changes to
 `session.py` that the diff did not contain
-([19.9](../../docs/19-improvement-agent.md#199-what-the-first-live-pass-showed)).
+([What it costs, and what is unmeasured](../../docs/agents/improve.md#what-it-costs-and-what-is-unmeasured)).
 The verdict from `git` goes first, and a caller reading "no commit, and nothing
 changed on disk" cannot accept "I made three changes" from the same message.
 

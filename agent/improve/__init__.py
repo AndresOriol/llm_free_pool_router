@@ -6,7 +6,7 @@ misbehaviour into a fix that someone else makes. It is modelled on LangSmith
 Engine: detect a recurring failure, diagnose it against the source, have the
 fix made, then track whether it stopped -- closing the issue when it did and
 reopening it when it comes back
-([19. The improvement agent](../../docs/19-improvement-agent.md)).
+([The improvement agent](../../docs/agents/improve.md)).
 
 - `agent.py` builds it -- settings, templating, model, the ledger, the
   read-only boundary, agent, and one run, top to bottom.

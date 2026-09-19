@@ -8,7 +8,7 @@ is one fewer argument on every function between here and `__main__`.
 why it is a function. `check()` raises `NoSearchPool` when no account is
 configured, and importing this module must not be able to kill a process that
 was never going to search -- `agent/code` imports the explorer's package to
-probe whether it can delegate ([16](../../docs/16-delegation.md)). The refusal
+probe whether it can delegate ([Delegation](../../docs/agents/delegation.md)). The refusal
 still happens before the run rather than during it, because
 [`connect()`](agent.py) asks for the pool at start-up.
 """

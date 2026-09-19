@@ -19,7 +19,7 @@ What the tools *do* is [tools.py](tools.py), over the evidence
 ([repo.py](repo.py)) and scenario drafts ([scenarios.py](scenarios.py)). What a
 tool returns is written there, next to the code that computes it. The reasons
 for all of it are in
-[19. The improvement agent](../../docs/19-improvement-agent.md).
+[The improvement agent](../../docs/agents/improve.md).
 
 ## How context reaches the model
 
@@ -43,7 +43,7 @@ branches the coding agent commits its fixes to.
   `agent/`, and the ledger it writes is `evals/results/issues/`.
 - **It cannot write a file.** The only way a change reaches the harness is
   `delegate_fix`, which runs `python -m agent.code`
-  ([16. Delegation](../../docs/16-delegation.md)). That separation is the
+  ([Delegation](../../docs/agents/delegation.md)). That separation is the
   agent's one structural claim.
 - **It can spend real quota**, through `run_evals`, which launches the eval
   runner: it materialises a pinned worktree per configuration, and that is the

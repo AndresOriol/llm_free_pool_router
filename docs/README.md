@@ -1,320 +1,105 @@
 # free_coding_agent — wiki
 
-A router that pools multiple free-tier LLM accounts behind one interface, an
-agent that runs on it, and an evaluation harness that decides whether changes to
+A router that pools free-tier LLM accounts behind one interface, the agents
+that run on it, and an evaluation harness that decides whether a change to
 either actually helped.
 
 **This wiki is the primary way to understand the repository.** It explains the
 logic and the reasoning, not the code — read a page instead of reading the
 source, and read the source only when you're about to change it.
 
-New here? Start with [1. Overview](01-overview.md), then
-[2. Repo map](02-repo-map.md).
-
-## Where things stand right now
-
-*The three facts most likely to mislead someone picking this up cold. Everything
-else on this page is design and changes rarely; this block is state.*
-
-- **There is one coding agent now, and its cost is unproven.** The narrow-role
-  arm is deleted; `agent/code/` keeps a conversation on the pool's *widest*
-  members (≥128,000 input tokens), configured the way `deepagents-code`
-  configures one. That was a decision about what to maintain, **not** a finding:
-  the last measurement had the deleted arm winning on input tokens 39× over, on
-  inputs that no longer hold and that nobody has re-run
-  ([6.1.1](06-agent.md#611-the-arm-that-was-deleted)). Watch `tokens_in`.
-- **A second agent researches the web.** `agent/explore/` shares the loop, the
-  pool and the jail, swaps the shell for `tavily_search`/`think_tool`, and hands
-  off to the coding agent by writing files ([15](15-explorer.md)). It runs
-  LangChain's deep-research workflow rather than a method written here, and its
-  search returns the **page** rather than a summary of it — which is the fix for
-  a run that searched 13 times and opened nothing
-  ([15.8](15-explorer.md#158-the-deep-research-port)). Needs a Tavily key; the
-  pool holds one.
-- **The coding agent can now ask the explorer for research mid-task**, by
-  running `python -m agent.explore` with `execute` — no protocol, no tool
-  ([16](16-delegation.md)). It is on by default and a delegation costs a whole
-  explorer session, so a run's `tokens_in` may include one; the record carries
-  `peers` and `AGENT_PEERS=` turns it off. **Unmeasured** — `code-peers` has never been run
-  against `code`.
-- **A third agent now reads the other two's runs and has the coding agent fix
-  what recurs** ([19](19-improvement-agent.md)). It cannot edit a file — the fix
-  is always delegated — and an issue in `evals/results/issues/` closes only when
-  runs recorded *after* the fix stop matching its signature. **Unmeasured.** Its
-  first live pass went round the whole loop and diagnosed a failure that had
-  already been fixed, then relayed a coding agent's claim to have made a change
-  the diff did not contain — read
-  [19.9](19-improvement-agent.md#199-what-the-first-live-pass-showed) before
-  trusting a pass. `IMPROVE_FIX=0` leaves a diagnose-only arm.
-- **The explorer has been watched once, and it drifted.** A live run searched 13 times, opened **zero** sources, and wrote one file at the end — all against its own prompt, and none of it visible to any existing metric. The prompt now carries numeric rules and
-  [evals/research_trajectory.py](../evals/research_trajectory.py) checks them ([15.7](15-explorer.md#157-measured-against-a-reference-research-agent),
-  [16.9](16-delegation.md#169-what-the-first-live-delegation-showed)).
-- **The one L0 scenario is exhausted as a measuring instrument.** Seven
-  configurations were run against it; none could be distinguished from another,
-  and one scored 3/3 and 1/3 on consecutive batches. Re-running them will
-  produce a different random ordering, not an answer
-  ([6.4.2](06-agent.md#642-the-pass-column-is-noise)).
-  There are now four more scenarios, at L1 and L2, and none has been run past
-  n=2 ([11.2](11-eval-status.md#112-whats-built)).
-- **A run's record is one object plus one flat file.** The agent fetches a
-  single LangSmith run tree and writes it down; the `EVAL_TRACE_FILE` JSONL is
-  still written alongside it, because every automatic metric is summed over that
-  and it has to exist when LangSmith does not
-  ([7.6](07-observability.md#76-the-record-one-run-tree)). This reverses
-  "LangSmith is for watching, never for the record" — the expiry argument is
-  answered by snapshotting the tree, not by rebuilding it by hand
-  ([13.5](13-roadmap.md#135-settled-decisions)).
-
----
+New here? Read [Overview](overview.md), then [Status and roadmap](status.md).
 
 ## Index
 
-### Part I — Orientation
+### Start here
 
-**[1. Overview](01-overview.md)** — what the project is for, and what it refuses to become
-&nbsp;&nbsp;&nbsp;&nbsp;[1.1](01-overview.md#11-the-goal) The goal ·
-[1.2](01-overview.md#12-why-this-is-infrastructure-not-a-demo) Why this is infrastructure ·
-[1.3](01-overview.md#13-the-three-subsystems) The three subsystems ·
-[1.4](01-overview.md#14-what-is-deliberately-not-built) What is deliberately not built ·
-[1.5](01-overview.md#15-where-the-project-actually-stands) Where it actually stands ·
-[1.6](01-overview.md#16-reading-paths) Reading paths
+| Page | What it answers |
+| --- | --- |
+| [Overview](overview.md) | What the project is for, what it refuses to become, and what lives where |
+| [Status and roadmap](status.md) | Where things stand, what is blocked, what to do next, what is settled ⟳ *changes often* |
 
-**[2. Repo map](02-repo-map.md)** — what lives where, and the question each file answers
-&nbsp;&nbsp;&nbsp;&nbsp;[2.2](02-repo-map.md#22-llm_router--the-pool) `llm_router/` ·
-[2.3](02-repo-map.md#23-agent--the-coding-agent) `agent/` ·
-[2.4](02-repo-map.md#24-evals--the-measurement-harness) `evals/` ·
-[2.6](02-repo-map.md#26-related-repos) Related repos ·
-[2.7](02-repo-map.md#27-state-that-lives-outside-git) State outside git
+### The pool — `llm_router/`
 
-### Part II — The pool
+| Page | What it answers |
+| --- | --- |
+| [The pool model](pool/model.md) | The vocabulary: accounts × models, priority tiers, pull-based availability |
+| [Failover](pool/failover.md) | How a request finds a working account: size-aware selection, failure classification, cooldown |
+| [Providers and limits](pool/providers.md) | Getting keys, the config schema, current free-tier limits, adding a model or platform |
+| [Quota panel](pool/quota.md) | What the pool has spent, and how close each account is to its wall |
 
-**[3. The pool model](03-pool-model.md)** — the vocabulary everything else assumes
-&nbsp;&nbsp;&nbsp;&nbsp;[3.1](03-pool-model.md#31-vocabulary) Vocabulary ·
-[3.2](03-pool-model.md#32-why-the-atom-is-account--model-not-account) Why the atom is account × model ·
-[3.3](03-pool-model.md#33-the-fan-out) The fan-out ·
-[3.4](03-pool-model.md#34-priority-tiers) Priority tiers, and the finding behind them ·
-[3.5](03-pool-model.md#35-availability-is-pull-based) Availability is pull-based ·
-[3.6](03-pool-model.md#36-every-pool-member-must-support-tool-calling) Tool calling is mandatory
+### The agents — `agent/`
 
-**[4. Failover](04-failover.md)** — the core logic: how a request finds a working account
-&nbsp;&nbsp;&nbsp;&nbsp;[4.1](04-failover.md#41-the-lifecycle-of-one-request) Lifecycle of one request ·
-[4.2](04-failover.md#42-size-aware-selection) Size-aware selection ·
-[4.2.1](04-failover.md#421-skipping-a-member-whose-day-is-spent) Skipping a spent day ·
-[4.3](04-failover.md#43-classifying-a-failure) Classifying a failure ·
-[4.3.1](04-failover.md#431-the-two-ways-a-member-dies-for-good) When a member dies for good ·
-[4.4](04-failover.md#44-cooldown-and-backoff) Cooldown and backoff ·
-[4.5](04-failover.md#45-the-failover-loop) The failover loop ·
-[4.6](04-failover.md#46-known-gaps) Known gaps ·
-[4.7](04-failover.md#47-making-a-reroute-visible) Making a reroute visible
+| Page | What it answers |
+| --- | --- |
+| [The coding agent](agents/code.md) | One conversation over the pool and one jail, configured the way `deepagents-code` is |
+| [The web explorer](agents/explore.md) | The agent that reads the web and writes notes the coding agent can use |
+| [The improvement agent](agents/improve.md) | Reads the other agents' runs, names what recurs, delegates the fix, checks it stopped |
+| [Delegation](agents/delegation.md) | How one agent asks another for work: it runs the command |
 
-**[5. Providers and limits](05-providers.md)** — the free-tier landscape, and how to grow the pool
-&nbsp;&nbsp;&nbsp;&nbsp;[5.1](05-providers.md#51-getting-keys) Getting keys ·
-[5.2](05-providers.md#52-config-schema) Config schema ·
-[5.3](05-providers.md#53-why-max_input_tokens-matters) Why `max_input_tokens` matters ·
-[5.4](05-providers.md#54-current-free-tier-limits) Current limits ·
-[5.5](05-providers.md#55-adding-a-model-or-account) Adding a model or account ·
-[5.6](05-providers.md#56-adding-a-new-platform) Adding a new platform
+### Evaluation — `evals/`
 
-### Part III — The agent
+| Page | What it answers |
+| --- | --- |
+| [Evaluation method](evaluation/method.md) | How a change gets decided: configurations, fair comparison, the promotion rule |
+| [Scenarios](evaluation/scenarios.md) | What a test case is, and why the answers are hidden |
+| [Metrics](evaluation/metrics.md) | What gets measured, and why nothing is collapsed into one score |
+| [Probes](evaluation/probes.md) | The small tests: one agent, one situation, one decision |
+| [Changing how an agent behaves](evaluation/changing-behaviour.md) | The test-first loop for a behaviour change, with probes as the instrument |
+| [Observability](evaluation/observability.md) | What a run leaves behind: the trace, the run tree, the condensed record |
 
-**[6. The coding agent](06-agent.md)** — one conversation over one pool and one jail, and the arm that was deleted to get there
-&nbsp;&nbsp;&nbsp;&nbsp;[6.1](06-agent.md#61-one-conversation-on-the-pool) One conversation ·
-[6.1.1](06-agent.md#611-the-arm-that-was-deleted) The arm that was deleted ·
-[6.2](06-agent.md#62-the-blast-radius) The blast radius ·
-[6.2.1](06-agent.md#621-why-the-restrictions-went) Why the restrictions went · [6.2.2](06-agent.md#622-the-step-budget) The step budget ·
-[6.3](06-agent.md#63-what-failover-looks-like-in-practice) Failover in practice ·
-[6.4](06-agent.md#64-why-it-is-shaped-this-way) Why it is shaped this way ·
-[6.5](06-agent.md#65-what-makes-it-a-coding-agent) What makes it a coding agent ·
-[6.6](06-agent.md#66-skills) Skills ·
-[6.6.1](06-agent.md#661-the-description-is-the-gate) The description is the gate ·
-[6.7](06-agent.md#67-read_file-reads-the-whole-file) `read_file` reads the whole file ·
-[6.8](06-agent.md#68-the-projects-own-memory-file) The project's own memory file ·
-[6.8.1](06-agent.md#681-one-file-not-both) One file, not both
+### Operations
 
-**[7. Observability](07-observability.md)** — what a run leaves behind, and why the answer is changing
-&nbsp;&nbsp;&nbsp;&nbsp;[7.1](07-observability.md#71-why-two) Why two ·
-[7.2](07-observability.md#72-langsmith) LangSmith ·
-[7.3](07-observability.md#73-the-local-trace) The local trace ·
-[7.4](07-observability.md#74-the-shape-is-a-contract) The shape is a contract ·
-[7.5](07-observability.md#75-reading-routing-decisions-live) Reading routing decisions live ·
-[7.6](07-observability.md#76-the-record-one-run-tree) The record: one run tree
+| Page | What it answers |
+| --- | --- |
+| [Serving the agents](operations/serving.md) | The agents as HTTP endpoints, in a container |
+| [Deployment](operations/deployment.md) | Where this can run unattended, and why most hosting platforms cannot |
+| [Driving the free agents](operations/driving-agents.md) | Handing a brief to an agent from the command line |
 
-**[15. The web explorer](15-explorer.md)** — the agent that reads the web and writes notes the coding agent can use
-&nbsp;&nbsp;&nbsp;&nbsp;[15.1](15-explorer.md#151-what-it-is-for) What it is for ·
-[15.2](15-explorer.md#152-the-web-on-a-free-tier) The web on a free tier ·
-[15.2.1](15-explorer.md#1521-a-capability-is-a-fact-to-probe-not-to-infer) A capability is a fact to probe ·
-[15.3](15-explorer.md#153-why-the-search-tool-fetches-the-page) Why the search tool fetches the page ·
-[15.4](15-explorer.md#154-which-account-serves-a-search) Which account serves a search ·
-[15.5](15-explorer.md#155-what-it-is-allowed-to-do) What it is allowed to do ·
-[15.6](15-explorer.md#156-what-it-costs-a-run) What it costs a run ·
-[15.7](15-explorer.md#157-measured-against-a-reference-research-agent) Measured against a reference research agent ·
-[15.8](15-explorer.md#158-the-deep-research-port) The deep-research port ·
-[15.9](15-explorer.md#159-what-the-grounded-gemini-search-was) What the grounded-Gemini search was
+### Design notes — [design/](design/)
 
-**[16. Delegation](16-delegation.md)** — how one agent asks another for work: it runs the command
-&nbsp;&nbsp;&nbsp;&nbsp;[16.1](16-delegation.md#161-the-problem-the-human-was-the-message-bus) The human was the message bus ·
-[16.1.1](16-delegation.md#1611-this-reopens-a-settled-decision-and-how-much-of-it) What it reopens ·
-[16.2](16-delegation.md#162-why-a-command-and-not-a-protocol) Why a command ·
-[16.3](16-delegation.md#163-what-the-jail-has-to-bend-and-how-far) What the jail bends ·
-[16.4](16-delegation.md#164-why-a-subprocess-costs-something-real) What a subprocess costs ·
-[16.5](16-delegation.md#165-what-a-delegation-costs) What a delegation costs ·
-[16.6](16-delegation.md#166-what-this-costs-and-what-is-unmeasured) What is unmeasured ·
-[16.7](16-delegation.md#167-what-is-deliberately-not-built) Not built ·
-[16.8](16-delegation.md#168-adding-a-fourth-agent) Adding a fourth agent ·
-[16.9](16-delegation.md#169-what-the-first-live-delegation-showed) What the first live delegation showed
+Proposals and working notes, not descriptions of what exists. They go stale by
+design; what they settle moves into a page above.
 
-**[19. The improvement agent](19-improvement-agent.md)** — the agent whose project is the other agents: it reads their traces, names what recurs, delegates the fix, and checks whether it stopped
-&nbsp;&nbsp;&nbsp;&nbsp;[19.1](19-improvement-agent.md#191-the-problem-the-loop-was-a-person) The loop was a person ·
-[19.2](19-improvement-agent.md#192-the-loop) The loop ·
-[19.3](19-improvement-agent.md#193-it-cannot-change-the-harness-and-that-is-the-point) Why it cannot change the harness ·
-[19.4](19-improvement-agent.md#194-what-counts-as-evidence) What counts as evidence ·
-[19.5](19-improvement-agent.md#195-the-signature-and-why-an-issue-can-close-itself) The signature ·
-[19.6](19-improvement-agent.md#196-the-rule-that-decides-whether-a-fix-worked) The rule that closes an issue ·
-[19.7](19-improvement-agent.md#197-making-new-evidence-costs-real-quota) Making new evidence ·
-[19.8](19-improvement-agent.md#198-what-it-costs-and-what-is-unmeasured) What is unmeasured ·
-[19.9](19-improvement-agent.md#199-what-the-first-live-pass-showed) What the first live pass showed ·
-[19.10](19-improvement-agent.md#1910-what-is-deliberately-not-built) Not built ·
-[19.11](19-improvement-agent.md#1911-running-it) Running it
-
-### Part IV — Evaluation
-
-**[8. Evaluation method](08-evaluation-method.md)** — how a change gets decided
-&nbsp;&nbsp;&nbsp;&nbsp;[8.1](08-evaluation-method.md#81-the-premise) The premise ·
-[8.2](08-evaluation-method.md#82-vocabulary) Vocabulary ·
-[8.3](08-evaluation-method.md#83-where-things-live) Where things live ·
-[8.4](08-evaluation-method.md#84-what-a-configuration-is) What a configuration is ·
-[8.5](08-evaluation-method.md#85-the-run-lifecycle) The run lifecycle ·
-[8.6](08-evaluation-method.md#86-fair-comparison) Fair comparison ·
-[8.7](08-evaluation-method.md#87-the-promotion-rule) The promotion rule ·
-[8.8](08-evaluation-method.md#88-suites-and-selective-running) Suites and selective running ·
-[8.9](08-evaluation-method.md#89-budget) Budget ·
-[8.10](08-evaluation-method.md#810-prior-art-and-why-we-still-build) Prior art
-
-**[9. Scenarios](09-scenarios.md)** — what a test case is, and why the answers are hidden
-&nbsp;&nbsp;&nbsp;&nbsp;[9.1](09-scenarios.md#91-storage-one-branch-per-topic-one-commit-per-scenario) Storage ·
-[9.2](09-scenarios.md#92-materialization-is-git-archive-not-a-checkout) Materialization ·
-[9.3](09-scenarios.md#93-anatomy) Anatomy ·
-[9.4](09-scenarios.md#94-scenarioyaml) `scenario.yaml` ·
-[9.5](09-scenarios.md#95-the-task-file) The task file ·
-[9.6](09-scenarios.md#96-categories-to-cover) Categories ·
-[9.7](09-scenarios.md#97-the-difficulty-ladder) The difficulty ladder ·
-[9.8](09-scenarios.md#98-the-validation-gate) The validation gate ·
-[9.9](09-scenarios.md#99-the-catalogue) The catalogue
-
-**[10. Metrics](10-metrics.md)** — what gets measured, and why nothing is collapsed into one score
-&nbsp;&nbsp;&nbsp;&nbsp;[10.1](10-metrics.md#101-the-axes) The axes ·
-[10.2](10-metrics.md#102-automatic-metrics) Automatic metrics ·
-[10.3](10-metrics.md#103-failure-taxonomy) Failure taxonomy ·
-[10.4](10-metrics.md#104-the-judge) The judge ·
-[10.5](10-metrics.md#105-ranking-is-lexicographic-not-weighted) Lexicographic ranking ·
-[10.6](10-metrics.md#106-what-a-run-leaves-behind) What a run leaves behind
-
-**[20. Probes](20-probes.md)** — the small tests: one agent, one situation, one decision, and what that can and cannot prove
-&nbsp;&nbsp;&nbsp;&nbsp;[20.1](20-probes.md#201-the-problem-one-test-and-it-is-a-blunt-one) One test, and it is blunt ·
-[20.2](20-probes.md#202-what-a-probe-is) What a probe is ·
-[20.3](20-probes.md#203-what-it-can-and-cannot-say) What it can and cannot say ·
-[20.4](20-probes.md#204-the-expectations) The expectations ·
-[20.5](20-probes.md#205-langsmith-holds-the-runs-git-holds-the-claims) LangSmith holds the runs, git holds the claims ·
-[20.6](20-probes.md#206-running-them) Running them ·
-[20.7](20-probes.md#207-what-the-first-two-live-runs-showed) What the first two live runs showed
-
-**[21. Changing how an agent behaves](21-changing-behaviour.md)** — the loop: find the turn a run went wrong, freeze it as an example, change the agent until it passes, keep the regressions green
-&nbsp;&nbsp;&nbsp;&nbsp;[21.1](21-changing-behaviour.md#211-the-loop) The loop ·
-[21.2](21-changing-behaviour.md#212-reading-an-experiment) Reading an experiment ·
-[21.3](21-changing-behaviour.md#213-examples-of-what-already-works) Examples of what already works ·
-[21.4](21-changing-behaviour.md#214-datasets-one-topic-each) Datasets: one topic each ·
-[21.5](21-changing-behaviour.md#215-reviewing-examples) Reviewing examples ·
-[21.6](21-changing-behaviour.md#216-the-first-case-the-explorers-absence-claims) The first case
-
-**[11. Evaluation status](11-eval-status.md)** — the running state ⟳ *changes often*
-&nbsp;&nbsp;&nbsp;&nbsp;[11.2](11-eval-status.md#112-whats-built) What's built ·
-[11.3](11-eval-status.md#113-where-the-numbers-stand) Where the numbers stand ·
-[11.4](11-eval-status.md#114-blockers) Blockers ·
-[11.5](11-eval-status.md#115-what-to-do-next) What to do next
-
-### Part V — How the repo evolves
-
-**[12. Development harness](12-development-harness.md)** — how this repo gets built, by agents
-&nbsp;&nbsp;&nbsp;&nbsp;[12.2](12-development-harness.md#122-model-tiers) Model tiers ·
-[12.3](12-development-harness.md#123-coding-standards) Coding standards ·
-[12.4](12-development-harness.md#124-how-the-docs-stay-current) How the docs stay current ·
-[12.5](12-development-harness.md#125-driving-the-free-agents) Driving the free agents ·
-[12.6](12-development-harness.md#126-commits) Commits ·
-[12.7](12-development-harness.md#127-the-rule-that-governs-changes-to-the-harness) The rule governing harness changes
-
-**[13. Roadmap and scope](13-roadmap.md)** — where this goes next, and what's already settled
-&nbsp;&nbsp;&nbsp;&nbsp;[13.1](13-roadmap.md#131-the-two-phases-of-the-project) The two phases ·
-[13.2](13-roadmap.md#132-what-to-do-next) What to do next ·
-[13.3](13-roadmap.md#133-known-constraints-that-shape-the-roadmap) Known constraints ·
-[13.4](13-roadmap.md#134-open-questions) Open questions ·
-[13.5](13-roadmap.md#135-settled-decisions) Settled decisions ·
-[13.6](13-roadmap.md#136-explicitly-out-of-scope) Out of scope ·
-[13.7](13-roadmap.md#137-how-to-propose-a-change) How to propose a change
-
-### Part VI — Operations
-
-**[14. Quota panel](14-quota-panel.md)** — what the pool has spent, and how close each account is to its wall
-&nbsp;&nbsp;&nbsp;&nbsp;[14.1](14-quota-panel.md#141-the-question) The question ·
-[14.2](14-quota-panel.md#142-the-path-of-one-number) The path of one number ·
-[14.3](14-quota-panel.md#143-two-files-under-llm_routerusage) The two files ·
-[14.4](14-quota-panel.md#144-one-source-and-what-it-misses) One source, and what it misses ·
-[14.5](14-quota-panel.md#145-windows-and-when-they-reset) Windows and resets ·
-[14.6](14-quota-panel.md#146-how-a-refused-attempt-is-counted) Refused attempts ·
-[14.7](14-quota-panel.md#147-what-the-report-says) What the report says ·
-[14.8](14-quota-panel.md#148-reading-it) Reading it ·
-[14.9](14-quota-panel.md#149-what-it-deliberately-doesnt-do) What it doesn't do
-
-**[17. Deployment](17-deployment.md)** — where this can run unattended, why most hosting platforms cannot run it, and what to change first
-&nbsp;&nbsp;&nbsp;&nbsp;[17.1](17-deployment.md#171-the-question) The question ·
-[17.2](17-deployment.md#172-what-the-workload-actually-is) What the workload is ·
-[17.3](17-deployment.md#173-why-requestresponse-platforms-cannot-host-it) Why request/response platforms fail ·
-[17.4](17-deployment.md#174-the-ceiling-is-the-pool-not-the-compute) The ceiling is the pool ·
-[17.5](17-deployment.md#175-what-fits) What fits ·
-[17.6](17-deployment.md#176-what-has-to-change-first) What has to change first ·
-[17.7](17-deployment.md#177-provider-terms) Provider terms
-
-**[18. Serving the agents](18-serving.md)** — the agents as HTTP endpoints, in a container, bound to a repository or a filesystem
-&nbsp;&nbsp;&nbsp;&nbsp;[18.1](18-serving.md#181-what-this-adds-and-what-it-does-not) What it adds ·
-[18.2](18-serving.md#182-the-surface) The surface ·
-[18.3](18-serving.md#183-why-submission-does-not-block) Why submission doesn't block ·
-[18.4](18-serving.md#184-binding-an-agent-to-a-repository-or-a-filesystem) Binding to a repo or filesystem ·
-[18.5](18-serving.md#185-why-there-is-exactly-one-worker) Why one worker ·
-[18.6](18-serving.md#186-the-token-is-not-optional) The token is not optional ·
-[18.7](18-serving.md#187-what-has-to-be-a-volume) What has to be a volume ·
-[18.8](18-serving.md#188-running-it) Running it ·
-[18.9](18-serving.md#189-reaching-it-from-outside-the-house) Reaching it from outside
-
----
+| Note | What it is |
+| --- | --- |
+| [long-run-harness](design/long-run-harness.md) | The standing maintainer: the daily cycle and what it requires |
+| [generative-scenarios](design/generative-scenarios.md) | Evaluating "build X" requests, not just repairs |
+| [next-steps](design/next-steps.md) | Ideas to come back to |
 
 ## Documents outside this wiki
 
 | Where | What | Why it's not a wiki page |
 | --- | --- | --- |
-| [CLAUDE.md](../CLAUDE.md) | Agent entry point: north star, standards, index | Loaded into every agent's context; must stay short |
+| [CLAUDE.md](../CLAUDE.md), [AGENTS.md](../AGENTS.md) | Agent entry point (Claude Code, Codex): north star, standards, layout | Loaded into every agent's context; must stay short |
 | [README.md](../README.md) | Human entry point: quick start, links out | Same reason |
-| [evals/CONFIGS.md](../evals/CONFIGS.md) | Ledger of every configuration tried and its verdict | Append-only data, lives next to the results it indexes |
-| `.claude/reports/` | One-off deep investigations, kept verbatim | Point-in-time research, not maintained state |
+| [evals/CONFIGS.md](../evals/CONFIGS.md) | Ledger of every configuration tried and its verdict | Append-only data, next to the results it indexes |
+| `.claude/artifacts/`, `research/` | Plans, audits, one-off investigations | Point-in-time, read once, not maintained |
 
 ## Conventions
 
+- **Grouped by topic, not numbered.** A page lives in the folder of the
+  subsystem it explains; the index above is the reading order. Adding a page
+  means adding an index row. Headings carry no section numbers, so adding one
+  never renumbers anything — link to a section by its heading's anchor.
 - **One topic per page.** Split a page when it starts covering two unrelated
   things rather than letting it grow.
-- **Pages are numbered and flat.** The number is the reading order; the index
-  above is the contract. Adding a page means adding an index entry.
 - **Concepts, not code.** Explain the logic and the reasoning behind non-obvious
   choices. Link to source files for the *what*; the page carries the *why*.
 - **Terse.** These pages are read by agents on a token budget. A bloated page
   defeats its own purpose.
+- **State lives on one page.** [Status and roadmap](status.md) is the one page
+  expected to change often; every other page describes design. A measurement
+  that stops being current moves out of the design pages, not into them.
 - Detail belongs here, not in [CLAUDE.md](../CLAUDE.md) or
   [README.md](../README.md) — both stay thin entry points that link in.
-- [11. Evaluation status](11-eval-status.md) is the one page expected to change
-  often. Everything else describes design and changes rarely.
 
 ## Maintenance
 
-The documentation tier keeps this wiki current via the `Stop` hook in
-[.claude/settings.json](../.claude/settings.json): after each turn it checks
-non-doc changes against these pages and updates whatever went stale, including
-adding pages and index entries as components are added. It never edits in
-response to changes made within `docs/` itself. See
-[12.4](12-development-harness.md#124-how-the-docs-stay-current).
+A `Stop` hook in [.claude/settings.json](../.claude/settings.json) runs a Haiku
+agent after every turn. If every changed path is inside `docs/`, or is the root
+`README.md` or `CLAUDE.md`, it does nothing — docs never edit in response to
+docs. Otherwise it reads this index, checks the non-doc changes against the
+pages, and makes a minimal, factual edit to whichever went stale, including
+adding an index row when a page is added. This index is the contract it reads:
+keep it accurate or the automation degrades.

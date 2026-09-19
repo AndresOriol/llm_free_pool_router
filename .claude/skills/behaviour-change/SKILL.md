@@ -5,8 +5,8 @@ description: Change how one of this repo's agents behaves, test-first - find the
 
 # Changing how an agent behaves
 
-The method is [docs/21-changing-behaviour.md](../../../docs/21-changing-behaviour.md);
-the instrument is [docs/20-probes.md](../../../docs/20-probes.md). Read 21 first.
+The method is [Changing how an agent behaves](../../../docs/evaluation/changing-behaviour.md);
+the instrument is [Probes](../../../docs/evaluation/probes.md). Read the method first.
 This file is the order of work and the commands.
 
 Behaviour is judged by **experiments**, not unit tests. `pytest` covers the probe
@@ -20,7 +20,7 @@ python -m evals probes --list       # what exists, by dataset
 ```
 
 A stale probe in the dataset you are about to change makes that dataset's
-numbers meaningless. Review it (docs/21 §21.5) before relying on them.
+numbers meaningless. Review it (docs/evaluation/changing-behaviour.md#reviewing-examples) before relying on them.
 
 ## 1. Find the turn
 
@@ -47,7 +47,7 @@ This prints a skeleton. Fill in:
   `read_file`, `write_todos`) when the decision under test comes after a
   reflection.
 
-Put it in the topic file it belongs to (docs/21 §21.4). If none fits, start a
+Put it in the topic file it belongs to (docs/evaluation/changing-behaviour.md#datasets-one-topic-each). If none fits, start a
 new file with its own `dataset:`, but only for a genuinely separate family of
 decisions. Add a `kind: regression` example for a decision the same run got
 right: about one for every three failures.
@@ -100,7 +100,7 @@ reaching for it.
 - The dataset's regression probes have not dropped.
 - `python -m pytest tests/evals` passes.
 - A change that alters behaviour still goes to a scenario run before it merges
-  (docs/08 §8.7).
+  (docs/evaluation/method.md#the-promotion-rule).
 
 Commit the change separately from the probes, with the experiment names in the
 body. Bump `reviewed` on every probe whose situation you re-checked.

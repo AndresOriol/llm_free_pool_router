@@ -1,20 +1,20 @@
-[← Wiki index](README.md)
+[← Wiki index](../README.md)
 
-# 21. Changing how an agent behaves
+# Changing how an agent behaves
 
 *The working loop for any change meant to make an agent act differently: find
 the decision a run got wrong, freeze it as an example, change the agent until
 the example passes, and keep what already worked working. The probes
-([20](20-probes.md)) are the instrument; this page is the method.*
+([Probes](probes.md)) are the instrument; this page is the method.*
 
-## 21.1 The loop
+## The loop
 
 1. **Run a task a user would ask for.** Scenarios first
-   ([8](08-evaluation-method.md)). Later, other sources of real tasks: recorded
+   ([Evaluation method](method.md)). Later, other sources of real tasks: recorded
    sessions, delegations, the explorer's own requests.
 2. **Find the turn it went wrong.** Read the run tree turn by turn. The
    `trace-reviewer` agent does this for one run
-   ([.claude/agents/trace-reviewer.md](../.claude/agents/trace-reviewer.md)).
+   ([.claude/agents/trace-reviewer.md](../../.claude/agents/trace-reviewer.md)).
    What you want is the **earliest decision that changed the outcome**, not
    the last symptom. In the explorer's Claude Mods run, the symptom was a
    wrong overview. The decisions were a leading brief (turn 5), searches that
@@ -25,17 +25,17 @@ the example passes, and keep what already worked working. The probes
    prints a probe whose prompt and history are the run's own conversation up to
    that turn. Write two things by hand:
    - `expect`: what must hold of the next decision. Prefer the negative
-     ([20.7](20-probes.md#207-what-the-first-two-live-runs-showed)).
+     ([What the first two live runs showed](probes.md#what-the-first-two-live-runs-showed)).
    - `why`: the run, the turn, and what went wrong there.
 
-   Put the probe in its topic's file (21.4) and commit it before any fix.
+   Put the probe in its topic's file ([Datasets](#datasets-one-topic-each)) and commit it before any fix.
 4. **Show it is red.** Score the recorded decision against it: a probe that
    passes the decision that went wrong asserts the wrong thing. Then run a
    baseline experiment with three or more repetitions. A probe that passes at
    baseline does not reproduce the failure. Rework it or drop it.
 5. **Change the agent until it passes.** Iterate with experiments on the whole
-   dataset (21.2). Reach for the levers in this order, the one the
-   [deepagents skill](../.claude/skills/deepagents/SKILL.md) sets out:
+   dataset ([Reading an experiment](#reading-an-experiment)). Reach for the levers in this order, the one the
+   [deepagents skill](../../.claude/skills/deepagents/SKILL.md) sets out:
    1. the prompt or a tool description;
    2. what tools are offered;
    3. which models serve the agent;
@@ -44,10 +44,10 @@ the example passes, and keep what already worked working. The probes
 6. **Accept.** The failure examples pass in most repetitions, and the
    regression examples in the same dataset do not drop. A change to behaviour
    still goes through a scenario run before it merges
-   ([8.7](08-evaluation-method.md#87-the-promotion-rule)). Probes say the agent
+   ([The promotion rule](method.md#the-promotion-rule)). Probes say the agent
    decides better at one point; only a scenario says the task gets done.
 
-## 21.2 Reading an experiment
+## Reading an experiment
 
 - **One experiment runs a whole dataset**, so the failures a change targets and
   the regressions beside them are measured together. Name each side
@@ -65,7 +65,7 @@ the example passes, and keep what already worked working. The probes
   full flash model, none from flash-lite. That ruled out "the weak model did
   it" before a single prompt was edited.
 
-## 21.3 Examples of what already works
+## Examples of what already works
 
 Most examples come from failures. A few must come from decisions the agent
 already gets right: `kind: regression`. Without them, a fix for one failure is
@@ -78,7 +78,7 @@ documentation cited it (turn 19). Both are regression examples now. Keep them
 fewer than the failures, roughly one for every three. They exist to catch
 collateral damage, not to measure progress.
 
-## 21.4 Datasets: one topic each
+## Datasets: one topic each
 
 One probe file is one topic is one LangSmith dataset. It names its `dataset`,
 so the grouping is reviewed in the same diff as the probes.
@@ -100,7 +100,7 @@ right regression check.
 | `probes-improve-diagnosis` | How the improvement agent diagnoses: the ledger before the traces, a diagnosis before any delegation or edit |
 | `probes-explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, claims that something does not exist |
 
-## 21.5 Reviewing examples
+## Reviewing examples
 
 An example freezes a situation, a conversation that reached a decision. Once the
 agent changes, it may never reach that point again. A renamed tool, a new
@@ -124,12 +124,12 @@ fresh run with `--from-run`. If the situation can no longer occur, retire the
 probe. Never patch a history by hand to fit a new agent: that turns a recorded
 situation into an invented one.
 
-## 21.6 The first case: the explorer's absence claims
+## The first case: the explorer's absence claims
 
 *Open. The record so far, on branch `explore-nonexistence-claims`.*
 
 The explorer concluded that Claude Mods do not exist; they do
-([research/claude-mods/postmortem.md](../research/claude-mods/postmortem.md),
+([research/claude-mods/postmortem.md](../../research/claude-mods/postmortem.md),
 kept locally). Five failure examples came from that run. Against the current
 prompts they score 3/15; two rounds of prompt and tool-description changes
 scored 5/15 and 4/15. The one change that clearly helped was telling the

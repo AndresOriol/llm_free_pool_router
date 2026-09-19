@@ -6,5 +6,5 @@
     tool_descriptions/  what each tool is for, one Markdown file per tool
 
 What it leaves behind is Markdown in its research directory, which the coding
-agent reads like any other file ([15. The web explorer](../../docs/15-explorer.md)).
+agent reads like any other file ([The web explorer](../../docs/agents/explore.md)).
 """

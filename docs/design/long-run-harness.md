@@ -2,13 +2,13 @@
 
 *Working document. Not a wiki page: this is where the design gets argued before
 anything is built, and it is expected to change every session. The settled parts
-graduate into [6. The coding agent](../06-agent.md) and
-[13. Roadmap](../13-roadmap.md); everything here is provisional until it does.*
+graduate into [The coding agent](../agents/code.md) and
+[Status and roadmap](../status.md); everything here is provisional until it does.*
 
 > **Read this as history from §3 onward.** The narrow-role harness this note
 > argues for — the orchestrator, the briefed roles, the shared log, the journal,
 > `record/` — was **deleted**. `agent/code/` is the only coding agent
-> ([6.1.1](../06-agent.md#611-the-arm-that-was-deleted)). What survives is the
+> ([The arm that was deleted](../agents/code.md#the-arm-that-was-deleted)). What survives is the
 > *requirement* set: §1's daily cycle, §2's constraints and §3's R-numbers still
 > describe what a standing maintainer has to do, and most of it is not built on
 > the surviving arm. The mechanisms proposed for meeting them are gone.
@@ -46,7 +46,7 @@ Three consequences, and they are the design:
 2. **The unit of work is a project's notes file, not a task string.**
 3. **The harness is project-agnostic** — configured by the repo it is pointed at,
    which is already how the agent's prompt works
-   ([6.3](../06-agent.md#611-the-arm-that-was-deleted)).
+   ([The arm that was deleted](../agents/code.md#the-arm-that-was-deleted)).
 
 Wall-clock time and token count are explicitly not costs to minimise. The bet
 underneath: **many attempts by a weak model can substitute for one attempt by a
@@ -62,7 +62,7 @@ make many attempts affordable.
 **C1 — Per-call size is capped, and the cap differs by pool member.** Groq's
 cheapest members top out at 6,000 input tokens; Gemini's run to six figures. The
 router excludes any provider whose ceiling the request does not fit
-([4.2](../04-failover.md#42-size-aware-selection)). No amount of patience buys a
+([Size-aware selection](../pool/failover.md#size-aware-selection)). No amount of patience buys a
 bigger single call from a small member.
 
 ### 2.1 Why C1 stopped applying
@@ -80,7 +80,7 @@ expensive one.
 
 So a coding session now declares a **hard** floor of 128,000 input tokens and the
 router refuses to route below it, waiting for a wide member rather than settling
-for a narrow one ([4.2](../04-failover.md#42-size-aware-selection)). Fourteen of
+for a narrow one ([Size-aware selection](../pool/failover.md#size-aware-selection)). Fourteen of
 seventeen pool members clear it; Groq keeps serving everything else.
 
 **What this does to the rest of this document.** C2's tiering argument survives
@@ -91,7 +91,7 @@ pushing context down in a labelled brief exists because a role could not be
 trusted to hold the conversation, and above the floor it can. The envelope may
 still be the better design; it is no longer the only one available. It is also no
 longer built: the narrow-role arm and its envelope were deleted in favour of the
-conversation ([6.1.1](../06-agent.md#611-the-arm-that-was-deleted)), before the
+conversation ([The arm that was deleted](../agents/code.md#the-arm-that-was-deleted)), before the
 measurement this section calls for was ever taken.
 
 **The cost of being wrong is asymmetric, which is why this is measured rather
@@ -113,7 +113,7 @@ roles that would have fit anywhere.
 
 **C3 — The measured bottleneck is judgement, and only execution can check it.**
 12 of 13 recorded failures were `reasoning`; zero `retrieval`, zero `tooling`
-([6.14.2](../06-agent.md#643-every-failure-is-reasoning)).
+([Every failure is `reasoning`](../agents/code.md#every-failure-is-reasoning)).
 Every variant found the file, edited it, ran the tests — and was conceptually
 wrong, usually the same way. So more attempts help only if something *tells them
 apart*, and that discriminator has to be stronger than what it judges. Inside a
@@ -127,7 +127,7 @@ R6 exist to answer this.
 
 **C5 — The current measuring instrument cannot see any of this.** One L0
 single-file bugfix, exhausted as a discriminator
-([6.14.1](../06-agent.md#642-the-pass-column-is-noise)).
+([The pass column is noise](../agents/code.md#the-pass-column-is-noise)).
 
 ## 3. What "helpful" requires (draft — v3)
 
@@ -159,14 +159,14 @@ also the cheapest to get wrong invisibly, since bad docs still read fine.
 ### 4.1 Git
 
 R8 reverses *"No git. The agent cannot commit"*
-([6.2](../06-agent.md#62-the-blast-radius)). The human stays in the loop; the
+([The blast radius](../agents/code.md#the-blast-radius)). The human stays in the loop; the
 gate moves from "cannot commit" to "cannot merge", which lets a session verify
 its own work and still leaves a one-command undo.
 
 This was built as a **subcommand allowlist** — `status`, `diff`, `log`, `add`,
 `commit`, `checkout -b`, `branch` allowed; `push`, `merge`, `rebase`,
 `reset --hard` and `clean` refused — and then removed along with every other
-execution restriction ([6.2.1](../06-agent.md#621-why-the-restrictions-went)).
+execution restriction ([Why the restrictions went](../agents/code.md#why-the-restrictions-went)).
 `git` is now unfiltered. **The gate the agent is asked to respect is still the
 merge**; nothing enforces it, so the human's real gate is reading the branch.
 
@@ -185,7 +185,7 @@ bash is arbitrary by construction.
 deepagents' `LocalShellBackend`, so the shell is not the Executor's alone.
 
 The argument held. The allowlist was `python`/`pytest`, and
-[6.2](../06-agent.md#62-the-blast-radius) already stated the consequence
+[The blast radius](../agents/code.md#the-blast-radius) already stated the consequence
 plainly: `python` *is* arbitrary code execution, so what existed was "a small
 blast radius, not a sandbox". Allowing bash did not open a door that was locked;
 it stopped pretending the door was locked. What it changes is
@@ -194,7 +194,7 @@ convenience — and the honest response is the one that page already names:
 prerequisite the day sessions run unattended overnight, not a nicety.
 
 Two rules survive from what the variants already taught
-([6.14.5](../06-agent.md#611-the-arm-that-was-deleted)):
+([The arm that was deleted](../agents/code.md#the-arm-that-was-deleted)):
 
 - **Verdicts come from exit codes, not from the Executor's summary of them.** A
   model reporting "everything passes" about a failing run would otherwise end a
@@ -237,7 +237,7 @@ instrument, and only one of them needs a model.
 | Layer | Question | Instrument | Cost |
 | --- | --- | --- | --- |
 | **Mechanics** | Did the machinery behave? Call fits a member, killed process resumes, stuck session reports, git allowlist refuses, doc update touches what the diff touched | Code assertions. Deterministic | Free, every commit |
-| **Outcome** | Did the work land? | Hidden `fail_to_pass` / `pass_to_pass` suites, already built ([8.5](../08-evaluation-method.md#85-the-run-lifecycle)) | Quota only |
+| **Outcome** | Did the work land? | Hidden `fail_to_pass` / `pass_to_pass` suites, already built ([The run lifecycle](../evaluation/method.md#the-run-lifecycle)) | Quota only |
 | **Account** | Is the rationale true, and are the docs faithful to the diff? | Claude Code, rubric, blind | Paid, cached by diff hash |
 
 The rule behind the table: **code-based checks for anything deterministic, a
@@ -287,7 +287,7 @@ build, which is why it is first and why it does not depend on J1 existing.
 
 ### 6.3 Why the existing taxonomy needs subdividing, urgently
 
-The four classes in [10.3](../10-metrics.md#103-failure-taxonomy) —
+The four classes in [Failure taxonomy](../evaluation/metrics.md#failure-taxonomy) —
 `retrieval` / `tooling` / `reasoning` / `stopping` — were written *before* the
 data. The data came back **12 of 13 in one bucket**. A taxonomy where one
 category holds 92% of the mass is not a diagnosis; it is a rename of "failed".
@@ -324,11 +324,11 @@ properties matter more than any structure:
   becoming a list of plausible ideas.
 - **What the evidence cannot support gets said out loud.** The claims J2 wanted
   to make and couldn't. Without this, an automated analysis drifts into confident
-  storytelling — and the pass-rate story that [6.14.1](../06-agent.md#642-the-pass-column-is-noise)
+  storytelling — and the pass-rate story that [The pass column is noise](../agents/code.md#the-pass-column-is-noise)
   had to retract is the local proof that it happens here.
 
 The one mechanical part is the **verdict** — promote / draw / reject, computed
-from the promotion rule ([8.7](../08-evaluation-method.md#87-the-promotion-rule))
+from the promotion rule ([The promotion rule](../evaluation/method.md#the-promotion-rule))
 and stated before any narrative, so the narrative cannot colour it.
 
 **Your feedback is an open comments section at the end of each report.** Write
@@ -344,7 +344,7 @@ been done, J1's output is commentary and gates nothing.
 
 ### 6.5 What a long-run agent needs measured that a task-runner does not
 
-The current metric set ([10.2](../10-metrics.md#102-automatic-metrics)) assumes a
+The current metric set ([Automatic metrics](../evaluation/metrics.md#automatic-metrics)) assumes a
 run is short and either works or doesn't. Three additions follow from §1:
 
 - **Sustained-work horizon** — how long the session does useful work before its
@@ -356,7 +356,7 @@ run is short and either works or doesn't. Three additions follow from §1:
   to an end-state pass/fail.
 - **Spec-gaming gap** — visible tests passing while hidden tests fail. This
   project has already produced a textbook instance
-  ([6.13.1](../06-agent.md#644-closing-the-loop-is-not-the-same-as-being-right)), and
+  ([Closing the loop is not the same as being right](../agents/code.md#closing-the-loop-is-not-the-same-as-being-right)), and
   under a prose-only review model it acquires a second face: a rationale that
   reads better than the diff deserves. J1's `faithful` verdict is the probe for
   it.
@@ -366,13 +366,13 @@ run is short and either works or doesn't. Three additions follow from §1:
 | Idea | Source | How it is adapted here |
 | --- | --- | --- |
 | Error analysis *before* judge design — open-code traces, then axial-code them into a taxonomy with counts; a single owner holds the taxonomy | [Hamel Husain & Shreya Shankar](https://hamel.dev/blog/posts/evals-faq/) | Adopted, inverted for scale: industry samples ~100 of thousands of production traces. Runs here are scarce and expensive, so **every failure gets read**, and the constraint becomes producing enough varied failures to learn from — which is another argument for scenarios past L0 |
-| Binary judgements with a critique, never Likert | [Hamel Husain](https://hamel.dev/blog/posts/llm-judge/) | Adopted. Replaces the 0–4 scales currently specified in [10.4](../10-metrics.md#104-the-judge) |
+| Binary judgements with a critique, never Likert | [Hamel Husain](https://hamel.dev/blog/posts/llm-judge/) | Adopted. Replaces the 0–4 scales currently specified in [The judge](../evaluation/metrics.md#the-judge) |
 | Validate the judge against human labels by TPR/TNR on a held-out set, not accuracy | [Hamel Husain](https://hamel.dev/blog/posts/evals-faq/) | Adopted as the gate in §6.4. Your labels are the ground truth |
 | Code-based evals for deterministic failures; a model only for subjective ones | [Hamel Husain](https://hamel.dev/blog/posts/evals-faq/) | Adopted as the §6.1 layering |
 | Three evaluation layers — session outcome, trace quality, tool-level correctness | [LLM-as-judge agent patterns](https://zylos.ai/research/2026-05-26-llm-as-judge-agent-evaluation-patterns/) | Adopted as §6.1, with "trace quality" reinterpreted as *the rationale and docs*, since those are the review surface here |
 | Agent-as-a-judge: a judge that reads the whole trajectory, not just the end state | [survey](https://arxiv.org/pdf/2508.02994) | Partially. J2 reads trajectories; J1 stays diff-addressed and cacheable. Full trajectory judging is the expensive version and is not justified yet |
-| Task-adaptive rubrics correlate with humans far better than one static rubric | [AdaRubric](https://arxiv.org/pdf/2603.21362) | Noted, **not adopted**. A rubric that varies per task cannot be pinned, and pinning is what makes scores comparable across epochs ([10.4](../10-metrics.md#104-the-judge)). Revisit only if J1 fails its TPR/TNR gate |
-| Visible validation suite vs held-out behavioural suite, to expose reward hacking | [SpecBench](https://arxiv.org/pdf/2605.21384) | Already the design ([9.3](../09-scenarios.md#93-anatomy)); the finding is that this is now standard practice, which raises confidence in it |
+| Task-adaptive rubrics correlate with humans far better than one static rubric | [AdaRubric](https://arxiv.org/pdf/2603.21362) | Noted, **not adopted**. A rubric that varies per task cannot be pinned, and pinning is what makes scores comparable across epochs ([The judge](../evaluation/metrics.md#the-judge)). Revisit only if J1 fails its TPR/TNR gate |
+| Visible validation suite vs held-out behavioural suite, to expose reward hacking | [SpecBench](https://arxiv.org/pdf/2605.21384) | Already the design ([Anatomy](../evaluation/scenarios.md#anatomy)); the finding is that this is now standard practice, which raises confidence in it |
 | Measure agent progress by how long autonomy is sustained, not by benchmark score | METR-style horizon measurement | New metric, §6.5 |
 | Quality decays over long iterative runs | [SlopCodeBench](https://arxiv.org/html/2603.24755v1) | New metric, §6.5 |
 | Don't build an eval until the failure justifies the cost | [Hamel Husain](https://hamel.dev/blog/posts/evals-faq/) | Adopted as the reason §6.1's first row is code, not model |
@@ -380,7 +380,7 @@ run is short and either works or doesn't. Three additions follow from §1:
 ### 6.7 One conflict of interest, stated
 
 Claude Code writes this harness and also grades it. The grader being blind to
-configuration ([10.4](../10-metrics.md#104-the-judge)) covers the obvious half.
+configuration ([The judge](../evaluation/metrics.md#the-judge)) covers the obvious half.
 The other half is not covered by any rule: J2's *recommendations* come from the
 same place as the changes being recommended, so a blind spot in the design is a
 blind spot in its diagnosis. Section 6.4's "what the evidence cannot support" and
@@ -400,7 +400,7 @@ most and is the least defined.
 - **Wait instead of exhausting.** With time free, "all providers cooling down"
   should be a sleep, not an error.
 - **Permanently disable decommissioned models** rather than benching them
-  temporarily ([13.2](../13-roadmap.md#132-what-to-do-next)).
+  temporarily ([What to do next](../status.md#what-to-do-next)).
 - **Tier-aware selection (C2).** A request must be able to say *"this needs a
   wide-context member"* and have the router honour it, and conversely the pool
   must not spend request-scarce wide-context members on work that would have fit
@@ -412,7 +412,7 @@ most and is the least defined.
 
 **Was built, then deleted** — `agent/harness/graph.py` and `agent/harness/nodes/`
 are in `git log` and nowhere else
-([6.1.1](../06-agent.md#611-the-arm-that-was-deleted)).
+([The arm that was deleted](../agents/code.md#the-arm-that-was-deleted)).
 
 | Role | Job | Tools | Tier (C2) |
 | --- | --- | --- | --- |
@@ -430,7 +430,7 @@ is refused**. Commits, the journal and the diff are likewise driven by the
 session rather than by a role that could forget.
 
 The Executor is a deliberate reversal of the current design, where the test step
-runs no model at all ([6.12.1](../06-agent.md#611-the-arm-that-was-deleted)).
+runs no model at all ([The arm that was deleted](../agents/code.md#the-arm-that-was-deleted)).
 That was right when the only check was a fixed test command. It is wrong once
 verification means *deciding what would convince you* — which is a judgement, and
 the one place a model earns its call.
@@ -463,7 +463,7 @@ and every field earns its place by naming a failure already seen:
 | `inputs` | Concrete pointers: paths, symbols, prior findings | Re-deriving what an earlier role already found |
 | `constraints` | What not to touch | Scope creep, which J1 scores as `in_scope` |
 | `done_when` | The check that ends this step — for the Executor, a command and its expected exit | "Done" meaning "I stopped" |
-| `report_back` | What the Orchestrator expects returned, and in what shape | A role that works and reports nothing — an observed bug ([6.14.4](../06-agent.md#611-the-arm-that-was-deleted)) |
+| `report_back` | What the Orchestrator expects returned, and in what shape | A role that works and reports nothing — an observed bug ([The arm that was deleted](../agents/code.md#the-arm-that-was-deleted)) |
 
 And the return path, which matters as much as the outbound one:
 
@@ -478,14 +478,14 @@ And the return path, which matters as much as the outbound one:
 Orchestrator a single point of failure for every role's quality — curate badly
 and the role is blind. Today a blind role *guesses*, and there is a recorded run
 where `inspect` returned no finding and `edit` then applied nothing, burning a
-whole cycle ([6.13.1](../06-agent.md#644-closing-the-loop-is-not-the-same-as-being-right)).
+whole cycle ([Closing the loop is not the same as being right](../agents/code.md#closing-the-loop-is-not-the-same-as-being-right)).
 A role must be able to say "you didn't give me enough, and here is what is
 missing" — that turns a wasted cycle into a cheap, informative one.
 
 **Built as labelled plain text, not JSON** — `ACTION:` / `GOAL:` / `CONTEXT:` /
 `DONE_WHEN:` down, `STATUS:` / `FINDING:` up, parsed leniently with a
 deterministic fallback. JSON is checkable, but the `write_todos` lesson
-([6.1](../06-agent.md#61-one-conversation-on-the-pool)) is that
+([One conversation, on the pool](../agents/code.md#one-conversation-on-the-pool)) is that
 small models fumble structure, and a session must not end because a model wrote
 a sentence where a word was asked for.
 
@@ -667,7 +667,7 @@ scenarios ──▶ batch ──▶ post-mortem per run ──▶ J2 over the ba
 Two links are weak, and they are weak for the same reason. **The scenario set is
 three, one of them exhausted** (§6.3 needs varied failures to code, and there
 are not enough). And **five of the eight categories in
-[9.6](../09-scenarios.md#96-categories-to-cover) have never been run at all** —
+[Categories to cover](../evaluation/scenarios.md#categories-to-cover) have never been run at all** —
 including `trap`, which is the only probe of over-eagerness, and symptom-only
 bugfix, which is the reason no `retrieval` failure has ever been observed: every
 scenario so far hands over the file.

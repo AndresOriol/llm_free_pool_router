@@ -15,7 +15,7 @@ filter's own cached reading rather than its window. A window that never resets
 on the vendor's clock keeps counting yesterday evening into this morning, and
 the requests-per-day filter ([budget.py](budget.py)) then skips a member Google
 would have answered. That is the one error
-[14.9](../../docs/14-quota-panel.md#149-what-it-deliberately-doesnt-do) says must
+[What it deliberately doesn't do](../../docs/pool/quota.md#what-it-deliberately-doesnt-do) says must
 never happen.
 
 So the windows here are **calendar buckets**, and a reset is a property of the
@@ -25,7 +25,7 @@ happened to start.
 Two vendor facts, declared and not measured, because a ledger cannot see them:
 
 - **When the day turns.** Google resets free-tier daily quota at midnight
-  Pacific ([5.4](../../docs/05-providers.md#54-current-free-tier-limits)); Groq
+  Pacific ([Current free-tier limits](../../docs/pool/providers.md#current-free-tier-limits)); Groq
   turns its day at midnight UTC. A platform nobody has declared falls back to
   UTC, which is the safe way to be wrong: an early boundary forgets yesterday
   sooner, so it over-states headroom and lands on an attempt the provider
