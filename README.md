@@ -109,12 +109,15 @@ Everything beyond the quick start lives in the wiki — start at
   [Providers and limits](docs/pool/providers.md)
 - **Have one agent ask another for work?** → [Delegation](docs/agents/delegation.md)
 - **Run the coding agent on the pool?** → [The coding agent](docs/agents/code.md)
+- **Test or change how an agent behaves?** →
+  [Evaluation method](docs/evaluation/method.md),
+  [Changing how an agent behaves](docs/evaluation/changing-behaviour.md)
 - **How does the router actually work, and why?** →
   [Failover](docs/pool/failover.md)
-- **Curious how this project is built (agent roles, model tiers)?** →
+- **Hand an agent a brief from the command line?** →
   [Driving the free agents](docs/operations/driving-agents.md)
 - **How much of the free tier is left?** →
   [Quota panel](docs/pool/quota.md) —
   `python -m llm_router.quota status`
-- **Where is this going next?** → [Roadmap and scope](docs/status.md#roadmap-and-scope)
+- **Where is this going next?** → [Status and roadmap](docs/status.md)
 - **Project goals and standards** → [CLAUDE.md](CLAUDE.md)
