@@ -140,6 +140,7 @@ def test_an_example_carries_the_reason_it_exists():
 def test_pushing_without_a_key_says_so_rather_than_failing_obscurely(monkeypatch):
     monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
     monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)  # the real .env has one
 
     with pytest.raises(probe_dataset.NoLangSmith, match="run without it"):
         probe_dataset.client()
