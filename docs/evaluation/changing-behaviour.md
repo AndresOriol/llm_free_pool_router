@@ -14,7 +14,9 @@ the example passes, and keep what already worked working. The probes
    sessions, delegations, the explorer's own requests.
 2. **Find the turn it went wrong.** Read the run tree turn by turn. The
    `trace-reviewer` agent does this for one run
-   ([.claude/agents/trace-reviewer.md](../../.claude/agents/trace-reviewer.md)).
+   ([.claude/agents/trace-reviewer.md](../../.claude/agents/trace-reviewer.md)),
+   and the J2 batch analysis ranks which of many to start from. Both read runs
+   the way [Reading a recorded run](reading-runs.md) sets out.
    What you want is the **earliest decision that changed the outcome**, not
    the last symptom. In the explorer's Claude Mods run, the symptom was a
    wrong overview. The decisions were a leading brief (turn 5), searches that

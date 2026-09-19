@@ -16,14 +16,12 @@ fetched.
 Reviews of runs from the deleted narrow-role arm (`session`, `context-and-gate`,
 `harness-v*`) are still here and still readable. They quote `journal.jsonl`,
 `steps/NN-<role>.md` and `rationale.md`, which no run produces any more
-([6.1.1](../../../docs/06-agent.md#611-the-arm-that-was-deleted)).
+([The arm that was deleted](../../../docs/agents/code.md#the-arm-that-was-deleted)).
 
-Two things to know before reading a `code` review. `trace.json` is fetched
-from LangSmith *after* the run, so a timed-out run has none and the review works
-from the router's narration in `stderr.log`. And `run.json`'s trace-derived
-metrics — `provider_calls`, `tokens_in`, `models_used`, `steps` — are zero on that
-arm by construction, because `evals/metrics.py` reads the `trace.jsonl` only the
-narrow arm writes. Reviews count from `stderr.log` and say that they did.
+What to trust in a run, and what not to, is in
+[Reading a recorded run](../../../docs/evaluation/reading-runs.md): a timed-out
+run has no `trace.json`, and `run.json`'s trace-derived counts are zero on any
+run without a `trace.jsonl`.
 
 These are the open-coding notes the J2 batch analysis works from
 (`.claude/skills/j2-error-analysis/`). J2 counts and ranks; a review explains one
@@ -32,6 +30,6 @@ stops being true between two runs is itself a finding. Neither is committed — 
 the runs they read, they are artifacts. What reaches the repo is a report in
 `../reports/`.
 
-See `docs/07-observability.md#77-the-record-one-run-tree` for the run tree, and
+See [Observability](../../../docs/evaluation/observability.md#the-record-one-run-tree) for the run tree, and
 `docs/design/long-run-harness.md#9-reading-one-session-back-the-post-mortem` for
 the post-mortem's original argument.
