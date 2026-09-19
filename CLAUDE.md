@@ -87,6 +87,12 @@ against scenarios and compared to baseline on quantitative metrics; a change
 that cannot be shown to help does not merge. Protocol and metrics:
 [8](docs/08-evaluation-method.md), [10](docs/10-metrics.md).
 
+A change to how an agent *behaves* starts from an example, not a hunch: the
+turn a recorded run went wrong, frozen as a probe in a topic dataset, red before
+the change and green after it, with that dataset's regression examples still
+passing ([21](docs/21-changing-behaviour.md)). Apply the **`behaviour-change`
+skill** ([.claude/skills/behaviour-change/](.claude/skills/behaviour-change/SKILL.md)).
+
 ## Commits
 
 - No AI or agent attribution — no "Co-Authored-By", no mention of a model or

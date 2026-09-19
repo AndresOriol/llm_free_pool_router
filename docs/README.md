@@ -218,6 +218,14 @@ else on this page is design and changes rarely; this block is state.*
 [20.6](20-probes.md#206-running-them) Running them ·
 [20.7](20-probes.md#207-what-the-first-two-live-runs-showed) What the first two live runs showed
 
+**[21. Changing how an agent behaves](21-changing-behaviour.md)** — the loop: find the turn a run went wrong, freeze it as an example, change the agent until it passes, keep the regressions green
+&nbsp;&nbsp;&nbsp;&nbsp;[21.1](21-changing-behaviour.md#211-the-loop) The loop ·
+[21.2](21-changing-behaviour.md#212-reading-an-experiment) Reading an experiment ·
+[21.3](21-changing-behaviour.md#213-examples-of-what-already-works) Examples of what already works ·
+[21.4](21-changing-behaviour.md#214-datasets-one-topic-each) Datasets: one topic each ·
+[21.5](21-changing-behaviour.md#215-reviewing-examples) Reviewing examples ·
+[21.6](21-changing-behaviour.md#216-the-first-case-the-explorers-absence-claims) The first case
+
 **[11. Evaluation status](11-eval-status.md)** — the running state ⟳ *changes often*
 &nbsp;&nbsp;&nbsp;&nbsp;[11.2](11-eval-status.md#112-whats-built) What's built ·
 [11.3](11-eval-status.md#113-where-the-numbers-stand) Where the numbers stand ·
