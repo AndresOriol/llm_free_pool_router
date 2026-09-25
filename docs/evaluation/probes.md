@@ -180,7 +180,11 @@ the files, and experiments keep pointing at the same examples.
 > could no longer be compared with its fix, which is the comparison the
 > dataset exists for. What the old rule guarded against was a partial update,
 > and a whole rewrite under a stable id avoids that too.
-
+>
+> **Amended 2026-09-25.** A new example's id is derived from its dataset and
+> probe id, but an example already in the dataset keeps the id it has, found by
+> the `probe_id` in its metadata. Renaming the datasets to `<agent>-<topic>`
+> would otherwise have re-created every example and orphaned every experiment.
 
 **One file is one topic is one dataset.** Each `evals/probes/*.yaml` names its
 `dataset`, and how probes are grouped is part of the change under review
@@ -220,9 +224,9 @@ Two more fields exist because of what the first baseline did:
 ```bash
 python -m evals probes --list                 # what would run; no calls, no keys
 python -m evals probes                        # run them, print the table
-python -m evals probes --dataset probes-improve-diagnosis   # one topic
+python -m evals probes --dataset improve-diagnosis   # one topic
 python -m evals probes --push                 # sync every dataset, run nothing
-python -m evals probes --dataset probes-explore-evidence --experiment     --name explore-fix --repetitions 3        # one side of a comparison
+python -m evals probes --dataset explore-evidence --experiment     --name explore-fix --repetitions 3        # one side of a comparison
 python -m evals probes --stale                # which probes are due a review
 python -m evals probes --from-run trace.json --turn 10 --agent explore     --id name-the-decision                    # a skeleton from a recorded run
 ```

@@ -107,10 +107,20 @@ def push(probes: list, dataset: str) -> dict:
         logger.info(f"Created dataset {dataset!r}")
 
     made = [as_example(p) for p in mine]
-    there = {str(e.id) for e in ls.list_examples(dataset_id=target.id)}
+    # An example already there keeps its id, found by the probe it came from
+    # rather than recomputed: the id is derived from the dataset's name, and
+    # renaming the datasets (probes-code-editing -> code-editing, 2026-09-25)
+    # would otherwise have deleted every example and orphaned its experiments.
+    there = {str(e.id): str((e.metadata or {}).get("probe_id") or "")
+             for e in ls.list_examples(dataset_id=target.id)}
+    by_probe = {}
+    for eid, pid in there.items():
+        by_probe.setdefault(pid, eid)
+    for example in made:
+        example["id"] = by_probe.get(example["metadata"]["probe_id"], example["id"])
     new = [e for e in made if e["id"] not in there]
     kept = [e for e in made if e["id"] in there]
-    gone = there - {e["id"] for e in made}
+    gone = set(there) - {e["id"] for e in made}
     if kept:
         ls.update_examples(dataset_id=target.id, updates=kept)
     if new:

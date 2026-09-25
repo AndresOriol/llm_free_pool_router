@@ -90,6 +90,12 @@ collateral damage, not to measure progress.
 One probe file is one topic is one LangSmith dataset. It names its `dataset`,
 so the grouping is reviewed in the same diff as the probes.
 
+A dataset is named **`<agent>-<topic>`**, and so is its file. `<agent>` is the
+agent under test (`code`, `explore`, `improve`); an explorer sub-agent such as
+`explore-researcher` belongs to `explore`. `<topic>` is a short tag for what
+groups the examples: `code-editing`, not `code-git-and-notes-rereads`. The
+loader refuses a name that does not start with the agent of every probe in it.
+
 A topic is **one agent's family of decisions that one change would plausibly
 move together**. That is what makes "the regressions in the same dataset" the
 right regression check.
@@ -103,10 +109,10 @@ right regression check.
 
 | Dataset | Topic |
 | --- | --- |
-| `probes-code-editing` | How the coding agent changes a repository: reading first and not twice, the shell and workspace it has (no git where there is no repository), recovering from a refused call |
-| `probes-code-scope` | What the task allows the coding agent to change: a stale page the task's own source overrides, against a guarantee someone else relies on (the Contradicted Requests section) |
-| `probes-improve-diagnosis` | How the improvement agent diagnoses: the ledger before the traces, a diagnosis before any delegation or edit, and no issue, delegation or report the evidence it already read contradicts |
-| `probes-explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, figures no page carries, claims that something does not exist |
+| `code-editing` | How the coding agent changes a repository: reading first and not twice, the shell and workspace it has (no git where there is no repository), recovering from a refused call |
+| `code-scope` | What the task allows the coding agent to change: a stale page the task's own source overrides, against a guarantee someone else relies on (the Contradicted Requests section) |
+| `improve-diagnosis` | How the improvement agent diagnoses: the ledger before the traces, a diagnosis before any delegation or edit, and no issue, delegation or report the evidence it already read contradicts |
+| `explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, figures no page carries, claims that something does not exist |
 
 ## Reviewing examples
 

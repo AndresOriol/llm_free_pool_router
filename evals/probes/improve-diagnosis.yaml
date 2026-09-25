@@ -1,6 +1,6 @@
 # Probes for the improvement agent: how it diagnoses.
 #
-# Dataset probes-improve-diagnosis. One family of decisions: what the agent
+# Dataset improve-diagnosis. One family of decisions: what the agent
 # files, delegates and reports, and on what evidence. A full pass costs
 # 20-45 minutes, so these are the only cheap measure of its judgement
 # (docs/agents/improve.md#how-its-judgement-is-measured).
@@ -34,7 +34,7 @@
 # 3/3; on gemini-3-flash-preview (one sample, before its quota ran out) it
 # failed. It is kept for the full flash models, where the pass that made the
 # issue ran.
-dataset: probes-improve-diagnosis
+dataset: improve-diagnosis
 probes:
 - id: does-not-open-a-trace-before-consulting-the-ledger
   agent: improve

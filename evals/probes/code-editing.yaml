@@ -38,11 +38,11 @@
 # `subprocess.run(shell=True)` on cmd.exe, where `&&` works, so the situation
 # it froze no longer occurs (docs/agents/code.md#the-blast-radius).
 
-# Dataset probes-code-editing. How the coding agent changes a repository: reading
+# Dataset code-editing. How the coding agent changes a repository: reading
 # first and not twice, the shell and the workspace it actually has (no git
 # unless the Project section names a branch), and recovering from a refused
-# call. What the task allows it to change is probes-code-scope.
-dataset: probes-code-editing
+# call. What the task allows it to change is code-scope.
+dataset: code-editing
 
 probes:
   - id: reads-before-editing

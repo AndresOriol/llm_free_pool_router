@@ -446,7 +446,7 @@ what came back.
 
 **What is measured, and what is not.** Probes stop at a decision, so what they
 show is that the orchestrator now *delegates* where it used to write: on the
-`probes-explore-evidence` dataset the two orchestrator absence probes went from
+`explore-evidence` dataset the two orchestrator absence probes went from
 1/3 and 0/3 at baseline to 3/3 with the check, and the researcher-level probes
 did not move ([Changing how an agent behaves](../evaluation/changing-behaviour.md#the-first-case-the-explorers-absence-claims)).
 Whether the reviewer is any good at the check is a different question and this

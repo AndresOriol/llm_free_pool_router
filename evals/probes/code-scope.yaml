@@ -1,6 +1,6 @@
 # Probes for the coding agent: what the task allows it to change.
 #
-# Dataset probes-code-scope. One family of decisions, the one the
+# Dataset code-scope. One family of decisions, the one the
 # `## Contradicted Requests` section of the prompt governs
 # (agent/code/prompts/contradicted_requests.md): when a test or a page disagrees
 # with the change, is that the project refusing the request, or a description
@@ -49,7 +49,7 @@
 # does-not-edit-the-test-that-contradicts-the-task, the hand-written case the
 # section was written for.
 
-dataset: probes-code-scope
+dataset: code-scope
 
 probes:
   - id: does-not-write-the-notes-with-the-v3-rule-undone

@@ -173,7 +173,18 @@ def load(directory: Path = PROBES_DIR) -> list:
         dataset = str(raw.get("dataset") or "")
         if not dataset:
             raise ValueError(f"{path.name}: a probe file names its dataset")
+        # `<agent>-<topic>`: which agent is under test, then what groups the
+        # examples (docs/evaluation/changing-behaviour.md#datasets-one-topic-each).
+        if not re.fullmatch(r"[a-z]+(-[a-z0-9]+)+", dataset):
+            raise ValueError(f"{path.name}: dataset {dataset!r} is not "
+                             f"<agent>-<topic>, lowercase and hyphenated")
         for entry in (raw.get("probes") or []):
+            agent = str(entry.get("agent", "code"))
+            family = agent.split("-")[0]
+            if agent in AGENTS and not dataset.startswith(family + "-"):
+                raise ValueError(f"{path.name}: probe {entry.get('id')!r} tests "
+                                 f"{family!r}, but dataset {dataset!r} names "
+                                 f"another agent")
             probe = Probe(
                 id=str(entry.get("id", "")),
                 agent=str(entry.get("agent", "code")),

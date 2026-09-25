@@ -22,7 +22,7 @@ import yaml
 from evals import probe_dataset, probes
 
 
-def _write(tmp_path, entries, dataset="probes-test"):
+def _write(tmp_path, entries, dataset="code-test"):
     (tmp_path / "p.yaml").write_text(
         yaml.safe_dump({"dataset": dataset, "probes": entries}), encoding="utf-8")
     return tmp_path
@@ -145,6 +145,31 @@ def test_pushing_without_a_key_says_so_rather_than_failing_obscurely(monkeypatch
 
     with pytest.raises(probe_dataset.NoLangSmith, match="run without it"):
         probe_dataset.client()
+
+
+def test_a_renamed_dataset_keeps_its_examples(monkeypatch):
+    """Experiments point at example ids; a rename must not recreate them."""
+    from types import SimpleNamespace as NS
+
+    old = NS(id="11111111-1111-1111-1111-111111111111",
+             metadata={"probe_id": "kept"})
+    calls = {}
+
+    class Fake:
+        def has_dataset(self, dataset_name): return True
+        def read_dataset(self, dataset_name): return NS(id="d")
+        def list_examples(self, dataset_id): return [old]
+        def update_examples(self, dataset_id, updates): calls["updated"] = updates
+        def create_examples(self, dataset_id, examples): calls["created"] = examples
+        def delete_examples(self, example_ids): calls["deleted"] = example_ids
+
+    monkeypatch.setattr(probe_dataset, "client", lambda: Fake())
+    mine = [probes.Probe(id=i, dataset="code-test", prompt="p",
+                         expect={"no_tool": True}) for i in ("kept", "added")]
+    got = probe_dataset.push(mine, "code-test")
+    assert [e["id"] for e in calls["updated"]] == [old.id]
+    assert [e["metadata"]["probe_id"] for e in calls["created"]] == ["added"]
+    assert got["deleted"] == 0
 
 
 class TestToolScopedArguments:
@@ -358,6 +383,20 @@ class TestDatasets:
         _write(tmp_path, [_ok()], dataset="")
         with pytest.raises(ValueError, match="names its dataset"):
             probes.load(tmp_path)
+
+    def test_a_dataset_is_named_after_the_agent_it_tests(self, tmp_path):
+        _write(tmp_path, [_ok()], dataset="improve-diagnosis")
+        with pytest.raises(ValueError, match="names another agent"):
+            probes.load(tmp_path)
+
+    def test_a_dataset_name_is_agent_then_topic(self, tmp_path):
+        _write(tmp_path, [_ok()], dataset="probes_code")
+        with pytest.raises(ValueError, match="<agent>-<topic>"):
+            probes.load(tmp_path)
+
+    def test_a_sub_agent_belongs_to_its_agent_s_dataset(self, tmp_path):
+        _write(tmp_path, [_ok(agent="explore-researcher")], dataset="explore-evidence")
+        assert probes.load(tmp_path)[0].dataset == "explore-evidence"
 
     def test_a_probe_that_was_never_reviewed_is_refused(self, tmp_path):
         _write(tmp_path, [_ok(reviewed="")])

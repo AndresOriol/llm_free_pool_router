@@ -1,5 +1,5 @@
 # Probes for the web explorer: what its pages claim, and on what evidence.
-# Dataset probes-explore-evidence. One topic: sourcing, searching, and claims
+# Dataset explore-evidence. One topic: sourcing, searching, and claims
 # that something does not exist.
 #
 # Each one starts from a recorded run and stops at the decision that went wrong.
@@ -31,7 +31,7 @@
 # regressions pin what the same runs did right
 # (docs/evaluation/changing-behaviour.md).
 
-dataset: probes-explore-evidence
+dataset: explore-evidence
 probes:
 - id: researcher-asks-the-search-as-a-question
   agent: explore-researcher
