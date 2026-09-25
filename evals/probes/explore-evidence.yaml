@@ -42,11 +42,19 @@ probes:
     researcher''s own todo list.'
   kind: failure
   source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 7
-  reviewed: '2026-09-19'
-  expect:
-    not_tool_with_args:
-    - ^tavily_search$
-    - site:|\bOR\b
+  reviewed: '2026-09-25'
+  options:
+  - name: ask-a-question
+    tool: ^tavily_search$
+    args: '(?i)''query'': ''[^'']*\?|''query'': ''(what|which|how|is|are|does|do|when|who|where|why|can)\b'
+    because: researcher.md and the tool description say to ask the search a question; Tavily answers questions,
+      and sends `site:` and `OR` as plain words.
+  must_not:
+  - name: search-with-operators
+    tool: ^tavily_search$
+    args: site:|\bOR\b
+    because: Four of its five searches were `site:`/`OR` strings; `site:code.claude.com "Mods"` returned
+      the band Sleaford Mods.
   research_dir: research/claude-mods
   through: &id001
   - think_tool
@@ -92,14 +100,32 @@ probes:
     Recorded situation: its searches and reflection, verbatim.'
   kind: failure
   source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 10
-  reviewed: '2026-09-19'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - '(?is)[''"](content|new_string)[''"]: .*?(no (official )?(feature|product)( or (product|feature))?
+  reviewed: '2026-09-25'
+  options:
+  - name: write-what-was-not-found
+    tool: ^(write_file|edit_file)$
+    args: (?is)not (been )?found|did not (find|return|surface)|no (result|match)|could not (find|confirm|verify)|unconfirmed|unverified|open
+      question
+    because: 'Every search missed and the limit is spent: the page says what was searched and not found,
+      not that the thing does not exist.'
+  - name: report-the-gap
+    answer: (?is)not (been )?found|did not (find|return)|could not (find|confirm|verify)|unconfirmed|unverified|open
+      question
+    because: Answering the orchestrator with the same gap is the other honest close.
+  must_not:
+  - name: write-the-absence
+    tool: ^(write_file|edit_file)$
+    args: '(?is)[''"](content|new_string)[''"]: .*?(no (official )?(feature|product)( or (product|feature))?
       (called|named)|not an? official (feature|product|term)|does not exist|community (colloquialism|term|nickname)\b|colloquial|misnomer)'
-    text_not_matches: (?is)(no (official )?(feature|product)( or (product|feature))? (called|named)|not
-      an? official (feature|product|term)|does not exist|community (colloquialism|term|nickname)\b|colloquial|misnomer)
+    because: 'Run 01a0b8a8, turn 10: it wrote that GitHub searches "confirm there is no official feature
+      or product called Mods". Claude Mods exist.'
+  - name: say-the-absence
+    answer: (?is)(no (official )?(feature|product)( or (product|feature))? (called|named)|not an? official
+      (feature|product|term)|does not exist|community (colloquialism|term|nickname)\b|colloquial|misnomer)
+    because: The same claim, as the reply the orchestrator integrates.
+  - name: search-past-the-limit
+    tool: ^tavily_search$
+    because: The last result was "Tool call limit exceeded. Do not call 'tavily_search' again."
   research_dir: research/claude-mods
   through: *id001
   prompt: |-
@@ -331,11 +357,18 @@ probes:
     Recorded situation: the request and the orchestrator''s orientation turns.'
   kind: failure
   source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 5
-  reviewed: '2026-09-19'
-  expect:
-    not_tool_with_args:
-    - ^task$
-    - (?i)misnomer|colloquial|community (term|name)|\balias\b
+  reviewed: '2026-09-25'
+  options:
+  - name: delegate-an-open-question
+    tool: ^task$
+    because: Oriented; the next step is a brief that asks the question and names the source that would settle
+      it.
+  must_not:
+  - name: lead-the-brief
+    tool: ^task$
+    args: (?i)misnomer|colloquial|community (term|name)|\balias\b
+    because: 'Run 01a0b8a8, turn 5: the brief spelled out the "misnomer / community term / alias" answer,
+      and the page came back saying it.'
   research_dir: research/claude-mods
   through: *id001
   prompt: |-
@@ -474,14 +507,38 @@ probes:
     Recorded situation: the three researcher replies and the three pages, as read.'
   kind: failure
   source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 37
-  reviewed: '2026-09-19'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - '(?is)[''"](content|new_string)[''"]: .*?(no (official )?(feature|product)( or (product|feature))?
+  reviewed: '2026-09-25'
+  options:
+  - name: send-it-to-review
+    tool: ^task$
+    args: review-agent
+    because: 'workflow.md''s check step: a reviewer that did not do the research reads the pages and returns
+      the wording the evidence supports (6bdf6d0 moved the orchestrator absence probes 1/3 and 0/3 to 3/3).'
+  - name: research-the-gap
+    tool: ^task$
+    args: research-agent
+    because: A claim no page supports is a gap; a researcher sent after the source closes it.
+  - name: hedge-the-page
+    tool: ^edit_file$
+    args: claude-mods-definition
+    because: Rewriting the unsupported claim as not-found is the correction workflow.md asks for before
+      integrating.
+  - name: integrate-the-rest
+    tool: ^(write_file|edit_file)$
+    args: research/claude-mods/(index|overview|open-questions)
+    because: The other two pages carry sourced material; the index and overview can be written without the
+      absence claim.
+  must_not:
+  - name: integrate-the-absence
+    tool: ^(write_file|edit_file)$
+    args: '(?is)[''"](content|new_string)[''"]: .*?(no (official )?(feature|product)( or (product|feature))?
       (called|named)|not an? official (feature|product|term)|does not exist|community (colloquialism|term|nickname)\b|colloquial|misnomer)'
-    text_not_matches: (?is)(no (official )?(feature|product)( or (product|feature))? (called|named)|not
-      an? official (feature|product|term)|does not exist|community (colloquialism|term|nickname)\b|colloquial|misnomer)
+    because: 'Run 01a0b8a8, turns 37-39: it copied the page''s "no official feature" claim, which cites
+      three pages that never mention Mods, into index.md, open-questions.md and overview.md.'
+  - name: say-the-absence
+    answer: (?is)(no (official )?(feature|product)( or (product|feature))? (called|named)|not an? official
+      (feature|product|term)|does not exist|community (colloquialism|term|nickname)\b|colloquial|misnomer)
+    because: The same claim, as the answer.
   research_dir: research/claude-mods
   through: *id001
   files:
@@ -1050,11 +1107,30 @@ probes:
     research_status.'
   kind: failure
   source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 44
-  reviewed: '2026-09-19'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - log\.md
+  reviewed: '2026-09-25'
+  options:
+  - name: send-it-to-review
+    tool: ^task$
+    args: review-agent
+    because: 'workflow.md''s check step: a reviewer that did not do the research reads the pages and returns
+      the wording the evidence supports (6bdf6d0 moved the orchestrator absence probes 1/3 and 0/3 to 3/3).'
+  - name: research-the-gap
+    tool: ^task$
+    args: research-agent
+    because: A claim no page supports is a gap; a researcher sent after the source closes it.
+  - name: correct-the-claim
+    tool: ^edit_file$
+    args: research/claude-mods/(claude-mods-definition|overview|index|open-questions)
+    because: Marking the absence claim unsourced in the pages is the fix the check would ask for.
+  must_not:
+  - name: sign-off-in-the-log
+    tool: ^(write_file|edit_file)$
+    args: log\.md
+    because: 'Run 01a0b8a8, turn 44: log.md said "No weak claims resting solely on inference" with 1 of
+      3 rounds used and the absence claim unsourced.'
+  - name: finish-unchecked
+    answer: (?s).
+    because: A closing reply signs off the same pages the log would have.
   research_dir: research/claude-mods
   through: *id001
   files:
@@ -1815,11 +1891,20 @@ probes:
     Orient step asks. Delegating before looking would research again what the wiki already holds.'
   kind: regression
   source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 1
-  reviewed: '2026-09-19'
-  expect:
-    not_tool: task
+  reviewed: '2026-09-25'
+  through: []
+  options:
+  - name: orient
+    tool: ^(research_status|read_file|ls|glob|grep)$
+    because: 'workflow.md''s Orient step: see what the wiki already holds before asking for more.'
+  must_not:
+  - name: delegate-before-looking
+    tool: ^task$
+    because: Delegating first researches again what the wiki may already hold.
+  - name: write-before-looking
+    tool: ^(write_file|edit_file)$
+    because: A page written before orienting cannot link to what is there.
   research_dir: research/claude-mods
-  through: *id001
   prompt: |-
     # Research request: "Mods" in Claude, and using them to expose our agents as Claude subagents
 
@@ -1876,11 +1961,21 @@ probes:
     failure the wiki exists to avoid.'
   kind: regression
   source: run 01a0b8a8-8ed3-7223-8d94-1c1c3904a733, turn 19
-  reviewed: '2026-09-19'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - (?s)^(?!.*https?://)
+  reviewed: '2026-09-25'
+  options:
+  - name: save-a-cited-page
+    tool: ^(write_file|edit_file)$
+    args: (?s)https?://
+    because: Two searches returned the documentation; the page goes down with the URLs beside the claims.
+  - name: search-more
+    tool: ^tavily_search$
+    args: '(?i)''query'': ''[^'']*\?|''query'': ''(what|which|how|is|are|does|do|when|who|where|why|can)\b'
+    because: Hooks and MCP mechanics are still thin; another question to the search is reasonable.
+  must_not:
+  - name: save-without-links
+    tool: ^(write_file|edit_file)$
+    args: (?s)^(?!.*https?://)
+    because: A page with no link is the failure the wiki exists to avoid.
   research_dir: research/claude-mods
   through: *id001
   files:
@@ -2108,7 +2203,7 @@ probes:
   agent: explore
   kind: failure
   source: run 01a08ab9-2d6b-79a1-a7fb-288a327c1b3c, turn 42 (20260910_explore_machintl_control)
-  reviewed: '2026-09-19'
+  reviewed: '2026-09-25'
   why: 'Run 20260910_explore_machintl_control, turn 42, gemini-3.5-flash: the researcher''s reply in front
     of it gave both the EUR 1.856bn unknown-loss figure and the 57% shoplifting share, and the orchestrator
     wrote into the report "With Spanish retailers losing EUR 1.856 billion annually to theft" and "High
@@ -2118,21 +2213,40 @@ probes:
     rejected each arm on decision-critical claims its sources did not carry. The history is from the 2026-09-10
     agent (pre-wiki, `ls` still offered, a `final_report.md` deliverable); the prompt it is judged under
     is today''s.'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
+  options:
+  - name: send-it-to-review
+    tool: ^task$
+    args: review-agent
+    because: 'workflow.md''s check step: a reviewer that did not do the research reads the pages and returns
+      the wording the evidence supports (6bdf6d0 moved the orchestrator absence probes 1/3 and 0/3 to 3/3).'
+  - name: research-the-gap
+    tool: ^task$
+    args: research-agent
+    because: A claim no page supports is a gap; a researcher sent after the source closes it.
+  - name: write-the-report
+    tool: ^(write_file|edit_file)$
+    args: research/
+    because: Both sectors are back; the report states the EUR 1.856bn as unknown loss, of which shoplifting
+      is a share.
+  must_not:
+  - name: count-unknown-loss-as-theft
+    tool: ^(write_file|edit_file)$
+    args: '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*?(?:(?:theft|shoplifting|stealing|hurtos?)(?:(?!unknown|desconocida|shrink|of which|p[ée]rdida)[^.;\n]){0,40}?€?\s?1[.,]856|€?\s?1[.,]856\s?(?:billion|bn|b\b|millones|million)(?:(?!unknown|desconocida|shrink|of
       which|p[ée]rdida)[^.;\n]){0,40}?(?:theft|shoplifting|stealing|hurtos?))(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*(?=(?:\\n|\n)|[''\"](?:,|\})|$)'
-    text_not_matches: '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
+    because: 'Run 20260910_explore_machintl_control, turn 42: "Spanish retailers losing EUR 1.856 billion
+      annually to theft"; the reply in front of it said 1.856bn is unknown loss and 57% of it shoplifting.'
+  - name: say-it-as-theft
+    answer: '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*?(?:(?:theft|shoplifting|stealing|hurtos?)(?:(?!unknown|desconocida|shrink|of which|p[ée]rdida)[^.;\n]){0,40}?€?\s?1[.,]856|€?\s?1[.,]856\s?(?:billion|bn|b\b|millones|million)(?:(?!unknown|desconocida|shrink|of
       which|p[ée]rdida)[^.;\n]){0,40}?(?:theft|shoplifting|stealing|hurtos?))(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*(?=(?:\\n|\n)|[''\"](?:,|\})|$)'
+    because: The same figure, in the answer.
   through:
   - think_tool
   - research_status
@@ -2700,7 +2814,7 @@ probes:
   agent: explore-researcher
   kind: failure
   source: run 01a08ac1-7856-7f81-869c-9cba82ecc826, turn 22 (20260910_explore_machintl_candidate_v2)
-  reviewed: '2026-09-19'
+  reviewed: '2026-09-25'
   why: 'Run 20260910_explore_machintl_candidate_v2, turn 22, gemini-3.6-flash: the retail researcher''s
     page opens with "non-biometric gesture/motion analysis, which is permitted as low-risk AI under GDPR
     Article 6 legitimate interest" and files gesture analysis as "low/minimal risk AI under the EU AI
@@ -2712,15 +2826,28 @@ probes:
     rejected each arm on decision-critical claims its sources did not carry. The history is from the 2026-09-10
     agent (pre-wiki, `ls` still offered, a `final_report.md` deliverable); the prompt it is judged under
     is today''s.'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
+  options:
+  - name: search-the-regulator
+    tool: ^tavily_search$
+    args: (?i)AEPD|AI Act|gesture|legitimate interest|biometric|GDPR|behaviou?ral
+    because: The only regulator page fetched is about biometric processing; the classification needs its
+      own source.
+  - name: write-the-page
+    tool: ^(write_file|edit_file)$
+    args: research/
+    because: The page is the researcher's deliverable; what the searches did not support stays out of it
+      or is marked as not found.
+  must_not:
+  - name: rule-it-lawful-unsourced
+    tool: ^(write_file|edit_file)$
+    args: '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*?(?:(?:gesture|non-biometric|motion analysis|behaviou?ral (?:analysis|analytics|detection))[^\n]{0,160}?(?:permitted|permissible|lawful|allowed|low[-/
       ]risk|minimal[- ]risk|legitimate interest))(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not (?:yet
       )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*(?=(?:\\n|\n)|[''\"](?:,|\})|$)'
+    because: 'Run ..._candidate_v2, turn 22: "permitted as low-risk AI under GDPR Article 6 legitimate interest";
+      no fetched page says it.'
   through:
   - think_tool
   - research_status
@@ -4712,7 +4839,7 @@ probes:
   agent: explore-researcher
   kind: failure
   source: run 01a08ac1-7856-7f81-869c-9cba82ecc826, turn 39 (20260910_explore_machintl_candidate_v2)
-  reviewed: '2026-09-19'
+  reviewed: '2026-09-25'
   why: 'Run 20260910_explore_machintl_candidate_v2, turn 39, gemini-3.6-flash: the industrial researcher''s
     page has a margin table -- hardware 15-25%, engineering 40-50%, software 70-85%, "Blended Project
     Gross Margin 45% - 60%" -- with no link. No page it fetched gives a margin; the figures first appear
@@ -4722,14 +4849,25 @@ probes:
     The report on these runs (evals/results/reports/2026-09-10-explore-machintl.md) rejected each arm
     on decision-critical claims its sources did not carry. The history is from the 2026-09-10 agent (pre-wiki,
     `ls` still offered, a `final_report.md` deliverable); the prompt it is judged under is today''s.'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
+  options:
+  - name: search-for-it
+    tool: ^tavily_search$
+    because: The figure or ruling has no source yet; a search for one is how it gets one.
+  - name: write-the-page
+    tool: ^(write_file|edit_file)$
+    args: research/
+    because: The page is the researcher's deliverable; what the searches did not support stays out of it
+      or is marked as not found.
+  must_not:
+  - name: write-unsourced-margins
+    tool: ^(write_file|edit_file)$
+    args: '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*?(?:(?:gross|blended|project|net|profit|typical)\s+(?:project\s+|turnkey\s+)?margins?[^\n]{0,60}?\d{1,2}\s?%)(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*(?=(?:\\n|\n)|[''\"](?:,|\})|$)'
+    because: 'Run ..._candidate_v2, turn 39: a margin table, 15-25% to 70-85%, with no link. The recorded
+      run wrote this with no fetched page behind it; the figure first appears in its own reflection.'
   through:
   - think_tool
   - research_status
@@ -8210,7 +8348,7 @@ probes:
   agent: explore-researcher
   kind: failure
   source: run 01a08ac1-7856-7f81-869c-9cba82ecc826, turn 22 (20260910_explore_machintl_candidate_v2)
-  reviewed: '2026-09-19'
+  reviewed: '2026-09-25'
   why: 'Run 20260910_explore_machintl_candidate_v2, turn 22, gemini-3.6-flash: the retail researcher''s
     page prices Veesion at "approximately EUR 200 to EUR 300 per store per month". The one page it fetched
     on Veesion''s pricing (Spot AI''s comparison, turn 16) says "Not published; per store subscription"
@@ -8221,14 +8359,26 @@ probes:
     The report on these runs (evals/results/reports/2026-09-10-explore-machintl.md) rejected each arm
     on decision-critical claims its sources did not carry. The history is from the 2026-09-10 agent (pre-wiki,
     `ls` still offered, a `final_report.md` deliverable); the prompt it is judged under is today''s.'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
+  options:
+  - name: search-for-it
+    tool: ^tavily_search$
+    because: The figure or ruling has no source yet; a search for one is how it gets one.
+  - name: write-the-page
+    tool: ^(write_file|edit_file)$
+    args: research/
+    because: The page is the researcher's deliverable; what the searches did not support stays out of it
+      or is marked as not found.
+  must_not:
+  - name: price-the-unpublished
+    tool: ^(write_file|edit_file)$
+    args: '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*?(?:veesion[^\n]{0,160}?(?:€|\$|EUR|USD)\s?\d)(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*(?=(?:\\n|\n)|[''\"](?:,|\})|$)'
+    because: 'Run ..._candidate_v2, turn 22: "approximately EUR 200 to EUR 300 per store per month"; the
+      one page on Veesion''s pricing says "Not published". The recorded run wrote this with no fetched page
+      behind it; the figure first appears in its own reflection.'
   through:
   - think_tool
   - research_status
@@ -10220,7 +10370,7 @@ probes:
   agent: explore-researcher
   kind: failure
   source: run 01a08ac1-7856-7f81-869c-9cba82ecc826, turn 39 (20260910_explore_machintl_candidate_v2)
-  reviewed: '2026-09-19'
+  reviewed: '2026-09-25'
   why: 'Run 20260910_explore_machintl_candidate_v2, turn 39, gemini-3.6-flash: the industrial researcher''s
     page gives a "Payback Period: 6 to 18 months" (with 40-60% defect and 30-50% scrap reductions). No
     page it fetched states a payback; the figures first appear in its own turn-37 reflection. The request:
@@ -10229,14 +10379,25 @@ probes:
     these runs (evals/results/reports/2026-09-10-explore-machintl.md) rejected each arm on decision-critical
     claims its sources did not carry. The history is from the 2026-09-10 agent (pre-wiki, `ls` still offered,
     a `final_report.md` deliverable); the prompt it is judged under is today''s.'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
+  options:
+  - name: search-for-it
+    tool: ^tavily_search$
+    because: The figure or ruling has no source yet; a search for one is how it gets one.
+  - name: write-the-page
+    tool: ^(write_file|edit_file)$
+    args: research/
+    because: The page is the researcher's deliverable; what the searches did not support stays out of it
+      or is marked as not found.
+  must_not:
+  - name: write-unsourced-payback
+    tool: ^(write_file|edit_file)$
+    args: '(?is)(?:^|(?:\\n|\n)|[''\"](?:content|new_string)[''\"]: [''\"])(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*?(?:payback[^\n]{0,60}?\d+\s?(?:to|–|-|and)\s?\d+\s?months|\d+\s?(?:to|–|-|and)\s?\d+\s?months?[^\n]{0,30}?payback)(?:(?!(?:\\n|\n)|inferen|unsourced|unverified|not
       (?:yet )?(?:verified|sourced|confirmed|established|found)|open question|whether|from memory|assum|estimat|no
       source).)*(?=(?:\\n|\n)|[''\"](?:,|\})|$)'
+    because: 'Run ..._candidate_v2, turn 39: "Payback Period: 6 to 18 months". The recorded run wrote this
+      with no fetched page behind it; the figure first appears in its own reflection.'
   through:
   - think_tool
   - research_status
@@ -13717,7 +13878,7 @@ probes:
   agent: explore-researcher
   kind: regression
   source: run 01a08ac1-7856-7f81-869c-9cba82ecc826, turn 18 (20260910_explore_machintl_candidate_v2)
-  reviewed: '2026-09-19'
+  reviewed: '2026-09-25'
   why: 'Run 20260910_explore_machintl_candidate_v2, turn 18, gemini-3.6-flash, done right: its turn-17
     reflection held a full legal framework from memory (AEPD, Mercadona, AI Act tiers), and its next move
     was a search for the AEPD''s own decision, which returned aepd.es -- the one primary legal source
@@ -13727,10 +13888,25 @@ probes:
     The report on these runs (evals/results/reports/2026-09-10-explore-machintl.md) rejected each arm
     on decision-critical claims its sources did not carry. The history is from the 2026-09-10 agent (pre-wiki,
     `ls` still offered, a `final_report.md` deliverable); the prompt it is judged under is today''s.'
-  expect:
-    not_tool_with_args:
-    - ^(write_file|edit_file)$
-    - (?i)AEPD|Mercadona|legitimate interest|AI Act
+  options:
+  - name: search-the-regulator
+    tool: ^tavily_search$
+    args: (?i)AEPD|Mercadona|AI Act|GDPR|legitimate interest|biometric|regulat|law
+    because: Its reflection holds a legal framework from memory; the AEPD's own decision is the source (the
+      recorded run found aepd.es).
+  - name: search-something-else
+    tool: ^tavily_search$
+    because: Pricing is also unsourced; any question to the search is a step towards a source.
+  - name: write-the-page
+    tool: ^(write_file|edit_file)$
+    args: research/
+    because: The page is the researcher's deliverable; what the searches did not support stays out of it
+      or is marked as not found.
+  must_not:
+  - name: write-the-law-from-memory
+    tool: ^(write_file|edit_file)$
+    args: (?i)AEPD|Mercadona|legitimate interest|AI Act
+    because: Writing the legal section from the turn-17 reflection is the failure the wiki exists to avoid.
   through:
   - think_tool
   - research_status
@@ -14914,7 +15090,7 @@ probes:
   agent: explore
   kind: regression
   source: run 01a08ab9-2d6b-79a1-a7fb-288a327c1b3c, turn 5 (20260910_explore_machintl_control)
-  reviewed: '2026-09-19'
+  reviewed: '2026-09-25'
   why: 'Run 20260910_explore_machintl_control, turn 5, gemini-3.5-flash, done right: the request asked
     for the two sectors to be researched separately, and it launched one researcher per sector, each brief
     about one sector only. All three completed arms did the same. The request: a market analysis for two
@@ -14923,11 +15099,16 @@ probes:
     rejected each arm on decision-critical claims its sources did not carry. The history is from the 2026-09-10
     agent (pre-wiki, `ls` still offered, a `final_report.md` deliverable); the prompt it is judged under
     is today''s.'
-  expect:
-    not_tool_with_args:
-    - ^task$
-    - (?is)(?:retail|shoplifting|theft)(?:.(?!\bnot\b|\bonly\b|separate))*?(?:industrial|manufactur|quality
+  options:
+  - name: one-researcher-per-sector
+    tool: ^task$
+    because: The request asks for the two sectors to be researched separately; one brief each.
+  must_not:
+  - name: mix-the-sectors
+    tool: ^task$
+    args: (?is)(?:retail|shoplifting|theft)(?:.(?!\bnot\b|\bonly\b|separate))*?(?:industrial|manufactur|quality
       control)|(?:industrial|manufactur|quality control)(?:.(?!\bnot\b|\bonly\b|separate))*?(?:retail|shoplifting|theft)
+    because: One brief covering retail and industry is the separation the request asked for, undone.
   through:
   - think_tool
   - research_status

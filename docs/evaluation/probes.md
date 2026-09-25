@@ -135,8 +135,9 @@ The report shows the path to the decision and the model that made it:
 
 ### The older keys
 
-`expect` still loads and scores, for the probes not yet moved to
-`options` and `must_not`. Seven keys,
+`expect` still loads and scores, but no probe on disk uses it since
+2026-09-25: every dataset was moved to `options` and `must_not`, its old
+expectations carried over verbatim as named `must_not` moves. Seven keys,
 mostly negative:
 
 | Key | Holds when |
