@@ -111,6 +111,7 @@ right regression check.
 | --- | --- |
 | `code-editing` | How the coding agent changes a repository: reading first and not twice, the shell and workspace it has (no git where there is no repository), recovering from a refused call |
 | `code-scope` | What the task allows the coding agent to change: a stale page the task's own source overrides, against a guarantee someone else relies on (the Contradicted Requests section) |
+| `code-debugging` | How the coding agent debugs: reproducing a reported failure before fixing it, fixing the cause rather than the line the traceback or the user points at, and rerunning the tests before it stops |
 | `improve-diagnosis` | How the improvement agent diagnoses: the ledger before the traces, a diagnosis before any delegation or edit, and no issue, delegation or report the evidence it already read contradicts |
 | `explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, figures no page carries, claims that something does not exist |
 

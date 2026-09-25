@@ -1,0 +1,1349 @@
+# Probes for the coding agent: how it debugs.
+#
+# Dataset code-debugging. One family of decisions, the one the `## Debugging`
+# and `## Verification` sections of the prompt govern (agent/code/prompts/
+# system.md): reproduce the error before fixing it, fix the cause rather than
+# the line the traceback or the user points at, and run the tests again before
+# the run ends. A change to how the agent debugs moves all of them together.
+#
+# All come from runs recorded 2026-09-25 on four invented tasks, each a small
+# repo where the obvious fix is wrong: a TypeError the user blames on the module
+# it surfaced in (billing), a test called flaky that fails only after another
+# file mutates shared state (shop), an off-by-one reported with a command and
+# blamed on the CLI (tasks), and a December crash blamed on the exporter
+# (reports). Seeds and traces were kept in the session scratchpad only.
+#
+# - failures: an edit that changed nothing while announcing the fix, a run that
+#   ended without rerunning the tests after its one edit (both
+#   gemini-2.5-flash-lite), and a fix made with the suite green and the user's
+#   reproduction never run (gemini-3.6-flash).
+# - regressions: the same model running the user's command before editing when
+#   the suite was green, and fixing shared state where it is mutated rather than
+#   in the tests.
+#
+# Who fails them matters (baselines 2026-09-25, three repetitions each):
+# - code-debugging-baseline, default pool, served by gemini-3.8/3.7-flash:
+#   does-not-fix-before-reproducing-the-report 0/3, every other probe 3/3. The
+#   two flash-lite failures do not reproduce on a full flash model.
+# - code-debugging-baseline-lite25, pinned to gemini-2.5-flash-lite (the model
+#   that made both of them; 14 of 15 samples before its day ran out): both are
+#   0/3, and worse than recorded -- it casts at report.py, the traceback line,
+#   and after the fix it patches the symptom sites too. The regressions fail on
+#   lite as well (0/3, 0/2), and the reproduce-first probe is 2/3.
+# They are kept because coding runs land on the lite tier most of the time; read
+# a score with the model column, not as one number.
+
+dataset: code-debugging
+probes:
+- id: does-not-leave-the-parsed-discount-a-string
+  agent: code
+  kind: failure
+  source: run 01a0d9c2-9aee-7830-b5d4-5c6bd1bfd2bd, turn 4
+  reviewed: '2026-09-25'
+  why: 'Run 01a0d9c2 (2026-09-25, invented billing task: the user blames a TypeError on billing/report.py;
+    the cause is billing/customers.py leaving the CSV discount a string), turns 4-5, gemini-2.5-flash-lite.
+    The turn-3 suite run had shown both report.py ("can''t multiply sequence by non-int of type ''float''")
+    and invoice.py ("''>'' not supported") failing, with the traceback''s locals printing `customers =
+    {''c1'': {''name'': ''Acme Ltd'', ''discount'': ''10''}, ...}`. It re-read customers.py, already read
+    whole at turn 1, then said "I will convert the `discount` to an integer when loading customer data"
+    and sent an edit to customers.py whose old_string and new_string were both `'' for row in rows}''`.
+    The tool answered "Successfully replaced" and nothing changed; the real edit came a turn later.'
+  prompt: 'The monthly report is broken: python -m pytest tests/test_report.py fails with a TypeError
+    in billing/report.py, on the discount_given line. Looks like report.py mishandles the discount. Finance
+    needs the report tomorrow, please fix it.'
+  files:
+    billing/__init__.py: ''
+    billing/customers.py: |
+      """Customer records, parsed from the CRM's CSV export."""
+      import csv
+      import io
+
+
+      def load_customers(text):
+          """Map customer id to {"name", "discount"}.
+
+          The export has the header `id,name,discount`; discount is a whole-number
+          percentage from 0 to 100.
+          """
+          rows = csv.DictReader(io.StringIO(text))
+          return {row["id"]: {"name": row["name"].strip(), "discount": row["discount"]}
+                  for row in rows}
+    billing/invoice.py: |
+      """The amount charged for one order line."""
+
+
+      def line_total(order, customer):
+          subtotal = order["qty"] * order["unit_price"]
+          if customer["discount"] > 0:
+              subtotal -= subtotal * customer["discount"] / 100
+          return round(subtotal, 2)
+    billing/report.py: |
+      """The monthly report: what each customer was charged, and the discount given."""
+      from .invoice import line_total
+
+
+      def monthly_report(orders, customers):
+          report = {}
+          for order in orders:
+              customer = customers[order["customer_id"]]
+              entry = report.setdefault(customer["name"], {"charged": 0.0, "discount_given": 0.0})
+              gross = order["qty"] * order["unit_price"]
+              entry["discount_given"] += round(gross * customer["discount"] / 100, 2)
+              entry["charged"] += line_total(order, customer)
+          return report
+    README.md: |
+      # billing
+
+      Monthly billing from the CRM export (`id,name,discount`, discount a whole-number
+      percentage). `billing.report.monthly_report` is what finance sends out.
+
+      Run the tests with `python -m pytest`.
+    tests/conftest.py: |
+      from pathlib import Path
+
+      import pytest
+
+      from billing.customers import load_customers
+
+      DATA = Path(__file__).parent / "data"
+
+
+      @pytest.fixture
+      def customers():
+          return load_customers((DATA / "customers.csv").read_text(encoding="utf-8"))
+    tests/data/customers.csv: |
+      id,name,discount
+      c1,Acme Ltd,10
+      c2,Bolt & Co,0
+      c3,Cinder SA,25
+    tests/test_customers.py: |
+      def test_names_are_parsed(customers):
+          assert customers["c1"]["name"] == "Acme Ltd"
+          assert customers["c2"]["name"] == "Bolt & Co"
+
+
+      def test_every_customer_is_loaded(customers):
+          assert sorted(customers) == ["c1", "c2", "c3"]
+    tests/test_invoice.py: |
+      from billing.invoice import line_total
+
+
+      def test_discounted_line(customers):
+          order = {"customer_id": "c1", "qty": 4, "unit_price": 25.0}
+          assert line_total(order, customers["c1"]) == 90.0
+
+
+      def test_undiscounted_line(customers):
+          order = {"customer_id": "c2", "qty": 3, "unit_price": 9.5}
+          assert line_total(order, customers["c2"]) == 28.5
+    tests/test_report.py: |
+      from billing.report import monthly_report
+
+      ORDERS = [
+          {"customer_id": "c1", "qty": 4, "unit_price": 25.0},
+          {"customer_id": "c3", "qty": 2, "unit_price": 40.0},
+          {"customer_id": "c1", "qty": 1, "unit_price": 10.0},
+      ]
+
+
+      def test_monthly_report(customers):
+          report = monthly_report(ORDERS, customers)
+          assert report["Acme Ltd"] == {"charged": 99.0, "discount_given": 11.0}
+          assert report["Cinder SA"] == {"charged": 60.0, "discount_given": 20.0}
+  history:
+  - ai: ''
+    calls:
+    - name: read_file
+      args:
+        file_path: /billing/report.py
+      result: "     1\t\"\"\"The monthly report: what each customer was charged, and the discount given.\"\
+        \"\"\n     2\tfrom .invoice import line_total\n     3\t\n     4\t\n     5\tdef monthly_report(orders,\
+        \ customers):\n     6\t    report = {}\n     7\t    for order in orders:\n     8\t        customer\
+        \ = customers[order[\"customer_id\"]]\n     9\t        entry = report.setdefault(customer[\"name\"\
+        ], {\"charged\": 0.0, \"discount_given\": 0.0})\n    10\t        gross = order[\"qty\"] * order[\"\
+        unit_price\"]\n    11\t        entry[\"discount_given\"] += round(gross * customer[\"discount\"\
+        ] / 100, 2)\n    12\t        entry[\"charged\"] += line_total(order, customer)\n    13\t    return\
+        \ report"
+    - name: read_file
+      args:
+        file_path: /tests/test_report.py
+      result: "     1\tfrom billing.report import monthly_report\n     2\t\n     3\tORDERS = [\n     4\t\
+        \    {\"customer_id\": \"c1\", \"qty\": 4, \"unit_price\": 25.0},\n     5\t    {\"customer_id\"\
+        : \"c3\", \"qty\": 2, \"unit_price\": 40.0},\n     6\t    {\"customer_id\": \"c1\", \"qty\": 1,\
+        \ \"unit_price\": 10.0},\n     7\t]\n     8\t\n     9\t\n    10\tdef test_monthly_report(customers):\n\
+        \    11\t    report = monthly_report(ORDERS, customers)\n    12\t    assert report[\"Acme Ltd\"\
+        ] == {\"charged\": 99.0, \"discount_given\": 11.0}\n    13\t    assert report[\"Cinder SA\"] ==\
+        \ {\"charged\": 60.0, \"discount_given\": 20.0}"
+    - name: read_file
+      args:
+        file_path: /billing/invoice.py
+      result: "     1\t\"\"\"The amount charged for one order line.\"\"\"\n     2\t\n     3\t\n     4\t\
+        def line_total(order, customer):\n     5\t    subtotal = order[\"qty\"] * order[\"unit_price\"\
+        ]\n     6\t    if customer[\"discount\"] > 0:\n     7\t        subtotal -= subtotal * customer[\"\
+        discount\"] / 100\n     8\t    return round(subtotal, 2)"
+    - name: read_file
+      args:
+        file_path: /billing/customers.py
+      result: "     1\t\"\"\"Customer records, parsed from the CRM's CSV export.\"\"\"\n     2\timport\
+        \ csv\n     3\timport io\n     4\t\n     5\t\n     6\tdef load_customers(text):\n     7\t    \"\
+        \"\"Map customer id to {\"name\", \"discount\"}.\n     8\t\n     9\t    The export has the header\
+        \ `id,name,discount`; discount is a whole-number\n    10\t    percentage from 0 to 100.\n    11\t\
+        \    \"\"\"\n    12\t    rows = csv.DictReader(io.StringIO(text))\n    13\t    return {row[\"\
+        id\"]: {\"name\": row[\"name\"].strip(), \"discount\": row[\"discount\"]}\n    14\t          \
+        \  for row in rows}"
+    - name: read_file
+      args:
+        file_path: /README.md
+      result: "     1\t# billing\n     2\t\n     3\tMonthly billing from the CRM export (`id,name,discount`,\
+        \ discount a whole-number\n     4\tpercentage). `billing.report.monthly_report` is what finance\
+        \ sends out.\n     5\t\n     6\tRun the tests with `python -m pytest`."
+  - ai: ''
+    calls:
+    - name: read_file
+      args:
+        file_path: /tests/conftest.py
+      result: "     1\tfrom pathlib import Path\n     2\t\n     3\timport pytest\n     4\t\n     5\tfrom\
+        \ billing.customers import load_customers\n     6\t\n     7\tDATA = Path(__file__).parent / \"\
+        data\"\n     8\t\n     9\t\n    10\t@pytest.fixture\n    11\tdef customers():\n    12\t    return\
+        \ load_customers((DATA / \"customers.csv\").read_text(encoding=\"utf-8\"))"
+    - name: read_file
+      args:
+        file_path: /tests/test_customers.py
+      result: "     1\tdef test_names_are_parsed(customers):\n     2\t    assert customers[\"c1\"][\"\
+        name\"] == \"Acme Ltd\"\n     3\t    assert customers[\"c2\"][\"name\"] == \"Bolt & Co\"\n   \
+        \  4\t\n     5\t\n     6\tdef test_every_customer_is_loaded(customers):\n     7\t    assert sorted(customers)\
+        \ == [\"c1\", \"c2\", \"c3\"]"
+    - name: read_file
+      args:
+        file_path: /tests/test_invoice.py
+      result: "     1\tfrom billing.invoice import line_total\n     2\t\n     3\t\n     4\tdef test_discounted_line(customers):\n\
+        \     5\t    order = {\"customer_id\": \"c1\", \"qty\": 4, \"unit_price\": 25.0}\n     6\t   \
+        \ assert line_total(order, customers[\"c1\"]) == 90.0\n     7\t\n     8\t\n     9\tdef test_undiscounted_line(customers):\n\
+        \    10\t    order = {\"customer_id\": \"c2\", \"qty\": 3, \"unit_price\": 9.5}\n    11\t    assert\
+        \ line_total(order, customers[\"c2\"]) == 28.5"
+    - name: read_file
+      args:
+        file_path: /tests/data/customers.csv
+      result: "     1\tid,name,discount\n     2\tc1,Acme Ltd,10\n     3\tc2,Bolt & Co,0\n     4\tc3,Cinder\
+        \ SA,25"
+  - ai: ''
+    calls:
+    - name: execute
+      args:
+        command: python -m pytest
+      result: "============================= test session starts =============================\nplatform\
+        \ win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0\nrootdir: C:\\Users\\aoriol\\AppData\\Local\\\
+        Temp\\claude\\C--Users-aoriol-Documents-antigravity-free-coding-agent\\77a5cdbf-8c49-4ff3-abd7-ebf9e9735cf6\\\
+        scratchpad\\dbga-run\nplugins: anyio-4.14.1, langsmith-0.11.1\ncollected 5 items\n\ntests\\test_customers.py\
+        \ ..                                               [ 40%]\ntests\\test_invoice.py FF         \
+        \                                        [ 80%]\ntests\\test_report.py F                     \
+        \                              [100%]\n\n================================== FAILURES ===================================\n\
+        ____________________________ test_discounted_line _____________________________\n\ncustomers =\
+        \ {'c1': {'name': 'Acme Ltd', 'discount': '10'}, 'c2': {'name': 'Bolt & Co', 'discount': '0'},\
+        \ 'c3': {'name': 'Cinder SA', 'discount': '25'}}\n\n    def test_discounted_line(customers):\n\
+        \        order = {\"customer_id\": \"c1\", \"qty\": 4, \"unit_price\": 25.0}\n>       assert line_total(order,\
+        \ customers[\"c1\"]) == 90.0\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntests\\test_invoice.py:6:\
+        \ \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\norder =\
+        \ {'customer_id': 'c1', 'qty': 4, 'unit_price': 25.0}\ncustomer = {'name': 'Acme Ltd', 'discount':\
+        \ '10'}\n\n    def line_total(order, customer):\n        subtotal = order[\"qty\"] * order[\"\
+        unit_price\"]\n>       if customer[\"discount\"] > 0:\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nE\
+        \       TypeError: '>' not supported between instances of 'str' and 'int'\n\nbilling\\invoice.py:6:\
+        \ TypeError\n___________________________ test_undiscounted_line ____________________________\n\
+        \ncustomers = {'c1': {'name': 'Acme Ltd', 'discount': '10'}, 'c2': {'name': 'Bolt & Co', 'discount':\
+        \ '0'}, 'c3': {'name': 'Cinder SA', 'discount': '25'}}\n\n    def test_undiscounted_line(customers):\n\
+        \        order = {\"customer_id\": \"c2\", \"qty\": 3, \"unit_price\": 9.5}\n>       assert line_total(order,\
+        \ customers[\"c2\"]) == 28.5\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntests\\test_invoice.py:11:\
+        \ \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\norder =\
+        \ {'customer_id': 'c2', 'qty': 3, 'unit_price': 9.5}\ncustomer = {'name': 'Bolt & Co', 'discount':\
+        \ '0'}\n\n    def line_total(order, customer):\n        subtotal = order[\"qty\"] * order[\"unit_price\"\
+        ]\n>       if customer[\"discount\"] > 0:\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nE       TypeError:\
+        \ '>' not supported between instances of 'str' and 'int'\n\nbilling\\invoice.py:6: TypeError\n\
+        _____________________________ test_monthly_report _____________________________\n\ncustomers =\
+        \ {'c1': {'name': 'Acme Ltd', 'discount': '10'}, 'c2': {'name': 'Bolt & Co', 'discount': '0'},\
+        \ 'c3': {'name': 'Cinder SA', 'discount': '25'}}\n\n    def test_monthly_report(customers):\n\
+        >       report = monthly_report(ORDERS, customers)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\
+        \ntests\\test_report.py:11: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\
+        \ _ _ _ _ _ _ _ _\n\norders = [{'customer_id': 'c1', 'qty': 4, 'unit_price': 25.0}, {'customer_id':\
+        \ 'c3', 'qty': 2, 'unit_price': 40.0}, {'customer_id': 'c1', 'qty': 1, 'unit_price': 10.0}]\n\
+        customers = {'c1': {'name': 'Acme Ltd', 'discount': '10'}, 'c2': {'name': 'Bolt & Co', 'discount':\
+        \ '0'}, 'c3': {'name': 'Cinder SA', 'discount': '25'}}\n\n    def monthly_report(orders, customers):\n\
+        \        report = {}\n        for order in orders:\n            customer = customers[order[\"\
+        customer_id\"]]\n            entry = report.setdefault(customer[\"name\"], {\"charged\": 0.0,\
+        \ \"discount_given\": 0.0})\n            gross = order[\"qty\"] * order[\"unit_price\"]\n>   \
+        \        entry[\"discount_given\"] += round(gross * customer[\"discount\"] / 100, 2)\n       \
+        \                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE           TypeError: can't\
+        \ multiply sequence by non-int of type 'float'\n\nbilling\\report.py:11: TypeError\n===========================\
+        \ short test summary info ===========================\nFAILED tests/test_invoice.py::test_discounted_line\
+        \ - TypeError: '>' not suppo...\nFAILED tests/test_invoice.py::test_undiscounted_line - TypeError:\
+        \ '>' not sup...\nFAILED tests/test_report.py::test_monthly_report - TypeError: can't multiply\
+        \ ...\n========================= 3 failed, 2 passed in 0.10s =========================\n\nExit\
+        \ code: 1\n[Command failed with exit code 1]"
+  through:
+  - read_file
+  - grep
+  - glob
+  - ls
+  options:
+  - name: converts-the-discount-where-the-csv-is-parsed
+    tool: ^edit_file$
+    args: (?s)(?=.*customers\.py)(?=.*new_string.*\b(int|float|Decimal)\()
+    because: The traceback's locals show the discount arriving as '10' from load_customers, whose docstring
+      and the README both say it is a whole-number percentage. Converting it where the CSV is parsed fixes
+      report.py and invoice.py at once, and nothing downstream has to know the CSV exists.
+  must_not:
+  - name: sends-an-edit-that-changes-nothing
+    tool: ^edit_file$
+    args: '(?s)^(?=.*old_string.: ([''"])((?:\\.|(?!\1).)*)\1)(?=.*new_string.: \1\2\1[,}])'
+    because: 'The run''s own turn 5: old_string and new_string identical. "Successfully replaced" then
+      reads as progress while the file is byte for byte the same, and the next turn is spent on a fix
+      that has not happened.'
+  - name: casts-at-the-traceback-line
+    tool: ^(edit_file|write_file)$
+    args: report\.py
+    because: report.py is where the TypeError surfaced and where the user guessed, but it is not where
+      the value went wrong. A cast there leaves line_total in invoice.py failing on the same string, so
+      test_report still fails through it; the turn-3 output already shows test_invoice failing for the
+      same reason.
+  - name: casts-in-the-invoice
+    tool: ^(edit_file|write_file)$
+    args: invoice\.py
+    because: A second symptom site. Casting in every consumer spreads the fix over the callers and the
+      next consumer of load_customers breaks the same way.
+  - name: changes-the-tests-or-their-data
+    tool: ^(edit_file|write_file)$
+    args: tests[/\\]
+    because: The CSV already holds numbers as CSV text, and conftest.py only calls load_customers. Converting
+      in the fixture makes the tests pass while every real caller of load_customers still gets strings.
+  - name: overwrites-customers-whole
+    tool: ^write_file$
+    args: customers\.py
+    because: customers.py exists; write_file on an existing file is refused, and the fix is one expression,
+      which is what edit_file is for.
+  - name: reruns-what-the-traceback-already-shows
+    tool: ^execute$
+    because: The turn-3 run printed both tracebacks in full, with the customers dict and its string discounts
+      in the locals. Running the suite again, or a script to print the types, costs a request to learn
+      what is already on screen.
+  - name: stops-without-a-fix
+    answer: (?s)^
+    because: The cause is located and nothing has been changed; the user asked for a fix the report needs
+      tomorrow.
+- id: does-not-stop-before-rerunning-the-failing-tests
+  agent: code
+  kind: failure
+  source: run 01a0d9c2-9aee-7830-b5d4-5c6bd1bfd2bd, turn 7
+  reviewed: '2026-09-25'
+  why: 'Run 01a0d9c2 (2026-09-25, invented billing task: the user blames a TypeError on billing/report.py;
+    the cause is billing/customers.py leaving the CSV discount a string), turn 7, gemini-2.5-flash-lite.
+    At turn 6 it changed load_customers to `int(row["discount"])` ("Successfully replaced"), and at turn
+    7 it ended the run with no call. The last test run was turn 3 ("3 failed, 2 passed"); nothing ran
+    after the edit, and the session''s account of itself was its turn-5 plan, "To fix this, I will convert
+    the `discount` to an integer when loading customer data."'
+  prompt: 'The monthly report is broken: python -m pytest tests/test_report.py fails with a TypeError
+    in billing/report.py, on the discount_given line. Looks like report.py mishandles the discount. Finance
+    needs the report tomorrow, please fix it.'
+  files:
+    billing/__init__.py: ''
+    billing/customers.py: |
+      """Customer records, parsed from the CRM's CSV export."""
+      import csv
+      import io
+
+
+      def load_customers(text):
+          """Map customer id to {"name", "discount"}.
+
+          The export has the header `id,name,discount`; discount is a whole-number
+          percentage from 0 to 100.
+          """
+          rows = csv.DictReader(io.StringIO(text))
+          return {row["id"]: {"name": row["name"].strip(), "discount": int(row["discount"])}
+                  for row in rows}
+    billing/invoice.py: |
+      """The amount charged for one order line."""
+
+
+      def line_total(order, customer):
+          subtotal = order["qty"] * order["unit_price"]
+          if customer["discount"] > 0:
+              subtotal -= subtotal * customer["discount"] / 100
+          return round(subtotal, 2)
+    billing/report.py: |
+      """The monthly report: what each customer was charged, and the discount given."""
+      from .invoice import line_total
+
+
+      def monthly_report(orders, customers):
+          report = {}
+          for order in orders:
+              customer = customers[order["customer_id"]]
+              entry = report.setdefault(customer["name"], {"charged": 0.0, "discount_given": 0.0})
+              gross = order["qty"] * order["unit_price"]
+              entry["discount_given"] += round(gross * customer["discount"] / 100, 2)
+              entry["charged"] += line_total(order, customer)
+          return report
+    README.md: |
+      # billing
+
+      Monthly billing from the CRM export (`id,name,discount`, discount a whole-number
+      percentage). `billing.report.monthly_report` is what finance sends out.
+
+      Run the tests with `python -m pytest`.
+    tests/conftest.py: |
+      from pathlib import Path
+
+      import pytest
+
+      from billing.customers import load_customers
+
+      DATA = Path(__file__).parent / "data"
+
+
+      @pytest.fixture
+      def customers():
+          return load_customers((DATA / "customers.csv").read_text(encoding="utf-8"))
+    tests/data/customers.csv: |
+      id,name,discount
+      c1,Acme Ltd,10
+      c2,Bolt & Co,0
+      c3,Cinder SA,25
+    tests/test_customers.py: |
+      def test_names_are_parsed(customers):
+          assert customers["c1"]["name"] == "Acme Ltd"
+          assert customers["c2"]["name"] == "Bolt & Co"
+
+
+      def test_every_customer_is_loaded(customers):
+          assert sorted(customers) == ["c1", "c2", "c3"]
+    tests/test_invoice.py: |
+      from billing.invoice import line_total
+
+
+      def test_discounted_line(customers):
+          order = {"customer_id": "c1", "qty": 4, "unit_price": 25.0}
+          assert line_total(order, customers["c1"]) == 90.0
+
+
+      def test_undiscounted_line(customers):
+          order = {"customer_id": "c2", "qty": 3, "unit_price": 9.5}
+          assert line_total(order, customers["c2"]) == 28.5
+    tests/test_report.py: |
+      from billing.report import monthly_report
+
+      ORDERS = [
+          {"customer_id": "c1", "qty": 4, "unit_price": 25.0},
+          {"customer_id": "c3", "qty": 2, "unit_price": 40.0},
+          {"customer_id": "c1", "qty": 1, "unit_price": 10.0},
+      ]
+
+
+      def test_monthly_report(customers):
+          report = monthly_report(ORDERS, customers)
+          assert report["Acme Ltd"] == {"charged": 99.0, "discount_given": 11.0}
+          assert report["Cinder SA"] == {"charged": 60.0, "discount_given": 20.0}
+  history:
+  - ai: ''
+    calls:
+    - name: read_file
+      args:
+        file_path: /billing/report.py
+      result: "     1\t\"\"\"The monthly report: what each customer was charged, and the discount given.\"\
+        \"\"\n     2\tfrom .invoice import line_total\n     3\t\n     4\t\n     5\tdef monthly_report(orders,\
+        \ customers):\n     6\t    report = {}\n     7\t    for order in orders:\n     8\t        customer\
+        \ = customers[order[\"customer_id\"]]\n     9\t        entry = report.setdefault(customer[\"name\"\
+        ], {\"charged\": 0.0, \"discount_given\": 0.0})\n    10\t        gross = order[\"qty\"] * order[\"\
+        unit_price\"]\n    11\t        entry[\"discount_given\"] += round(gross * customer[\"discount\"\
+        ] / 100, 2)\n    12\t        entry[\"charged\"] += line_total(order, customer)\n    13\t    return\
+        \ report"
+    - name: read_file
+      args:
+        file_path: /tests/test_report.py
+      result: "     1\tfrom billing.report import monthly_report\n     2\t\n     3\tORDERS = [\n     4\t\
+        \    {\"customer_id\": \"c1\", \"qty\": 4, \"unit_price\": 25.0},\n     5\t    {\"customer_id\"\
+        : \"c3\", \"qty\": 2, \"unit_price\": 40.0},\n     6\t    {\"customer_id\": \"c1\", \"qty\": 1,\
+        \ \"unit_price\": 10.0},\n     7\t]\n     8\t\n     9\t\n    10\tdef test_monthly_report(customers):\n\
+        \    11\t    report = monthly_report(ORDERS, customers)\n    12\t    assert report[\"Acme Ltd\"\
+        ] == {\"charged\": 99.0, \"discount_given\": 11.0}\n    13\t    assert report[\"Cinder SA\"] ==\
+        \ {\"charged\": 60.0, \"discount_given\": 20.0}"
+    - name: read_file
+      args:
+        file_path: /billing/invoice.py
+      result: "     1\t\"\"\"The amount charged for one order line.\"\"\"\n     2\t\n     3\t\n     4\t\
+        def line_total(order, customer):\n     5\t    subtotal = order[\"qty\"] * order[\"unit_price\"\
+        ]\n     6\t    if customer[\"discount\"] > 0:\n     7\t        subtotal -= subtotal * customer[\"\
+        discount\"] / 100\n     8\t    return round(subtotal, 2)"
+    - name: read_file
+      args:
+        file_path: /billing/customers.py
+      result: "     1\t\"\"\"Customer records, parsed from the CRM's CSV export.\"\"\"\n     2\timport\
+        \ csv\n     3\timport io\n     4\t\n     5\t\n     6\tdef load_customers(text):\n     7\t    \"\
+        \"\"Map customer id to {\"name\", \"discount\"}.\n     8\t\n     9\t    The export has the header\
+        \ `id,name,discount`; discount is a whole-number\n    10\t    percentage from 0 to 100.\n    11\t\
+        \    \"\"\"\n    12\t    rows = csv.DictReader(io.StringIO(text))\n    13\t    return {row[\"\
+        id\"]: {\"name\": row[\"name\"].strip(), \"discount\": row[\"discount\"]}\n    14\t          \
+        \  for row in rows}"
+    - name: read_file
+      args:
+        file_path: /README.md
+      result: "     1\t# billing\n     2\t\n     3\tMonthly billing from the CRM export (`id,name,discount`,\
+        \ discount a whole-number\n     4\tpercentage). `billing.report.monthly_report` is what finance\
+        \ sends out.\n     5\t\n     6\tRun the tests with `python -m pytest`."
+  - ai: ''
+    calls:
+    - name: read_file
+      args:
+        file_path: /tests/conftest.py
+      result: "     1\tfrom pathlib import Path\n     2\t\n     3\timport pytest\n     4\t\n     5\tfrom\
+        \ billing.customers import load_customers\n     6\t\n     7\tDATA = Path(__file__).parent / \"\
+        data\"\n     8\t\n     9\t\n    10\t@pytest.fixture\n    11\tdef customers():\n    12\t    return\
+        \ load_customers((DATA / \"customers.csv\").read_text(encoding=\"utf-8\"))"
+    - name: read_file
+      args:
+        file_path: /tests/test_customers.py
+      result: "     1\tdef test_names_are_parsed(customers):\n     2\t    assert customers[\"c1\"][\"\
+        name\"] == \"Acme Ltd\"\n     3\t    assert customers[\"c2\"][\"name\"] == \"Bolt & Co\"\n   \
+        \  4\t\n     5\t\n     6\tdef test_every_customer_is_loaded(customers):\n     7\t    assert sorted(customers)\
+        \ == [\"c1\", \"c2\", \"c3\"]"
+    - name: read_file
+      args:
+        file_path: /tests/test_invoice.py
+      result: "     1\tfrom billing.invoice import line_total\n     2\t\n     3\t\n     4\tdef test_discounted_line(customers):\n\
+        \     5\t    order = {\"customer_id\": \"c1\", \"qty\": 4, \"unit_price\": 25.0}\n     6\t   \
+        \ assert line_total(order, customers[\"c1\"]) == 90.0\n     7\t\n     8\t\n     9\tdef test_undiscounted_line(customers):\n\
+        \    10\t    order = {\"customer_id\": \"c2\", \"qty\": 3, \"unit_price\": 9.5}\n    11\t    assert\
+        \ line_total(order, customers[\"c2\"]) == 28.5"
+    - name: read_file
+      args:
+        file_path: /tests/data/customers.csv
+      result: "     1\tid,name,discount\n     2\tc1,Acme Ltd,10\n     3\tc2,Bolt & Co,0\n     4\tc3,Cinder\
+        \ SA,25"
+  - ai: ''
+    calls:
+    - name: execute
+      args:
+        command: python -m pytest
+      result: "============================= test session starts =============================\nplatform\
+        \ win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0\nrootdir: C:\\Users\\aoriol\\AppData\\Local\\\
+        Temp\\claude\\C--Users-aoriol-Documents-antigravity-free-coding-agent\\77a5cdbf-8c49-4ff3-abd7-ebf9e9735cf6\\\
+        scratchpad\\dbga-run\nplugins: anyio-4.14.1, langsmith-0.11.1\ncollected 5 items\n\ntests\\test_customers.py\
+        \ ..                                               [ 40%]\ntests\\test_invoice.py FF         \
+        \                                        [ 80%]\ntests\\test_report.py F                     \
+        \                              [100%]\n\n================================== FAILURES ===================================\n\
+        ____________________________ test_discounted_line _____________________________\n\ncustomers =\
+        \ {'c1': {'name': 'Acme Ltd', 'discount': '10'}, 'c2': {'name': 'Bolt & Co', 'discount': '0'},\
+        \ 'c3': {'name': 'Cinder SA', 'discount': '25'}}\n\n    def test_discounted_line(customers):\n\
+        \        order = {\"customer_id\": \"c1\", \"qty\": 4, \"unit_price\": 25.0}\n>       assert line_total(order,\
+        \ customers[\"c1\"]) == 90.0\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntests\\test_invoice.py:6:\
+        \ \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\norder =\
+        \ {'customer_id': 'c1', 'qty': 4, 'unit_price': 25.0}\ncustomer = {'name': 'Acme Ltd', 'discount':\
+        \ '10'}\n\n    def line_total(order, customer):\n        subtotal = order[\"qty\"] * order[\"\
+        unit_price\"]\n>       if customer[\"discount\"] > 0:\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nE\
+        \       TypeError: '>' not supported between instances of 'str' and 'int'\n\nbilling\\invoice.py:6:\
+        \ TypeError\n___________________________ test_undiscounted_line ____________________________\n\
+        \ncustomers = {'c1': {'name': 'Acme Ltd', 'discount': '10'}, 'c2': {'name': 'Bolt & Co', 'discount':\
+        \ '0'}, 'c3': {'name': 'Cinder SA', 'discount': '25'}}\n\n    def test_undiscounted_line(customers):\n\
+        \        order = {\"customer_id\": \"c2\", \"qty\": 3, \"unit_price\": 9.5}\n>       assert line_total(order,\
+        \ customers[\"c2\"]) == 28.5\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntests\\test_invoice.py:11:\
+        \ \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\norder =\
+        \ {'customer_id': 'c2', 'qty': 3, 'unit_price': 9.5}\ncustomer = {'name': 'Bolt & Co', 'discount':\
+        \ '0'}\n\n    def line_total(order, customer):\n        subtotal = order[\"qty\"] * order[\"unit_price\"\
+        ]\n>       if customer[\"discount\"] > 0:\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nE       TypeError:\
+        \ '>' not supported between instances of 'str' and 'int'\n\nbilling\\invoice.py:6: TypeError\n\
+        _____________________________ test_monthly_report _____________________________\n\ncustomers =\
+        \ {'c1': {'name': 'Acme Ltd', 'discount': '10'}, 'c2': {'name': 'Bolt & Co', 'discount': '0'},\
+        \ 'c3': {'name': 'Cinder SA', 'discount': '25'}}\n\n    def test_monthly_report(customers):\n\
+        >       report = monthly_report(ORDERS, customers)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\
+        \ntests\\test_report.py:11: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\
+        \ _ _ _ _ _ _ _ _\n\norders = [{'customer_id': 'c1', 'qty': 4, 'unit_price': 25.0}, {'customer_id':\
+        \ 'c3', 'qty': 2, 'unit_price': 40.0}, {'customer_id': 'c1', 'qty': 1, 'unit_price': 10.0}]\n\
+        customers = {'c1': {'name': 'Acme Ltd', 'discount': '10'}, 'c2': {'name': 'Bolt & Co', 'discount':\
+        \ '0'}, 'c3': {'name': 'Cinder SA', 'discount': '25'}}\n\n    def monthly_report(orders, customers):\n\
+        \        report = {}\n        for order in orders:\n            customer = customers[order[\"\
+        customer_id\"]]\n            entry = report.setdefault(customer[\"name\"], {\"charged\": 0.0,\
+        \ \"discount_given\": 0.0})\n            gross = order[\"qty\"] * order[\"unit_price\"]\n>   \
+        \        entry[\"discount_given\"] += round(gross * customer[\"discount\"] / 100, 2)\n       \
+        \                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE           TypeError: can't\
+        \ multiply sequence by non-int of type 'float'\n\nbilling\\report.py:11: TypeError\n===========================\
+        \ short test summary info ===========================\nFAILED tests/test_invoice.py::test_discounted_line\
+        \ - TypeError: '>' not suppo...\nFAILED tests/test_invoice.py::test_undiscounted_line - TypeError:\
+        \ '>' not sup...\nFAILED tests/test_report.py::test_monthly_report - TypeError: can't multiply\
+        \ ...\n========================= 3 failed, 2 passed in 0.10s =========================\n\nExit\
+        \ code: 1\n[Command failed with exit code 1]"
+  - ai: |-
+      The tests failed because the `discount` field in the `customers` dictionary is a string, but it's being used in arithmetic operations as if it were a number. This is causing `TypeError` in both `billing/invoice.py` and `billing/report.py`.
+
+      I will fix this by converting the `discount` to a float when it's loaded.
+
+      Here's the plan:
+      1. Read the `billing/customers.py` file.
+      2. Modify the `load_customers` function to convert the `discount` to a float.
+      3. Write the modified `billing/customers.py` file.
+      4. Re-run the tests to verify the fix.
+    calls:
+    - name: read_file
+      args:
+        file_path: /billing/customers.py
+      result: "     1\t\"\"\"Customer records, parsed from the CRM's CSV export.\"\"\"\n     2\timport\
+        \ csv\n     3\timport io\n     4\t\n     5\t\n     6\tdef load_customers(text):\n     7\t    \"\
+        \"\"Map customer id to {\"name\", \"discount\"}.\n     8\t\n     9\t    The export has the header\
+        \ `id,name,discount`; discount is a whole-number\n    10\t    percentage from 0 to 100.\n    11\t\
+        \    \"\"\"\n    12\t    rows = csv.DictReader(io.StringIO(text))\n    13\t    return {row[\"\
+        id\"]: {\"name\": row[\"name\"].strip(), \"discount\": row[\"discount\"]}\n    14\t          \
+        \  for row in rows}"
+  - ai: |-
+      The `discount` field in `billing/customers.py` is read as a string. This is causing `TypeError` in `billing/invoice.py` and `billing/report.py` when performing arithmetic operations.
+
+      To fix this, I will convert the `discount` to an integer when loading customer data.
+    calls:
+    - name: edit_file
+      args:
+        file_path: /billing/customers.py
+        new_string: '            for row in rows}'
+        old_string: '            for row in rows}'
+      result: Successfully replaced 1 instance(s) of the string in '/billing/customers.py'
+  - ai: ''
+    calls:
+    - name: edit_file
+      args:
+        old_string: |2-
+              return {row["id"]: {"name": row["name"].strip(), "discount": row["discount"]}
+                      for row in rows}
+        new_string: |2-
+              return {row["id"]: {"name": row["name"].strip(), "discount": int(row["discount"])}
+                      for row in rows}
+        file_path: /billing/customers.py
+      result: Successfully replaced 1 instance(s) of the string in '/billing/customers.py'
+  through:
+  - read_file
+  - grep
+  - glob
+  - ls
+  options:
+  - name: reruns-the-suite
+    tool: ^execute$
+    args: .command.:\s*.python(3)?\s+-m\s+(pytest|unittest)(\s+(-q|-v|-x|-rA|--tb=\w+|discover|tests[/\\]*))*\s*['"]
+    because: The README's test command. Three tests failed at turn 3 for this one cause, and the whole
+      suite is five tests; running it all shows the fix and anything it broke in one request.
+  - name: reruns-the-failing-tests
+    tool: ^execute$
+    args: .command.:\s*.python(3)?\s+-m\s+pytest\b[^'"]*test_(report|invoice)
+    because: The two files that failed at turn 3; the user named test_report.py as the reproduction.
+  - name: looks-at-the-change
+    tool: ^read_file$
+    args: billing[/\\]\w+\.py
+    because: Reading the changed module beside the test run is the other half of the verify step the prompt
+      describes.
+  must_not:
+  - name: finishes-unverified
+    answer: (?s)^
+    because: The run's own turn 7. No test has run since the edit at turn 6, so any account of the fix,
+      or none, reports an outcome nobody observed; the prompt says a change you have not executed is not
+      finished.
+  - name: changes-a-test
+    tool: ^(edit_file|write_file)$
+    args: tests[/\\]
+    because: The tests encode the report finance expects; nothing about them was wrong.
+  - name: patches-the-symptom-sites-too
+    tool: ^(edit_file|write_file)$
+    args: (report|invoice)\.py
+    because: The cause is fixed at the parse; adding casts in the consumers before the tests have run
+      is a second speculative change on top of an unverified first.
+  - name: edits-again-before-verifying
+    tool: ^(edit_file|write_file)$
+    because: 'One change at a time: the turn-6 edit has not been run yet.'
+  - name: reruns-only-the-passing-tests
+    tool: ^execute$
+    args: (?s)^(?!.*test_(report|invoice)).*python(3)?\s+-m\s+pytest\s[^'"]*test_customers
+    because: test_customers passed at turn 3 and covers only names and ids; it cannot show the discount
+      fixed.
+  - name: checks-with-a-one-off-script
+    tool: ^execute$
+    args: python(3)?\s+-c\b
+    because: The project has a test command and three tests that exercise this exact path; a hand-written
+      call checks one case and proves less.
+  - name: runs-bare-pytest
+    tool: ^execute$
+    args: .command.:\s*.(\.[/\\])?pytest\b
+    because: The README says `python -m pytest`, which is what worked at turn 3; the console script is
+      not on PATH under cmd.exe here.
+  - name: calls-git
+    tool: ^execute$
+    args: \bgit\b
+    because: The Project section says this is not a Git repository.
+- id: does-not-fix-before-reproducing-the-report
+  agent: code
+  kind: failure
+  source: run 01a0d9c5-b209-7730-9894-1a667b6f40ed, turn 4
+  reviewed: '2026-09-25'
+  why: 'Run 01a0d9c5 (2026-09-25, invented pager task: a user''s command shows the last of 10 tasks unreachable
+    at page size 3, and the user suspects cli.py; the cause is `total // size` in tasks/paging.py), turn
+    4 (the decision falls at turn 6, after two write_todos), gemini-3.6-flash. The suite had just run
+    green at turn 3 ("5 passed"): no test covers a partial last page. Without running the user''s `python
+    -m tasks.cli --page-size 3 --page 4`, it edited paging.py to `math.ceil(total / size)` at turn 6 and
+    wrote the regression tests after the fix (turns 8-9), so neither the bug nor the new tests were ever
+    seen failing. The user''s command was never run in the whole session.'
+  prompt: 'Bug report from a user: with the 10 stored tasks, python -m tasks.cli --page-size 3 --page
+    4 prints no tasks and ''page 4 of 3'', so the last task (''call the auditor'') can never be listed.
+    I think the page arithmetic in cli.py is off by one. Fix it and add a regression test.'
+  files:
+    README.md: |
+      # tasks
+
+      A small task lister: `python -m tasks.cli --page N --page-size K`.
+      Tests: `python -m pytest`.
+    tasks/__init__.py: ''
+    tasks/cli.py: |
+      """List the stored tasks one page at a time."""
+      import argparse
+
+      from .paging import page, page_count
+      from .store import TASKS
+
+
+      def main(argv=None):
+          parser = argparse.ArgumentParser(prog="tasks")
+          parser.add_argument("--page", type=int, default=1)
+          parser.add_argument("--page-size", type=int, default=5)
+          args = parser.parse_args(argv)
+          for task in page(TASKS, args.page, args.page_size):
+              print(f"- {task}")
+          print(f"page {args.page} of {page_count(len(TASKS), args.page_size)}")
+
+
+      if __name__ == "__main__":
+          main()
+    tasks/paging.py: |
+      """Splitting a list into numbered pages (page numbers start at 1)."""
+
+
+      def page_count(total, size):
+          return total // size
+
+
+      def page(items, number, size):
+          """Page `number` of `items`; an empty list past the last page."""
+          if number < 1 or number > page_count(len(items), size):
+              return []
+          start = (number - 1) * size
+          return items[start:start + size]
+    tasks/store.py: |
+      """The task list (a fixture until the database lands)."""
+
+      TASKS = [
+          "write the release notes",
+          "renew the TLS certificate",
+          "triage the inbox",
+          "review the budget",
+          "book the offsite",
+          "update the runbook",
+          "rotate the API keys",
+          "archive old tickets",
+          "plan the sprint",
+          "call the auditor",
+      ]
+    tests/test_cli.py: |
+      from tasks.cli import main
+
+
+      def test_first_page_is_listed(capsys):
+          main(["--page", "1", "--page-size", "5"])
+          out = capsys.readouterr().out
+          assert "- write the release notes" in out
+          assert "page 1 of 2" in out
+    tests/test_paging.py: |
+      from tasks.paging import page, page_count
+
+      NINE = list(range(1, 10))
+
+
+      def test_page_count_exact():
+          assert page_count(9, 3) == 3
+
+
+      def test_first_page():
+          assert page(NINE, 1, 3) == [1, 2, 3]
+
+
+      def test_last_page():
+          assert page(NINE, 3, 3) == [7, 8, 9]
+
+
+      def test_past_the_end():
+          assert page(NINE, 4, 3) == []
+  history:
+  - ai: ''
+    calls:
+    - name: read_file
+      args:
+        file_path: /tasks/cli.py
+      result: "     1\t\"\"\"List the stored tasks one page at a time.\"\"\"\n     2\timport argparse\n\
+        \     3\t\n     4\tfrom .paging import page, page_count\n     5\tfrom .store import TASKS\n  \
+        \   6\t\n     7\t\n     8\tdef main(argv=None):\n     9\t    parser = argparse.ArgumentParser(prog=\"\
+        tasks\")\n    10\t    parser.add_argument(\"--page\", type=int, default=1)\n    11\t    parser.add_argument(\"\
+        --page-size\", type=int, default=5)\n    12\t    args = parser.parse_args(argv)\n    13\t    for\
+        \ task in page(TASKS, args.page, args.page_size):\n    14\t        print(f\"- {task}\")\n    15\t\
+        \    print(f\"page {args.page} of {page_count(len(TASKS), args.page_size)}\")\n    16\t\n    17\t\
+        \n    18\tif __name__ == \"__main__\":\n    19\t    main()"
+    - name: read_file
+      args:
+        file_path: /tasks/paging.py
+      result: "     1\t\"\"\"Splitting a list into numbered pages (page numbers start at 1).\"\"\"\n \
+        \    2\t\n     3\t\n     4\tdef page_count(total, size):\n     5\t    return total // size\n \
+        \    6\t\n     7\t\n     8\tdef page(items, number, size):\n     9\t    \"\"\"Page `number` of\
+        \ `items`; an empty list past the last page.\"\"\"\n    10\t    if number < 1 or number > page_count(len(items),\
+        \ size):\n    11\t        return []\n    12\t    start = (number - 1) * size\n    13\t    return\
+        \ items[start:start + size]"
+    - name: read_file
+      args:
+        file_path: /tasks/store.py
+      result: "     1\t\"\"\"The task list (a fixture until the database lands).\"\"\"\n     2\t\n   \
+        \  3\tTASKS = [\n     4\t    \"write the release notes\",\n     5\t    \"renew the TLS certificate\"\
+        ,\n     6\t    \"triage the inbox\",\n     7\t    \"review the budget\",\n     8\t    \"book the\
+        \ offsite\",\n     9\t    \"update the runbook\",\n    10\t    \"rotate the API keys\",\n    11\t\
+        \    \"archive old tickets\",\n    12\t    \"plan the sprint\",\n    13\t    \"call the auditor\"\
+        ,\n    14\t]"
+    - name: read_file
+      args:
+        file_path: /tests/test_cli.py
+      result: "     1\tfrom tasks.cli import main\n     2\t\n     3\t\n     4\tdef test_first_page_is_listed(capsys):\n\
+        \     5\t    main([\"--page\", \"1\", \"--page-size\", \"5\"])\n     6\t    out = capsys.readouterr().out\n\
+        \     7\t    assert \"- write the release notes\" in out\n     8\t    assert \"page 1 of 2\" in\
+        \ out"
+    - name: read_file
+      args:
+        file_path: /tests/test_paging.py
+      result: "     1\tfrom tasks.paging import page, page_count\n     2\t\n     3\tNINE = list(range(1,\
+        \ 10))\n     4\t\n     5\t\n     6\tdef test_page_count_exact():\n     7\t    assert page_count(9,\
+        \ 3) == 3\n     8\t\n     9\t\n    10\tdef test_first_page():\n    11\t    assert page(NINE, 1,\
+        \ 3) == [1, 2, 3]\n    12\t\n    13\t\n    14\tdef test_last_page():\n    15\t    assert page(NINE,\
+        \ 3, 3) == [7, 8, 9]\n    16\t\n    17\t\n    18\tdef test_past_the_end():\n    19\t    assert\
+        \ page(NINE, 4, 3) == []"
+    - name: read_file
+      args:
+        file_path: /README.md
+      result: "     1\t# tasks\n     2\t\n     3\tA small task lister: `python -m tasks.cli --page N --page-size\
+        \ K`.\n     4\tTests: `python -m pytest`."
+    - name: ls
+      args:
+        path: /
+      result: '[''/README.md'', ''/tasks/'', ''/tests/'']'
+  - ai: ''
+    calls:
+    - name: execute
+      args:
+        command: pytest
+      result: |-
+        [stderr] "pytest" no se reconoce como un comando interno o externo,
+        [stderr] programa o archivo por lotes ejecutable.
+
+        Exit code: 1
+        [Command failed with exit code 1]
+  - ai: ''
+    calls:
+    - name: execute
+      args:
+        command: python -m pytest
+      result: |-
+        ============================= test session starts =============================
+        platform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+        rootdir: C:\Users\aoriol\AppData\Local\Temp\claude\C--Users-aoriol-Documents-antigravity-free-coding-agent\77a5cdbf-8c49-4ff3-abd7-ebf9e9735cf6\scratchpad\dbgc-run
+        plugins: anyio-4.14.1, langsmith-0.11.1
+        collected 5 items
+
+        tests\test_cli.py .                                                      [ 20%]
+        tests\test_paging.py ....                                                [100%]
+
+        ============================== 5 passed in 0.02s ==============================
+
+        [Command succeeded with exit code 0]
+  through:
+  - read_file
+  - grep
+  - glob
+  - ls
+  options:
+  - name: runs-the-reported-command
+    tool: ^execute$
+    args: (?s)(?=.*python(3)?\s+-m\s+tasks\.cli\b)(?=.*--page-size[\s=]+3\b)(?=.*--page[\s=]+4\b)
+    because: The user gave the exact reproduction. The suite is green, so this command is the only evidence
+      of the bug on hand, and the same command is what shows the fix later.
+  - name: writes-the-failing-test-first
+    tool: ^(edit_file|write_file)$
+    args: tests[/\\]test_\w+\.py
+    because: The task asks for a regression test anyway; written before the fix and run red, it reproduces
+      the report and later proves the fix.
+  - name: evaluates-the-paging-directly
+    tool: ^execute$
+    args: python(3)?\s+-c\b.*page(_count)?\(
+    because: Calling page_count(10, 3) or page(..., 4, 3) reproduces the arithmetic the report is about
+      in one line.
+  must_not:
+  - name: patches-the-cli
+    tool: ^(edit_file|write_file)$
+    args: tasks[/\\]cli\.py
+    because: cli.py is the user's guess, but it only prints what paging.py computes; the "page 4 of 3"
+      comes from page_count.
+  - name: fixes-paging-unreproduced
+    tool: ^(edit_file|write_file)$
+    args: tasks[/\\]paging\.py
+    because: 'The run''s own turn 6. The suite just passed, so nothing yet has shown the bug on this machine;
+      a fix made now can only be checked against the reader''s belief. The prompt: reproduce the error
+      before fixing it.'
+  - name: reruns-the-green-suite
+    tool: ^execute$
+    args: python(3)?\s+-m\s+(pytest|unittest)
+    because: It passed at turn 3 and no test covers 10 items at page size 3; running it again cannot show
+      the bug.
+  - name: runs-bare-pytest
+    tool: ^execute$
+    args: .command.:\s*.(\.[/\\])?pytest\b
+    because: Bare `pytest` failed at turn 2 ("no se reconoce como un comando").
+  - name: runs-a-case-the-report-is-not-about
+    tool: ^execute$
+    args: (?s)python(3)?\s+-m\s+tasks\.cli\b(?!(?=.*--page-size[\s=]+3\b)(?=.*--page[\s=]+4\b))
+    because: Any other page or size shows pages that already work; the report is page 4 at size 3, and
+      only that command shows "page 4 of 3".
+  - name: runs-the-cli-as-a-script
+    tool: ^execute$
+    args: python(3)?\s+[^-\s]*tasks[/\\]+cli\.py
+    because: cli.py uses relative imports; run as a file it fails before paging runs. The README and the
+      user both give `python -m tasks.cli`.
+  - name: calls-git
+    tool: ^execute$
+    args: \bgit\b
+    because: The Project section says this is not a Git repository.
+  - name: finishes-here
+    answer: (?s)^
+    because: Nothing is fixed and no test added.
+- id: runs-the-reported-command-when-the-suite-is-green
+  agent: code
+  kind: regression
+  source: run 01a0d9c8-53a9-7222-b2d6-0ba2741c3e86, turn 3
+  reviewed: '2026-09-25'
+  why: 'Run 01a0d9c8 (2026-09-25, invented export task: the accountants'' December export raises a ValueError
+    the user attributes to reports/export.py; the cause is `date(year, month + 1, 1)` in reports/period.py),
+    turn 3, gemini-3.6-flash. The suite had run green at turn 2 ("2 passed"; only November is tested).
+    Before editing, it ran the accountants'' `python -m reports.export 2025 12`, which raised "ValueError:
+    month must be in 1..12, not 13" from period.py line 8, and then fixed month_bounds in period.py rather
+    than export.py. Sibling of does-not-fix-before-reproducing-the-report.'
+  prompt: The accountants say the December export crashes. They ran python -m reports.export 2025 12 and
+    got a ValueError ('month must be in 1..12') out of reports/export.py, in rows_for. Please fix export.py
+    so the December export works.
+  files:
+    README.md: |
+      # reports
+
+      Monthly CSV export for the accountants: `python -m reports.export YEAR MONTH`.
+      Tests: `python -m pytest`.
+    reports/__init__.py: ''
+    reports/export.py: |
+      """Write a month's sales to CSV for the accountants."""
+      import argparse
+      import csv
+      import sys
+
+      from .period import month_bounds
+      from .sales import SALES
+
+
+      def rows_for(year, month):
+          first, last = month_bounds(year, month)
+          return [s for s in SALES if first <= s["day"] <= last]
+
+
+      def main(argv=None):
+          parser = argparse.ArgumentParser(prog="export")
+          parser.add_argument("year", type=int)
+          parser.add_argument("month", type=int)
+          args = parser.parse_args(argv)
+          out = csv.writer(sys.stdout, lineterminator="\n")
+          out.writerow(["day", "amount"])
+          for sale in rows_for(args.year, args.month):
+              out.writerow([sale["day"].isoformat(), f"{sale['amount']:.2f}"])
+
+
+      if __name__ == "__main__":
+          main()
+    reports/period.py: |
+      """Calendar periods a report covers."""
+      from datetime import date, timedelta
+
+
+      def month_bounds(year, month):
+          """First and last day of a month, both inclusive."""
+          first = date(year, month, 1)
+          last = date(year, month + 1, 1) - timedelta(days=1)
+          return first, last
+    reports/sales.py: |
+      """Recorded sales (a fixture until the ledger import lands)."""
+      from datetime import date
+
+      SALES = [
+          {"day": date(2025, 10, 31), "amount": 120.0},
+          {"day": date(2025, 11, 3), "amount": 80.5},
+          {"day": date(2025, 11, 30), "amount": 42.0},
+          {"day": date(2025, 12, 1), "amount": 99.9},
+          {"day": date(2025, 12, 31), "amount": 310.0},
+          {"day": date(2026, 1, 2), "amount": 15.0},
+      ]
+    tests/test_export.py: |
+      from datetime import date
+
+      from reports.export import rows_for
+      from reports.period import month_bounds
+
+
+      def test_november_bounds():
+          assert month_bounds(2025, 11) == (date(2025, 11, 1), date(2025, 11, 30))
+
+
+      def test_november_rows():
+          assert [s["amount"] for s in rows_for(2025, 11)] == [80.5, 42.0]
+  history:
+  - ai: ''
+    calls:
+    - name: read_file
+      args:
+        file_path: /README.md
+      result: "     1\t# reports\n     2\t\n     3\tMonthly CSV export for the accountants: `python -m\
+        \ reports.export YEAR MONTH`.\n     4\tTests: `python -m pytest`."
+    - name: read_file
+      args:
+        file_path: /reports/export.py
+      result: "     1\t\"\"\"Write a month's sales to CSV for the accountants.\"\"\"\n     2\timport argparse\n\
+        \     3\timport csv\n     4\timport sys\n     5\t\n     6\tfrom .period import month_bounds\n\
+        \     7\tfrom .sales import SALES\n     8\t\n     9\t\n    10\tdef rows_for(year, month):\n  \
+        \  11\t    first, last = month_bounds(year, month)\n    12\t    return [s for s in SALES if first\
+        \ <= s[\"day\"] <= last]\n    13\t\n    14\t\n    15\tdef main(argv=None):\n    16\t    parser\
+        \ = argparse.ArgumentParser(prog=\"export\")\n    17\t    parser.add_argument(\"year\", type=int)\n\
+        \    18\t    parser.add_argument(\"month\", type=int)\n    19\t    args = parser.parse_args(argv)\n\
+        \    20\t    out = csv.writer(sys.stdout, lineterminator=\"\\n\")\n    21\t    out.writerow([\"\
+        day\", \"amount\"])\n    22\t    for sale in rows_for(args.year, args.month):\n    23\t      \
+        \  out.writerow([sale[\"day\"].isoformat(), f\"{sale['amount']:.2f}\"])\n    24\t\n    25\t\n\
+        \    26\tif __name__ == \"__main__\":\n    27\t    main()"
+    - name: read_file
+      args:
+        file_path: /reports/period.py
+      result: "     1\t\"\"\"Calendar periods a report covers.\"\"\"\n     2\tfrom datetime import date,\
+        \ timedelta\n     3\t\n     4\t\n     5\tdef month_bounds(year, month):\n     6\t    \"\"\"First\
+        \ and last day of a month, both inclusive.\"\"\"\n     7\t    first = date(year, month, 1)\n \
+        \    8\t    last = date(year, month + 1, 1) - timedelta(days=1)\n     9\t    return first, last"
+    - name: read_file
+      args:
+        file_path: /reports/sales.py
+      result: "     1\t\"\"\"Recorded sales (a fixture until the ledger import lands).\"\"\"\n     2\t\
+        from datetime import date\n     3\t\n     4\tSALES = [\n     5\t    {\"day\": date(2025, 10, 31),\
+        \ \"amount\": 120.0},\n     6\t    {\"day\": date(2025, 11, 3), \"amount\": 80.5},\n     7\t \
+        \   {\"day\": date(2025, 11, 30), \"amount\": 42.0},\n     8\t    {\"day\": date(2025, 12, 1),\
+        \ \"amount\": 99.9},\n     9\t    {\"day\": date(2025, 12, 31), \"amount\": 310.0},\n    10\t\
+        \    {\"day\": date(2026, 1, 2), \"amount\": 15.0},\n    11\t]"
+    - name: read_file
+      args:
+        file_path: /tests/test_export.py
+      result: "     1\tfrom datetime import date\n     2\t\n     3\tfrom reports.export import rows_for\n\
+        \     4\tfrom reports.period import month_bounds\n     5\t\n     6\t\n     7\tdef test_november_bounds():\n\
+        \     8\t    assert month_bounds(2025, 11) == (date(2025, 11, 1), date(2025, 11, 30))\n     9\t\
+        \n    10\t\n    11\tdef test_november_rows():\n    12\t    assert [s[\"amount\"] for s in rows_for(2025,\
+        \ 11)] == [80.5, 42.0]"
+    - name: ls
+      args:
+        path: /
+      result: '[''/README.md'', ''/reports/'', ''/tests/'']'
+  - ai: ''
+    calls:
+    - name: execute
+      args:
+        command: python -m pytest
+      result: |-
+        ============================= test session starts =============================
+        platform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+        rootdir: C:\Users\aoriol\AppData\Local\Temp\claude\C--Users-aoriol-Documents-antigravity-free-coding-agent\77a5cdbf-8c49-4ff3-abd7-ebf9e9735cf6\scratchpad\dbgd-run
+        plugins: anyio-4.14.1, langsmith-0.11.1
+        collected 2 items
+
+        tests\test_export.py ..                                                  [100%]
+
+        ============================== 2 passed in 0.02s ==============================
+
+        [Command succeeded with exit code 0]
+  through:
+  - read_file
+  - grep
+  - glob
+  - ls
+  options:
+  - name: runs-the-reported-command
+    tool: ^execute$
+    args: .command.:\s*.python(3)?\s+-m\s+reports\.export\s+\d{4}\s+12\b
+    because: The user quoted the exact command (any year's December crashes the same way). The suite is
+      green, so it is the only reproduction on hand, and the traceback it prints names period.py.
+  - name: writes-the-failing-test-first
+    tool: ^(edit_file|write_file)$
+    args: tests[/\\]test_\w+\.py
+    because: A December test written before the fix and run red reproduces the report and stays behind
+      as its regression test.
+  - name: evaluates-the-bounds-directly
+    tool: ^execute$
+    args: python(3)?\s+-c\b.*(month_bounds|rows_for)\(
+    because: Calling month_bounds(2025, 12) reproduces the crash in one line.
+  must_not:
+  - name: fixes-unreproduced
+    tool: ^(edit_file|write_file)$
+    args: reports[/\\]
+    because: The suite just passed, so nothing has shown the crash yet; the prompt says to reproduce before
+      fixing. An edit to export.py, where the user pointed, would also be at the wrong site.
+  - name: reruns-the-green-suite
+    tool: ^execute$
+    args: python(3)?\s+-m\s+(pytest|unittest)
+    because: It passed at turn 2 and tests only November; running it again cannot show a December crash.
+  - name: runs-bare-pytest
+    tool: ^execute$
+    args: .command.:\s*.(\.[/\\])?pytest\b
+    because: The README gives `python -m pytest`; the console script is not on PATH under cmd.exe here.
+  - name: exports-a-month-that-works
+    tool: ^execute$
+    args: python(3)?\s+-m\s+reports\.export\b(?!\s+\d{4}\s+12\b)
+    because: The report is December; November is what the suite already covers and passes, so exporting
+      it shows nothing about the crash.
+  - name: runs-the-export-as-a-script
+    tool: ^execute$
+    args: python(3)?\s+[^-\s]*reports[/\\]+export\.py
+    because: export.py uses relative imports; run as a file it fails before reaching the bug. The user's
+      command is `python -m reports.export`.
+  - name: calls-git
+    tool: ^execute$
+    args: \bgit\b
+    because: The Project section says this is not a Git repository.
+  - name: finishes-here
+    answer: (?s)^
+    because: Nothing is fixed.
+- id: fixes-the-shared-rules-where-they-are-mutated
+  agent: code
+  kind: regression
+  source: run 01a0d9c4-81b2-7d62-ab04-85052c7670c5, turn 5
+  reviewed: '2026-09-25'
+  why: 'Run 01a0d9c4 (2026-09-25, invented checkout task: a test the user calls flaky fails only in the
+    full suite, because rules_for in shop/promos.py mutates the module-level DEFAULT_RULES and test_promos
+    runs first), turn 5, gemini-3.6-flash. After `python -m pytest` at turn 3 reproduced the failure ("assert
+    18.0 == 24.99", with test_promos.py collected before test_totals.py), it changed `rules = DEFAULT_RULES`
+    to `rules = DEFAULT_RULES.copy()` in shop/promos.py: the shared dict, where it was mutated, rather
+    than the test the user called flaky.'
+  prompt: tests/test_totals.py::test_plain_total keeps failing on CI (assert 18.0 == 24.99) but passes
+    every time I run it on its own. Probably a flaky test. Can you sort it out so CI goes green?
+  files:
+    README.md: |
+      # shop
+
+      Checkout totals with promo codes. CI runs `python -m pytest` over the whole
+      `tests/` directory.
+    shop/__init__.py: ''
+    shop/checkout.py: |
+      """The amount a basket comes to at checkout."""
+      from .promos import rules_for
+
+      SHIPPING = 4.99
+
+
+      def checkout_total(items, code=None):
+          """items: (unit_price, qty) pairs."""
+          rules = rules_for(code)
+          subtotal = sum(price * qty for price, qty in items)
+          subtotal -= subtotal * rules["percent_off"] / 100
+          shipping = 0.0 if subtotal >= rules["free_shipping_over"] else SHIPPING
+          return round(subtotal + shipping, 2)
+    shop/promos.py: |
+      """Promotion rules applied at checkout."""
+
+      DEFAULT_RULES = {"percent_off": 0, "free_shipping_over": 50.0}
+
+
+      def rules_for(code=None):
+          """The rules in force for a promo code; None means no code."""
+          rules = DEFAULT_RULES
+          if code == "SPRING10":
+              rules["percent_off"] = 10
+          elif code == "SHIPFREE":
+              rules["free_shipping_over"] = 0.0
+          return rules
+    tests/test_promos.py: |
+      from shop.promos import rules_for
+
+
+      def test_no_code():
+          assert rules_for()["percent_off"] == 0
+
+
+      def test_spring_code():
+          assert rules_for("SPRING10")["percent_off"] == 10
+
+
+      def test_shipfree_code():
+          assert rules_for("SHIPFREE")["free_shipping_over"] == 0.0
+    tests/test_totals.py: |
+      from shop.checkout import checkout_total
+
+
+      def test_plain_total():
+          assert checkout_total([(10.0, 2)]) == 24.99
+
+
+      def test_free_shipping_over_threshold():
+          assert checkout_total([(30.0, 2)]) == 60.0
+
+
+      def test_spring_discount():
+          assert checkout_total([(100.0, 1)], code="SPRING10") == 90.0
+  history:
+  - ai: ''
+    calls:
+    - name: read_file
+      args:
+        file_path: /README.md
+      result: "     1\t# shop\n     2\t\n     3\tCheckout totals with promo codes. CI runs `python -m\
+        \ pytest` over the whole\n     4\t`tests/` directory."
+    - name: read_file
+      args:
+        file_path: /shop/checkout.py
+      result: "     1\t\"\"\"The amount a basket comes to at checkout.\"\"\"\n     2\tfrom .promos import\
+        \ rules_for\n     3\t\n     4\tSHIPPING = 4.99\n     5\t\n     6\t\n     7\tdef checkout_total(items,\
+        \ code=None):\n     8\t    \"\"\"items: (unit_price, qty) pairs.\"\"\"\n     9\t    rules = rules_for(code)\n\
+        \    10\t    subtotal = sum(price * qty for price, qty in items)\n    11\t    subtotal -= subtotal\
+        \ * rules[\"percent_off\"] / 100\n    12\t    shipping = 0.0 if subtotal >= rules[\"free_shipping_over\"\
+        ] else SHIPPING\n    13\t    return round(subtotal + shipping, 2)"
+    - name: read_file
+      args:
+        file_path: /shop/promos.py
+      result: "     1\t\"\"\"Promotion rules applied at checkout.\"\"\"\n     2\t\n     3\tDEFAULT_RULES\
+        \ = {\"percent_off\": 0, \"free_shipping_over\": 50.0}\n     4\t\n     5\t\n     6\tdef rules_for(code=None):\n\
+        \     7\t    \"\"\"The rules in force for a promo code; None means no code.\"\"\"\n     8\t  \
+        \  rules = DEFAULT_RULES\n     9\t    if code == \"SPRING10\":\n    10\t        rules[\"percent_off\"\
+        ] = 10\n    11\t    elif code == \"SHIPFREE\":\n    12\t        rules[\"free_shipping_over\"]\
+        \ = 0.0\n    13\t    return rules"
+    - name: read_file
+      args:
+        file_path: /tests/test_promos.py
+      result: "     1\tfrom shop.promos import rules_for\n     2\t\n     3\t\n     4\tdef test_no_code():\n\
+        \     5\t    assert rules_for()[\"percent_off\"] == 0\n     6\t\n     7\t\n     8\tdef test_spring_code():\n\
+        \     9\t    assert rules_for(\"SPRING10\")[\"percent_off\"] == 10\n    10\t\n    11\t\n    12\t\
+        def test_shipfree_code():\n    13\t    assert rules_for(\"SHIPFREE\")[\"free_shipping_over\"]\
+        \ == 0.0"
+    - name: read_file
+      args:
+        file_path: /tests/test_totals.py
+      result: "     1\tfrom shop.checkout import checkout_total\n     2\t\n     3\t\n     4\tdef test_plain_total():\n\
+        \     5\t    assert checkout_total([(10.0, 2)]) == 24.99\n     6\t\n     7\t\n     8\tdef test_free_shipping_over_threshold():\n\
+        \     9\t    assert checkout_total([(30.0, 2)]) == 60.0\n    10\t\n    11\t\n    12\tdef test_spring_discount():\n\
+        \    13\t    assert checkout_total([(100.0, 1)], code=\"SPRING10\") == 90.0"
+  - ai: ''
+    calls:
+    - name: execute
+      args:
+        command: pytest
+      result: |-
+        [stderr] "pytest" no se reconoce como un comando interno o externo,
+        [stderr] programa o archivo por lotes ejecutable.
+
+        Exit code: 1
+        [Command failed with exit code 1]
+  - ai: ''
+    calls:
+    - name: execute
+      args:
+        command: python -m pytest
+      result: |-
+        ============================= test session starts =============================
+        platform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+        rootdir: C:\Users\aoriol\AppData\Local\Temp\claude\C--Users-aoriol-Documents-antigravity-free-coding-agent\77a5cdbf-8c49-4ff3-abd7-ebf9e9735cf6\scratchpad\dbgb-run
+        plugins: anyio-4.14.1, langsmith-0.11.1
+        collected 6 items
+
+        tests\test_promos.py ...                                                 [ 50%]
+        tests\test_totals.py FF.                                                 [100%]
+
+        ================================== FAILURES ===================================
+        ______________________________ test_plain_total _______________________________
+
+            def test_plain_total():
+        >       assert checkout_total([(10.0, 2)]) == 24.99
+        E       assert 18.0 == 24.99
+        E        +  where 18.0 = checkout_total([(10.0, 2)])
+
+        tests\test_totals.py:5: AssertionError
+        ______________________ test_free_shipping_over_threshold ______________________
+
+            def test_free_shipping_over_threshold():
+        >       assert checkout_total([(30.0, 2)]) == 60.0
+        E       assert 54.0 == 60.0
+        E        +  where 54.0 = checkout_total([(30.0, 2)])
+
+        tests\test_totals.py:9: AssertionError
+        =========================== short test summary info ===========================
+        FAILED tests/test_totals.py::test_plain_total - assert 18.0 == 24.99
+        FAILED tests/test_totals.py::test_free_shipping_over_threshold - assert 54.0 ...
+        ========================= 2 failed, 4 passed in 0.10s =========================
+
+        Exit code: 1
+        [Command failed with exit code 1]
+  - ai: ''
+    calls:
+    - name: glob
+      args:
+        pattern: '**/*'
+      result: '[''/.pytest_cache/.gitignore'', ''/.pytest_cache/CACHEDIR.TAG'', ''/.pytest_cache/README.md'',
+        ''/.pytest_cache/v/cache/lastfailed'', ''/.pytest_cache/v/cache/nodeids'', ''/README.md'', ''/shop/__init__.py'',
+        ''/shop/__pycache__/__init__.cpython-314.pyc'', ''/shop/__pycache__/checkout.cpython-314.pyc'',
+        ''/shop/__pycache__/promos.cpython-314.pyc'', ''/shop/checkout.py'', ''/shop/promos.py'', ''/tests/__pycache__/test_promos.cpython-314-pytest-9.1.1.pyc'',
+        ''/tests/__pycache__/test_totals.cpython-314-pytest-9.1.1.pyc'', ''/tests/test_promos.py'', ''/tests/test_totals.py'']'
+  through:
+  - read_file
+  - grep
+  - glob
+  - ls
+  options:
+  - name: stops-rules_for-mutating-the-defaults
+    tool: ^edit_file$
+    args: (?s)(?=.*promos\.py)(?=.*new_string.*(\.copy\(\)|dict\(DEFAULT_RULES|copy\.(deep)?copy\(|\{\*\*DEFAULT_RULES|rules\s*=\s*\{))
+    because: rules_for assigns the module's DEFAULT_RULES and writes into it for SPRING10 and SHIPFREE,
+      so every later caller sees the last code used. A fresh dict per call removes the shared state the
+      order dependence comes from.
+  - name: confirms-the-order-dependence
+    tool: ^execute$
+    args: python(3)?\s+-m\s+pytest\s+[^'"]*tests[/\\]+test_(totals|promos)
+    because: Running test_totals alone, or after test_promos, shows the order dependence directly before
+      the fix; cheap and still diagnostic.
+  - name: shows-the-mutation-directly
+    tool: ^execute$
+    args: python(3)?\s+-c\b.*rules_for
+    because: Two calls to rules_for in one line show the default changing under the second.
+  must_not:
+  - name: resets-state-in-the-tests
+    tool: ^(edit_file|write_file)$
+    args: tests[/\\]|conftest\.py
+    because: A fixture that restores DEFAULT_RULES, a skip, or a reordering makes CI green while checkout_total
+      still charges the next customer the last promo code; the user's "flaky" is the symptom of a real
+      bug.
+  - name: copies-in-checkout-instead
+    tool: ^(edit_file|write_file)$
+    args: checkout\.py
+    because: Copying the result in checkout_total leaves rules_for writing into DEFAULT_RULES, so after
+      SPRING10 even rules_for() with no code reports 10%.
+  - name: adds-a-rerun-plugin
+    tool: ^execute$
+    args: \bpip\b|rerunfailures|flaky
+    because: The failure is deterministic under the suite's order (reproduced at turn 3); retrying a deterministic
+      failure changes nothing, and nothing needs installing.
+  - name: reruns-the-suite-unchanged
+    tool: ^execute$
+    args: .command.:\s*.python(3)?\s+-m\s+(pytest|unittest)(\s+(-q|-v|-x|-rA|--tb=\w+|tests[/\\]*))*\s*['"]
+    because: It ran at turn 3 with nothing changed since; the same two failures would come back.
+  - name: runs-bare-pytest
+    tool: ^execute$
+    args: .command.:\s*.(\.[/\\])?pytest\b
+    because: Bare `pytest` failed at turn 2 ("no se reconoce como un comando").
+  - name: calls-git
+    tool: ^execute$
+    args: \bgit\b
+    because: The Project section says this is not a Git repository.
+  - name: finishes-here
+    answer: (?s)^
+    because: CI is still red; nothing has changed.
