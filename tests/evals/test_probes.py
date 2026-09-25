@@ -262,8 +262,14 @@ class TestThrough:
         assert [t["name"] for t in got["tools"]] == ["write_file"]
 
     def test_without_through_the_first_call_is_the_decision(self, monkeypatch):
-        got = self._run(monkeypatch, [], "think_tool", "write_file")
-        assert [t["name"] for t in got["tools"]] == ["think_tool"]
+        got = self._run(monkeypatch, [], "read_file", "write_file")
+        assert [t["name"] for t in got["tools"]] == ["read_file"]
+
+    def test_a_todo_list_is_never_the_decision(self, monkeypatch):
+        """Three NOTES.md probes passed on `write_todos` and failed past it."""
+        got = self._run(monkeypatch, [], "write_todos", "read_file")
+        assert [t["name"] for t in got["tools"]] == ["read_file"]
+        assert got["before"] == ["write_todos"]
 
 
 def test_running_out_of_passes_is_not_a_pass(monkeypatch):
@@ -290,6 +296,59 @@ def test_a_reply_is_judged_by_what_it_says():
     said = {"tools": [], "text": "Mods does not exist.", "error": ""}
     assert not probes.score(probe, said)["passed"]
 
+
+def _decided(*calls, text=""):
+    return {"tools": [{"name": n, "args": a} for n, a in calls], "text": text,
+            "error": ""}
+
+
+class TestOptionsAndMustNot:
+    """The decision is one of the named options, and none of the failures."""
+
+    PROBE = probes.Probe(
+        id="t", options=[
+            {"name": "read-it", "tool": "^read_file$", "because": "b"},
+            {"name": "say-so", "answer": "(?i)conflict", "because": "b"}],
+        must_not=[{"name": "edit-the-test", "tool": "^edit_file$",
+                   "args": "tests/", "because": "b"}])
+
+    def test_an_option_passes_and_is_named(self):
+        got = probes.score(self.PROBE, _decided(("read_file", {"file_path": "/a"})))
+        assert got["passed"] and got["outcome"] == "option:read-it"
+
+    def test_a_reply_can_be_an_option(self):
+        got = probes.score(self.PROBE, _decided(text="There is a conflict."))
+        assert got["passed"] and got["outcome"] == "option:say-so"
+
+    def test_a_move_on_neither_list_is_unlisted_and_fails(self):
+        got = probes.score(self.PROBE, _decided(("execute", {"command": "ls"})))
+        assert not got["passed"] and got["outcome"] == "unlisted"
+
+    def test_a_forbidden_call_fails_even_beside_an_option(self):
+        got = probes.score(self.PROBE, _decided(
+            ("read_file", {"file_path": "/a"}),
+            ("edit_file", {"file_path": "/tests/t.py"})))
+        assert not got["passed"] and got["outcome"] == "forbidden:edit-the-test"
+
+    def test_every_call_in_the_turn_must_be_an_option(self):
+        got = probes.score(self.PROBE, _decided(
+            ("read_file", {"file_path": "/a"}), ("execute", {"command": "x"})))
+        assert got["outcome"] == "unlisted"
+
+    def test_a_move_that_says_nothing_about_why_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(expect=None, options=[{"name": "x", "tool": "a"}])])
+        with pytest.raises(ValueError, match="why"):
+            probes.load(tmp_path)
+
+    def test_a_move_that_matches_nothing_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(expect=None, must_not=[{"name": "x", "because": "b"}])])
+        with pytest.raises(ValueError, match="matches nothing"):
+            probes.load(tmp_path)
+
+    def test_options_alone_are_an_expectation(self, tmp_path):
+        _write(tmp_path, [_ok(expect=None, options=[
+            {"name": "x", "tool": "read_file", "because": "b"}])])
+        assert probes.load(tmp_path)[0].options
 
 
 class TestDatasets:

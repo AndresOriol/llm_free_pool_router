@@ -26,8 +26,13 @@ the example passes, and keep what already worked working. The probes
    `python -m evals probes --from-run <record> --turn N --agent A --id <name>`
    prints a probe whose prompt and history are the run's own conversation up to
    that turn. Write two things by hand:
-   - `expect`: what must hold of the next decision. Prefer the negative
-     ([What the first two live runs showed](probes.md#what-the-first-two-live-runs-showed)).
+   - `must_not`: the move that went wrong, named, with the run's own words
+     for why. Add any other move you would call a failure at that point.
+   - `options`: the moves that make sense there, each with a `because`
+     ([The expectations](probes.md#the-expectations-options-and-must_not)).
+     Listing them is deciding how the agent should work at that point, so
+     it belongs in the diff a reviewer reads. A move you did not think of
+     scores `unlisted`, which is the prompt to put it on one of the two lists.
    - `why`: the run, the turn, and what went wrong there.
 
    Put the probe in its topic's file ([Datasets](#datasets-one-topic-each)) and commit it before any fix.

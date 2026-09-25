@@ -55,12 +55,23 @@ python -m evals probes --from-run <run_dir>/trace.json --turn N --agent <code|im
 This prints a skeleton. Fill in:
 
 - `why`: the run, the turn, and what went wrong, quoted from the record.
-- `expect`: prefer the negative (`not_tool`, `not_tool_with_args`,
-  `text_not_matches`). Name the move that was wrong. Don't try to list every
-  right one.
-- `through`: side-effect-free tools (`think_tool`, `research_status`,
-  `read_file`, `write_todos`) when the decision under test comes after a
-  reflection.
+- Replace `expect` with `must_not` and `options`
+  (docs/evaluation/probes.md#the-expectations-options-and-must_not). Each is a
+  list of named moves, `{name, tool?, args?, answer?, because}`:
+  - `must_not`: the move that was wrong, with the record's words for why,
+    plus any other move you would call a failure there.
+  - `options`: every move that makes sense at that point. Listing them is a
+    decision about how the agent should work, so argue each `because`. A move
+    on neither list scores `unlisted`: add it to one list or the other.
+  - `args` is a regex over the call's arguments printed as a Python dict, in
+    whatever key order the model chose. Test the path and the content with
+    lookaheads (`(?s)(?=.*NOTES\.md)(?=.*\\n## )`), not `path.*content`.
+    A newline inside an argument is the two characters `\n` there.
+- `through`: side-effect-free tools (`research_status`, `read_file`) when the
+  decision under test comes after them. `write_todos` and `think_tool` are
+  always passed through.
+- `files`: the skeleton leaves them out. The workspace is the last whole read
+  of each file in the history, with the run's later successful edits applied.
 
 Put it in the topic file it belongs to (docs/evaluation/changing-behaviour.md#datasets-one-topic-each). If none fits, start a
 new file with its own `dataset:`, but only for a genuinely separate family of
