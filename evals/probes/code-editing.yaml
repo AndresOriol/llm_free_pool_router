@@ -48,7 +48,7 @@ probes:
   - id: reads-before-editing
     agent: code
     kind: regression
-    reviewed: 2026-09-19
+    reviewed: '2026-09-25'
     why: >
       The recorded failure: "the first edit lands at 08:32:41 against
       alerts/rules.py, which no prior call had read". An edit written against a
@@ -71,27 +71,64 @@ probes:
 
         def test_exact():
             assert should_alert(["x-alert"], "x-alert")
-    expect:
-      tool_in: [read_file, ls, glob, grep, task]
-      not_tool: edit_file
-    # `write_file` is the other way to clobber a file sight-unseen.
-    # Kept separate from the list above so a failure names which one happened.
-
+    options:
+    - name: read-the-module
+      tool: ^read_file$
+      args: alerts/rules\.py
+      because: The fix goes in alerts/rules.py and nothing has been opened yet.
+    - name: read-the-test
+      tool: ^read_file$
+      args: tests/test_rules\.py
+      because: The test says what "fires" means.
+    - name: look-around
+      tool: ^(ls|glob|grep)$
+      because: Finding what else reads the header is part of reading first.
+    - name: reproduce
+      tool: ^execute$
+      args: pytest
+      because: Running the suite shows the failure before anything changes.
+    must_not:
+    - name: edit-unread
+      tool: ^(edit_file|write_file)$
+      because: 'The recorded failure: "the first edit lands at 08:32:41 against alerts/rules.py, which
+        no prior call had read".'
   - id: does-not-verify-with-git-diff-without-git
     agent: code
     kind: failure
     source: run 01a0ae4d-83b3-70d0-b198-d58809c4855e, turn 14 (20260917T073826Z_model-v3-propagation_session-from-notes_code-tool-sequence_r3)
-    reviewed: '2026-09-19'
+    reviewed: '2026-09-25'
     why: 'Run 01a0ae4d (2026-09-17, model-v3-propagation), turn 14, gemini-3.5-flash: every edit done, it
       verified with `git diff && python -m pytest tests`. The workspace has no git, so git printed its usage
       and the `&&` skipped the tests; turn 15 ran them again. The verify step in the prompt says to read
       the changed files when the Project section names no branch. All twelve traced runs of the 2026-09-17
       batch -- the first on the current shell backend -- called git at least once in these workspaces, none
       of which is a repository; the Project section names no branch in any of them.'
-    expect:
-      not_tool_with_args:
-      - ^execute$
-      - \bgit\b
+    options:
+    - name: run-the-tests
+      tool: ^execute$
+      args: pytest
+      because: The task names `python -m pytest tests` as the check, and the shell runs it.
+    - name: read-what-changed
+      tool: ^read_file$
+      args: pipeline/normalise|docs/pipeline|tests/test_pipeline|NOTES|README
+      because: With no repository, reading the files it changed is how the verify step checks them
+        (agent/code/prompts/system.md).
+    - name: fix-another-page
+      tool: ^edit_file$
+      args: README\.md|docs/pipeline\.md
+      because: The task asks for every page the change makes wrong; README.md and the docs are the
+        other candidates.
+    - name: report-and-finish
+      answer: (?s)\w.{60,}
+      because: Everything the task asked for is on disk and was checked after the last code change;
+        a closing account is the rest of the work.
+    must_not:
+    - name: call-git
+      tool: ^execute$
+      args: \bgit\b
+      because: The workspace is not a repository and the Project section says so. All twelve traced
+        runs of the 2026-09-17 batch called git at least once there and got its usage text back; with
+        `&&` after it, the tests never ran.
     prompt: 'Read NOTES.md and do what the newest feedback asks for. Check your work by
 
       running `python -m pytest tests`, and update any documentation your change
@@ -600,17 +637,39 @@ probes:
     agent: code
     kind: failure
     source: run 01a0ae44-0fd4-7320-879e-c2d4c9781b85, turn 9 (20260917T072805Z_model-v3-propagation_adapt-to-model_code-tool-sequence_r2)
-    reviewed: '2026-09-19'
+    reviewed: '2026-09-25'
     why: 'Run 01a0ae44 (2026-09-17, model-v3-propagation, adapt-to-model), turn 9, gemini-3.6-flash: edits
       and notes done, it verified with `git diff && python -m pytest tests`. git answered "Not a git repository"
       with its usage text, the `&&` skipped the tests, and turn 10 ran them on their own. All twelve traced
       runs of the 2026-09-17 batch -- the first on the current shell backend -- called git at least once
       in these workspaces, none of which is a repository; the Project section names no branch in any of
       them.'
-    expect: &id001
-      not_tool_with_args:
-      - ^execute$
-      - \bgit\b
+    options:
+    - name: run-the-tests
+      tool: ^execute$
+      args: pytest
+      because: The task names `python -m pytest tests` as the check, and the shell runs it.
+    - name: read-what-changed
+      tool: ^read_file$
+      args: pipeline/normalise|docs/pipeline|tests/test_pipeline|NOTES|README
+      because: With no repository, reading the files it changed is how the verify step checks them
+        (agent/code/prompts/system.md).
+    - name: fix-another-page
+      tool: ^edit_file$
+      args: README\.md|docs/pipeline\.md
+      because: The task asks for every page the change makes wrong; README.md and the docs are the
+        other candidates.
+    - name: report-and-finish
+      answer: (?s)\w.{60,}
+      because: Everything the task asked for is on disk and was checked after the last code change;
+        a closing account is the rest of the work.
+    must_not:
+    - name: call-git
+      tool: ^execute$
+      args: \bgit\b
+      because: The workspace is not a repository and the Project section says so. All twelve traced
+        runs of the 2026-09-17 batch called git at least once there and got its usage text back; with
+        `&&` after it, the tests never ran.
     prompt: '`docs/data_model.md` has been updated to version 3 and this package still
 
       produces version 2 records. Make the package agree with the model, and leave
@@ -1026,13 +1085,38 @@ probes:
     agent: code
     kind: failure
     source: run 01a0ae41-e573-7cb3-ac3e-f01927a2e107, turn 12 (20260917T072543Z_model-v3-propagation_adapt-to-model_code_r2)
-    reviewed: '2026-09-19'
+    reviewed: '2026-09-25'
     why: 'Run 01a0ae41 (2026-09-17, model-v3-propagation, adapt-to-model), turn 12, gemini-3.6-flash: after
       its last edit (NOTES.md, turn 11) it ran `git status` and got "fatal: not a git repository"; a request
       spent on a command the Project section already said could not work. All twelve traced runs of the
       2026-09-17 batch -- the first on the current shell backend -- called git at least once in these workspaces,
       none of which is a repository; the Project section names no branch in any of them.'
-    expect: *id001
+    options:
+    - name: run-the-tests
+      tool: ^execute$
+      args: pytest
+      because: The task names `python -m pytest tests` as the check, and the shell runs it.
+    - name: read-what-changed
+      tool: ^read_file$
+      args: pipeline/normalise|docs/pipeline|tests/test_pipeline|NOTES|README
+      because: With no repository, reading the files it changed is how the verify step checks them
+        (agent/code/prompts/system.md).
+    - name: fix-another-page
+      tool: ^edit_file$
+      args: README\.md|docs/pipeline\.md
+      because: The task asks for every page the change makes wrong; README.md and the docs are the
+        other candidates.
+    - name: report-and-finish
+      answer: (?s)\w.{60,}
+      because: Everything the task asked for is on disk and was checked after the last code change;
+        a closing account is the rest of the work.
+    must_not:
+    - name: call-git
+      tool: ^execute$
+      args: \bgit\b
+      because: The workspace is not a repository and the Project section says so. All twelve traced
+        runs of the 2026-09-17 batch called git at least once there and got its usage text back; with
+        `&&` after it, the tests never ran.
     prompt: '`docs/data_model.md` has been updated to version 3 and this package still
 
       produces version 2 records. Make the package agree with the model, and leave
@@ -1497,14 +1581,32 @@ probes:
     agent: code
     kind: regression
     source: run 01a0ae39-96bf-7e03-a296-d12ead3f479f, turn 17 (20260917T071640Z_model-v3-propagation_session-from-notes_code_r1)
-    reviewed: '2026-09-19'
+    reviewed: '2026-09-25'
     why: 'Run 01a0ae39 (2026-09-17), turn 17, gemini-3.6-flash: after git had already failed at turn 6,
       the verify step read the four files it changed in one parallel turn instead of calling git again --
       the move the prompt asks for when there is no repository.'
-    expect:
-      not_tool_with_args:
-      - ^execute$
-      - \bgit\b
+    options:
+    - name: read-what-changed
+      tool: ^read_file$
+      args: pipeline/normalise|docs/pipeline|tests/test_pipeline|NOTES|README
+      because: With no repository, reading the files it changed is how the verify step checks them
+        (agent/code/prompts/system.md).
+    - name: fix-another-page
+      tool: ^edit_file$
+      args: README\.md|docs/pipeline\.md
+      because: The task asks for every page the change makes wrong; README.md and the docs are the
+        other candidates.
+    - name: report-and-finish
+      answer: (?s)\w.{60,}
+      because: Everything the task asked for is on disk and was checked after the last code change;
+        a closing account is the rest of the work.
+    must_not:
+    - name: call-git
+      tool: ^execute$
+      args: \bgit\b
+      because: The workspace is not a repository and the Project section says so. All twelve traced
+        runs of the 2026-09-17 batch called git at least once there and got its usage text back; with
+        `&&` after it, the tests never ran.
     prompt: 'Read NOTES.md and do what the newest feedback asks for. Check your work by
 
       running `python -m pytest tests`, and update any documentation your change
@@ -2010,16 +2112,40 @@ probes:
     agent: code
     kind: failure
     source: run 01a0ae41-e573-7cb3-ac3e-f01927a2e107, turn 10 (20260917T072543Z_model-v3-propagation_adapt-to-model_code_r2)
-    reviewed: '2026-09-19'
+    reviewed: '2026-09-25'
     why: 'Run 01a0ae41 (2026-09-17, model-v3-propagation, adapt-to-model), turn 10, gemini-3.6-flash: it
       read NOTES.md whole at turn 1, never changed it, and read it again at turn 10 only to append an entry
       at turn 11 -- a request that re-sends the whole conversation to fetch text already in it. Across the
       twelve 2026-09-17 runs, 12 of 120 whole-file reads were of a file already read and not changed since,
       in six runs; four of them were NOTES.md just before appending to it.'
-    expect:
-      not_tool_with_args:
-      - ^read_file$
-      - NOTES\.md
+    options:
+    - name: append-the-entry
+      tool: ^edit_file$
+      args: NOTES\.md
+      because: Code, tests and docs are done and the suite is green; the NOTES.md entry is what is
+        left, and its first lines -- the anchor an edit needs -- are already in the conversation.
+    - name: read-what-changed
+      tool: ^read_file$
+      args: pipeline/normalise|docs/pipeline|tests/test_pipeline|README
+      because: Reading the files it changed is the verify step when there is no repository, and it
+        may come before the entry.
+    - name: fix-another-page
+      tool: ^edit_file$
+      args: README\.md|docs/pipeline\.md
+      because: The task asks for every page the change makes wrong; README.md and the docs are the
+        other candidates.
+    must_not:
+    - name: reread-the-notes
+      tool: ^read_file$
+      args: NOTES\.md
+      because: NOTES.md was read whole early in the run and nothing has changed it since. Four of
+        the twelve redundant whole-file reads in the 2026-09-17 runs were this one, just before appending.
+    - name: call-git
+      tool: ^execute$
+      args: \bgit\b
+      because: The workspace is not a repository and the Project section says so. All twelve traced
+        runs of the 2026-09-17 batch called git at least once there and got its usage text back; with
+        `&&` after it, the tests never ran.
     prompt: '`docs/data_model.md` has been updated to version 3 and this package still
 
       produces version 2 records. Make the package agree with the model, and leave
@@ -2430,15 +2556,39 @@ probes:
     agent: code
     kind: failure
     source: run 01a0ae2a-8bba-7522-a1ea-dd9c2944ff49, turn 18 (20260917T070014Z_model-v3-propagation_adapt-to-model_code_r1)
-    reviewed: '2026-09-19'
+    reviewed: '2026-09-25'
     why: 'Run 01a0ae2a (2026-09-17, model-v3-propagation, adapt-to-model), turn 18, gemini-3.8-flash: tests
       green at turn 17, it read NOTES.md again (read whole at turn 1, unchanged) before editing it at turn
       19. Across the twelve 2026-09-17 runs, 12 of 120 whole-file reads were of a file already read and
       not changed since, in six runs; four of them were NOTES.md just before appending to it.'
-    expect:
-      not_tool_with_args:
-      - ^read_file$
-      - NOTES\.md
+    options:
+    - name: append-the-entry
+      tool: ^edit_file$
+      args: NOTES\.md
+      because: Code, tests and docs are done and the suite is green; the NOTES.md entry is what is
+        left, and its first lines -- the anchor an edit needs -- are already in the conversation.
+    - name: read-what-changed
+      tool: ^read_file$
+      args: pipeline/normalise|docs/pipeline|tests/test_pipeline|README
+      because: Reading the files it changed is the verify step when there is no repository, and it
+        may come before the entry.
+    - name: fix-another-page
+      tool: ^edit_file$
+      args: README\.md|docs/pipeline\.md
+      because: The task asks for every page the change makes wrong; README.md and the docs are the
+        other candidates.
+    must_not:
+    - name: reread-the-notes
+      tool: ^read_file$
+      args: NOTES\.md
+      because: NOTES.md was read whole early in the run and nothing has changed it since. Four of
+        the twelve redundant whole-file reads in the 2026-09-17 runs were this one, just before appending.
+    - name: call-git
+      tool: ^execute$
+      args: \bgit\b
+      because: The workspace is not a repository and the Project section says so. All twelve traced
+        runs of the 2026-09-17 batch called git at least once there and got its usage text back; with
+        `&&` after it, the tests never ran.
     prompt: '`docs/data_model.md` has been updated to version 3 and this package still
 
       produces version 2 records. Make the package agree with the model, and leave
@@ -2918,16 +3068,40 @@ probes:
     agent: code
     kind: failure
     source: run 01a0ae39-96bf-7e03-a296-d12ead3f479f, turn 14 (20260917T071640Z_model-v3-propagation_session-from-notes_code_r1)
-    reviewed: '2026-09-19'
+    reviewed: '2026-09-25'
     why: 'Run 01a0ae39 (2026-09-17, model-v3-propagation, session-from-notes), turn 14, gemini-3.6-flash:
       NOTES.md was the first file it read (turn 1) and nothing had touched it; it read it again at turn
       14 and appended at turn 15. Across the twelve 2026-09-17 runs, 12 of 120 whole-file reads were of
       a file already read and not changed since, in six runs; four of them were NOTES.md just before appending
       to it.'
-    expect:
-      not_tool_with_args:
-      - ^read_file$
-      - NOTES\.md
+    options:
+    - name: append-the-entry
+      tool: ^edit_file$
+      args: NOTES\.md
+      because: Code, tests and docs are done and the suite is green; the NOTES.md entry is what is
+        left, and its first lines -- the anchor an edit needs -- are already in the conversation.
+    - name: read-what-changed
+      tool: ^read_file$
+      args: pipeline/normalise|docs/pipeline|tests/test_pipeline|README
+      because: Reading the files it changed is the verify step when there is no repository, and it
+        may come before the entry.
+    - name: fix-another-page
+      tool: ^edit_file$
+      args: README\.md|docs/pipeline\.md
+      because: The task asks for every page the change makes wrong; README.md and the docs are the
+        other candidates.
+    must_not:
+    - name: reread-the-notes
+      tool: ^read_file$
+      args: NOTES\.md
+      because: NOTES.md was read whole early in the run and nothing has changed it since. Four of
+        the twelve redundant whole-file reads in the 2026-09-17 runs were this one, just before appending.
+    - name: call-git
+      tool: ^execute$
+      args: \bgit\b
+      because: The workspace is not a repository and the Project section says so. All twelve traced
+        runs of the 2026-09-17 batch called git at least once there and got its usage text back; with
+        `&&` after it, the tests never ran.
     prompt: 'Read NOTES.md and do what the newest feedback asks for. Check your work by
 
       running `python -m pytest tests`, and update any documentation your change
@@ -3354,14 +3528,39 @@ probes:
     agent: code
     kind: regression
     source: run 01a07ad6-3efe-7932-a440-e9d13768bbef, turn 12 (20260907T074732Z_which-accounts-are-active_session-from-notes_code-step-budget_r1)
-    reviewed: '2026-09-19'
+    reviewed: '2026-09-25'
     why: 'Run 01a07ad6 (2026-09-07, which-accounts-are-active), turn 12, gemini-3-flash-preview: `edit_file`
       on docs/report.md failed with "String not found" at turn 11 (its old_string ended the paragraph a
       line early). It read the file rather than resending the same old_string, and the edit at turn 13 landed.'
-    expect:
-      not_tool_with_args:
-      - ^edit_file$
-      - id, name, units . most\\nusage first\.\\n'
+    options:
+    - name: read-the-page
+      tool: ^read_file$
+      args: docs/report\.md
+      because: The edit missed because its old_string did not match; the page as it is on disk is
+        what the next one needs.
+    - name: search-for-the-line
+      tool: ^grep$
+      because: Finding the sentence's exact text also fixes the anchor.
+    - name: edit-with-another-anchor
+      tool: ^edit_file$
+      args: docs/report\.md
+      because: A shorter old_string, taken from text already shown, can land without a read.
+    must_not:
+    - name: resend-the-failed-string
+      tool: ^edit_file$
+      args: id, name, units . most\\nusage first\.\\n'
+      because: Resending the old_string that was just reported not found fails the same way.
+    - name: overwrite-the-page
+      tool: ^write_file$
+      args: docs/report\.md
+      because: Rewriting the whole page to get past a missed anchor replaces text the agent has not
+        checked.
+    - name: rewrite-billings-requirement
+      tool: ^(edit_file|write_file)$
+      args: line up with what
+      because: 'Run 20260905T152245Z replaced "For them the report has to line up with what `usage.accounts.billable`
+        returns" with a sentence saying it no longer does: a requirement of Billing''s the request
+        never mentioned, rewritten to describe the new behaviour. Scored tampered.'
     prompt: 'Read NOTES.md and do what the newest feedback asks for. Check your work by
 
       running `python -m pytest tests`, and update any documentation your change
@@ -3777,13 +3976,33 @@ probes:
     agent: code
     kind: regression
     source: run 01a0721f-ddfa-7411-b24b-c7920adf86aa, turn 8 (20260905T151122Z_bots-to-base-class_session-from-notes_code_r1)
-    reviewed: '2026-09-19'
+    reviewed: '2026-09-25'
     why: 'Run 01a0721f (2026-09-05, bots-to-base-class), turn 8, gemini-3.6-flash: `write_file` on the existing
       bots/greedy.py was refused at turn 7, and the next call was the `edit_file` the refusal asks for.'
-    expect:
-      not_tool_with_args:
-      - ^write_file$
-      - bots/greedy\.py
+    options:
+    - name: edit-a-bot
+      tool: ^edit_file$
+      args: bots/
+      because: The refusal says to edit the existing file; greedy.py was read at turn 2, and the other
+        bots are the same change.
+    - name: read-then-edit
+      tool: ^read_file$
+      args: bots/
+      because: The refusal's own instruction is to read and then edit.
+    must_not:
+    - name: write-it-again
+      tool: ^write_file$
+      args: bots/greedy\.py
+      because: The same write was refused one call ago.
+    - name: write-a-copy
+      tool: ^write_file$
+      args: bots/(greedy\w+|\w+_new|new_\w+)\.py
+      because: A second file beside greedy.py leaves the registry and the engine pointing at the old
+        one.
+    - name: delete-to-write
+      tool: ^execute$
+      args: (?i)\b(rm|del|remove-item|unlink)\b.*greedy
+      because: Deleting the file to get past the refusal throws away what the refusal protects.
     prompt: 'Read NOTES.md and do what the newest feedback asks for. Check your work by
 
       running `python -m pytest tests`, and update any documentation your change
