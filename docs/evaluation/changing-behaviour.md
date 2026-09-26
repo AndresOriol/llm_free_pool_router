@@ -114,6 +114,7 @@ right regression check.
 | `code-debugging` | How the coding agent debugs: reproducing a reported failure before fixing it, fixing the cause rather than the line the traceback or the user points at, and rerunning the tests before it stops |
 | `code-verification` | What the coding agent claims about its work: no test result a later edit has made stale, no dependency installed by hand to go green, and a journal entry and closing report that say plainly what is not done or not green |
 | `code-navigation` | How the coding agent finds everything a change touches in a multi-file repository: opening the other module that reads a setting, calls a function by name or documents a field before the first edit, and the file its change made untrue before the last message |
+| `code-autonomy` | What the coding agent does on someone's own project with nobody watching: no files the project never had, its own machinery for generated files, only the dependencies it allows, its CLAUDE.md kept true, and the part of a request it cannot build reported rather than faked |
 | `improve-diagnosis` | How the improvement agent diagnoses: the ledger before the traces, a diagnosis before any delegation or edit, and no issue, delegation or report the evidence it already read contradicts |
 | `explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, figures no page carries, claims that something does not exist |
 
