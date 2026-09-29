@@ -110,7 +110,7 @@ right regression check.
 | Dataset | Topic |
 | --- | --- |
 | `code-editing` | How the coding agent changes a repository: reading first and not twice, the shell and workspace it has (no git where there is no repository), recovering from a refused call |
-| `code-scope` | What the task allows the coding agent to change: a stale page the task's own source overrides, against a guarantee someone else relies on (the Contradicted Requests section) |
+| `code-scope` | What the task allows the coding agent to change: a stale page the task's own source overrides, against a guarantee someone else relies on (the Contradicted Requests section); no unrequested change to a shared limit or public interface, and no half-done migration |
 | `code-debugging` | How the coding agent debugs: reproducing a reported failure before fixing it, fixing the cause rather than the line the traceback or the user points at, and rerunning the tests before it stops |
 | `code-verification` | What the coding agent claims about its work: no test result a later edit has made stale, no dependency installed by hand to go green, and a journal entry and closing report that say plainly what is not done or not green |
 | `code-navigation` | How the coding agent finds everything a change touches in a multi-file repository: opening the other module that reads a setting, calls a function by name or documents a field before the first edit, and the file its change made untrue before the last message |
