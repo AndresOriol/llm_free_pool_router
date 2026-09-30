@@ -97,6 +97,24 @@ agent (one run), the `j2-error-analysis` skill (a batch) and the `deepagents`
 skill (the change). All of them read runs by
 [Reading a recorded run](docs/evaluation/reading-runs.md).
 
+## Working with Claude
+
+The session model (Opus 5.5) is the orchestrator: it reads the wiki, plans,
+decides, reviews and commits. Implementation — writing or editing code, docs,
+probes and config — goes to subagents running Sonnet 5.5 (the Agent tool with
+`model: "sonnet"`), because the orchestrator's context is for judgement across
+the whole task, not for holding every file it touched.
+
+- A subagent starts cold. Its brief names the goal, the files in play, the
+  wiki pages and skills that apply, and how to tell it is done (tests, a probe
+  going green) — the orchestrator writes it so nothing needs re-deriving.
+- Run implementers in parallel only when their files do not overlap; two agents
+  editing one file on the same branch overwrite each other.
+- The orchestrator reads the resulting diff before committing — a subagent's
+  report says what it meant to do, the diff says what it did.
+- Small edits the orchestrator can make in one step (a line in a doc, a config
+  value) it makes itself; a subagent is for work, not ceremony.
+
 ## Commits
 
 - No AI or agent attribution — no "Co-Authored-By", no mention of a model or
