@@ -357,12 +357,15 @@ def cmd_probes(args) -> int:
     # on the others (evals/run.py).
     results = []
     for index, probe in enumerate(found, 1):
-        print(f"[{index}/{len(found)}] {probe.id} ... ", end="", flush=True)
+        # One line, printed once decided: the router's failover logs land
+        # while the probe runs and used to split a half-printed line.
         decision = probes_mod.first_decision(probe, model, floor=floor,
                                              members=members)
         result = probes_mod.score(probe, decision)
         results.append(result)
-        print("pass" if result["passed"] else "FAIL")
+        print(f"[{index}/{len(found)}] {probe.id} ... "
+              f"{'pass' if result['passed'] else 'FAIL'} ({result['outcome']})",
+              flush=True)
 
     print()
     print(probes_mod.report(results))

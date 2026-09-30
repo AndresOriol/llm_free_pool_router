@@ -22,7 +22,7 @@ import yaml
 from evals import probe_dataset, probes
 
 
-def _write(tmp_path, entries, dataset="probes-test"):
+def _write(tmp_path, entries, dataset="code-test"):
     (tmp_path / "p.yaml").write_text(
         yaml.safe_dump({"dataset": dataset, "probes": entries}), encoding="utf-8")
     return tmp_path
@@ -147,6 +147,31 @@ def test_pushing_without_a_key_says_so_rather_than_failing_obscurely(monkeypatch
         probe_dataset.client()
 
 
+def test_a_renamed_dataset_keeps_its_examples(monkeypatch):
+    """Experiments point at example ids; a rename must not recreate them."""
+    from types import SimpleNamespace as NS
+
+    old = NS(id="11111111-1111-1111-1111-111111111111",
+             metadata={"probe_id": "kept"})
+    calls = {}
+
+    class Fake:
+        def has_dataset(self, dataset_name): return True
+        def read_dataset(self, dataset_name): return NS(id="d")
+        def list_examples(self, dataset_id): return [old]
+        def update_examples(self, dataset_id, updates): calls["updated"] = updates
+        def create_examples(self, dataset_id, examples): calls["created"] = examples
+        def delete_examples(self, example_ids): calls["deleted"] = example_ids
+
+    monkeypatch.setattr(probe_dataset, "client", lambda: Fake())
+    mine = [probes.Probe(id=i, dataset="code-test", prompt="p",
+                         expect={"no_tool": True}) for i in ("kept", "added")]
+    got = probe_dataset.push(mine, "code-test")
+    assert [e["id"] for e in calls["updated"]] == [old.id]
+    assert [e["metadata"]["probe_id"] for e in calls["created"]] == ["added"]
+    assert got["deleted"] == 0
+
+
 class TestToolScopedArguments:
     """The check the first live run of this suite proved was needed.
 
@@ -262,8 +287,14 @@ class TestThrough:
         assert [t["name"] for t in got["tools"]] == ["write_file"]
 
     def test_without_through_the_first_call_is_the_decision(self, monkeypatch):
-        got = self._run(monkeypatch, [], "think_tool", "write_file")
-        assert [t["name"] for t in got["tools"]] == ["think_tool"]
+        got = self._run(monkeypatch, [], "read_file", "write_file")
+        assert [t["name"] for t in got["tools"]] == ["read_file"]
+
+    def test_a_todo_list_is_never_the_decision(self, monkeypatch):
+        """Three NOTES.md probes passed on `write_todos` and failed past it."""
+        got = self._run(monkeypatch, [], "write_todos", "read_file")
+        assert [t["name"] for t in got["tools"]] == ["read_file"]
+        assert got["before"] == ["write_todos"]
 
 
 def test_running_out_of_passes_is_not_a_pass(monkeypatch):
@@ -291,6 +322,59 @@ def test_a_reply_is_judged_by_what_it_says():
     assert not probes.score(probe, said)["passed"]
 
 
+def _decided(*calls, text=""):
+    return {"tools": [{"name": n, "args": a} for n, a in calls], "text": text,
+            "error": ""}
+
+
+class TestOptionsAndMustNot:
+    """The decision is one of the named options, and none of the failures."""
+
+    PROBE = probes.Probe(
+        id="t", options=[
+            {"name": "read-it", "tool": "^read_file$", "because": "b"},
+            {"name": "say-so", "answer": "(?i)conflict", "because": "b"}],
+        must_not=[{"name": "edit-the-test", "tool": "^edit_file$",
+                   "args": "tests/", "because": "b"}])
+
+    def test_an_option_passes_and_is_named(self):
+        got = probes.score(self.PROBE, _decided(("read_file", {"file_path": "/a"})))
+        assert got["passed"] and got["outcome"] == "option:read-it"
+
+    def test_a_reply_can_be_an_option(self):
+        got = probes.score(self.PROBE, _decided(text="There is a conflict."))
+        assert got["passed"] and got["outcome"] == "option:say-so"
+
+    def test_a_move_on_neither_list_is_unlisted_and_fails(self):
+        got = probes.score(self.PROBE, _decided(("execute", {"command": "ls"})))
+        assert not got["passed"] and got["outcome"] == "unlisted"
+
+    def test_a_forbidden_call_fails_even_beside_an_option(self):
+        got = probes.score(self.PROBE, _decided(
+            ("read_file", {"file_path": "/a"}),
+            ("edit_file", {"file_path": "/tests/t.py"})))
+        assert not got["passed"] and got["outcome"] == "forbidden:edit-the-test"
+
+    def test_every_call_in_the_turn_must_be_an_option(self):
+        got = probes.score(self.PROBE, _decided(
+            ("read_file", {"file_path": "/a"}), ("execute", {"command": "x"})))
+        assert got["outcome"] == "unlisted"
+
+    def test_a_move_that_says_nothing_about_why_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(expect=None, options=[{"name": "x", "tool": "a"}])])
+        with pytest.raises(ValueError, match="why"):
+            probes.load(tmp_path)
+
+    def test_a_move_that_matches_nothing_is_refused(self, tmp_path):
+        _write(tmp_path, [_ok(expect=None, must_not=[{"name": "x", "because": "b"}])])
+        with pytest.raises(ValueError, match="matches nothing"):
+            probes.load(tmp_path)
+
+    def test_options_alone_are_an_expectation(self, tmp_path):
+        _write(tmp_path, [_ok(expect=None, options=[
+            {"name": "x", "tool": "read_file", "because": "b"}])])
+        assert probes.load(tmp_path)[0].options
+
 
 class TestDatasets:
     """One file is one topic is one dataset, and every probe is dated."""
@@ -299,6 +383,20 @@ class TestDatasets:
         _write(tmp_path, [_ok()], dataset="")
         with pytest.raises(ValueError, match="names its dataset"):
             probes.load(tmp_path)
+
+    def test_a_dataset_is_named_after_the_agent_it_tests(self, tmp_path):
+        _write(tmp_path, [_ok()], dataset="improve-diagnosis")
+        with pytest.raises(ValueError, match="names another agent"):
+            probes.load(tmp_path)
+
+    def test_a_dataset_name_is_agent_then_topic(self, tmp_path):
+        _write(tmp_path, [_ok()], dataset="probes_code")
+        with pytest.raises(ValueError, match="<agent>-<topic>"):
+            probes.load(tmp_path)
+
+    def test_a_sub_agent_belongs_to_its_agent_s_dataset(self, tmp_path):
+        _write(tmp_path, [_ok(agent="explore-researcher")], dataset="explore-evidence")
+        assert probes.load(tmp_path)[0].dataset == "explore-evidence"
 
     def test_a_probe_that_was_never_reviewed_is_refused(self, tmp_path):
         _write(tmp_path, [_ok(reviewed="")])

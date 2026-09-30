@@ -26,8 +26,13 @@ the example passes, and keep what already worked working. The probes
    `python -m evals probes --from-run <record> --turn N --agent A --id <name>`
    prints a probe whose prompt and history are the run's own conversation up to
    that turn. Write two things by hand:
-   - `expect`: what must hold of the next decision. Prefer the negative
-     ([What the first two live runs showed](probes.md#what-the-first-two-live-runs-showed)).
+   - `must_not`: the move that went wrong, named, with the run's own words
+     for why. Add any other move you would call a failure at that point.
+   - `options`: the moves that make sense there, each with a `because`
+     ([The expectations](probes.md#the-expectations-options-and-must_not)).
+     Listing them is deciding how the agent should work at that point, so
+     it belongs in the diff a reviewer reads. A move you did not think of
+     scores `unlisted`, which is the prompt to put it on one of the two lists.
    - `why`: the run, the turn, and what went wrong there.
 
    Put the probe in its topic's file ([Datasets](#datasets-one-topic-each)) and commit it before any fix.
@@ -85,6 +90,12 @@ collateral damage, not to measure progress.
 One probe file is one topic is one LangSmith dataset. It names its `dataset`,
 so the grouping is reviewed in the same diff as the probes.
 
+A dataset is named **`<agent>-<topic>`**, and so is its file. `<agent>` is the
+agent under test (`code`, `explore`, `improve`); an explorer sub-agent such as
+`explore-researcher` belongs to `explore`. `<topic>` is a short tag for what
+groups the examples: `code-editing`, not `code-git-and-notes-rereads`. The
+loader refuses a name that does not start with the agent of every probe in it.
+
 A topic is **one agent's family of decisions that one change would plausibly
 move together**. That is what makes "the regressions in the same dataset" the
 right regression check.
@@ -98,9 +109,14 @@ right regression check.
 
 | Dataset | Topic |
 | --- | --- |
-| `probes-code-editing` | How the coding agent changes a repository: reading first, the shell it has, tests it must not rewrite |
-| `probes-improve-diagnosis` | How the improvement agent diagnoses: the ledger before the traces, a diagnosis before any delegation or edit |
-| `probes-explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, claims that something does not exist |
+| `code-editing` | How the coding agent changes a repository: reading first and not twice, the shell and workspace it has (no git where there is no repository), recovering from a refused call |
+| `code-scope` | What the task allows the coding agent to change: a stale page the task's own source overrides, against a guarantee someone else relies on (the Contradicted Requests section); no unrequested change to a shared limit or public interface, and no half-done migration |
+| `code-debugging` | How the coding agent debugs: reproducing a reported failure before fixing it, fixing the cause rather than the line the traceback or the user points at, and rerunning the tests before it stops |
+| `code-verification` | What the coding agent claims about its work: no test result a later edit has made stale, no dependency installed by hand to go green, and a journal entry and closing report that say plainly what is not done or not green |
+| `code-navigation` | How the coding agent finds everything a change touches in a multi-file repository: opening the other module that reads a setting, calls a function by name or documents a field before the first edit, and the file its change made untrue before the last message |
+| `code-autonomy` | What the coding agent does on someone's own project with nobody watching: no files the project never had, its own machinery for generated files, only the dependencies it allows, its CLAUDE.md kept true, and the part of a request it cannot build reported rather than faked |
+| `improve-diagnosis` | How the improvement agent diagnoses: the ledger before the traces, a diagnosis before any delegation or edit, and no issue, delegation or report the evidence it already read contradicts |
+| `explore-evidence` | What the explorer's pages claim and on what evidence: searching, sourcing, figures no page carries, claims that something does not exist |
 
 ## Reviewing examples
 
@@ -128,7 +144,8 @@ situation into an invented one.
 
 ## The first case: the explorer's absence claims
 
-*Open. The record so far, on branch `explore-nonexistence-claims`.*
+*Open. The record so far, on branches `explore-nonexistence-claims` and
+`probes-expansion`.*
 
 The explorer concluded that Claude Mods do not exist; they do
 ([research/claude-mods/postmortem.md](../../research/claude-mods/postmortem.md),
@@ -139,9 +156,42 @@ researcher that `site:` and `OR` are not applied: that probe went from 0/3 to
 2/3 in both rounds. The absence claims did not move, including on full flash
 models.
 
-The reading so far: these examples start after the conversation has committed
-to the wrong answer. The brief asked for the alias explanation, and the
-researcher's own reflection already said "no official feature". Rules in a
-long prompt do not undo that. The next lever to try is structure (step 5.5
-above): a review run in a fresh context that sees the request and the pages,
-not the researchers' confident replies.
+The reading: these examples start after the conversation has committed to the
+wrong answer. The brief asked for the alias explanation, and the researcher's
+own reflection already said "no official feature". Rules in a long prompt do not
+undo that.
+
+**The dataset outgrew one run (2026-09-20).** Seven probes were added from the
+2026-09-10 machintl market-analysis runs, where the same family fails without
+any absence claim: a researcher ruling gesture analysis lawful and minimal-risk
+with no page saying so, quoting a price the one page it read calls unpublished,
+and writing margins and a payback that first appear in its own `think_tool`
+reflection. Four more candidates were screened out because they passed 3/3 at
+baseline. Every one of these claims enters through a reflection, which the tool
+echoes back as a `ToolMessage` — the model's memory arrives in the same shape
+as a page.
+
+**Structure was the lever that moved, and only where it applies.** Pinned to
+`gemini-3.5-flash-lite`, three repetitions:
+
+| Experiment | Failures | Regressions |
+| --- | --- | --- |
+| `explore-evidence-baseline2-lite` | 9/30 | 8/12 |
+| `explore-evidence-fix1-lite` (researcher prose: reflections are not sources) | 6/30 | 9/12 |
+| `explore-evidence-fix2-lite` (`review-agent`, the check in a fresh context) | 11/30 | 11/12 |
+| `explore-evidence-fix3-lite` (both) | 12/30 | 8/12 |
+
+`fix2` is what merged ([The check that did not do the research](../agents/explore.md#the-check-that-did-not-do-the-research)).
+It moves exactly the two orchestrator probes that sign off and integrate an
+unsupported absence claim, 1/3 and 0/3 to 3/3 each, and it moves them by
+changing what the orchestrator does at that point: it delegates the check
+instead of writing. **That is a path those probes were frozen against, and they
+now test the delegation rather than the claim** — said here rather than patched
+into the histories. Whether the reviewer catches the claim is not measured by a
+probe: driven once by hand over the Mods page, flash-lite searched for plugins
+rather than for "Mods" and confirmed the false claim. A third prose round on
+the researcher did not move the researcher's own probes and is not kept.
+
+What is still open: a pinned full-flash pair (the machintl failures were
+`gemini-3.5`/`3.6-flash`, and both models' daily quota was spent), a probe on
+the reviewer itself, and the scenario run the promotion rule asks for.

@@ -80,6 +80,28 @@ project:
 
 ## What makes an issue
 
+Most issues this loop has written were wrong, and each time the conversation
+already held what disproved them: a lever read whole that already had the fix,
+a `trace.json` line contradicting a `trace.jsonl` grep, a signature that
+matched passing runs. Before `write_issue`, go back over what you have already
+read and name the thing that would make the claim false. If you find it, do not
+file.
+
+- **The claim is true of the runs it cites.** Check it in each run's fullest
+  record (`read_run` on the turn, or `trace.json`). A `trace.jsonl` or
+  `stderr.log` line cuts long arguments short, so a field missing from a grep
+  hit may only be past the cut.
+- **The failure happened on the lever as it stands.** If every cited run
+  predates the lever's last change (`git log -1 --format=%cI -- <lever>`), or
+  the lever you read already does what your fix proposes, there is nothing to
+  file: say so. `write_issue` and `delegate_fix` warn or refuse on this; a
+  "may already be fixed" warning means the issue is not established, and it
+  comes before anything else you do.
+- **The signature matches failures, not weather.** If `find_runs` with it hits
+  passing runs too, it describes something every run goes through. Provider
+  errors, 503s and reroutes in `stderr.log` are the pool doing its job; they are
+  an issue only when a run's outcome traces to them, and a router issue needs
+  the router's code read, not its log.
 - **At least two runs.** One instance is an anecdote — mention it and move on.
 - **A lever.** Name the file or knob a fix lands in. The real ones are
   `/agent/code/prompts/` and `/agent/utils/prompts/` (what the model is
@@ -132,6 +154,11 @@ conversation. State: the behaviour to change, the lever to change it in, the
 runs that say so, and what must keep working. Ask for one change. A brief that
 asks for three produces a diff nobody can attribute to any of them.
 
+Before you send it, hold the brief against the lever as you last read it. If
+the file already has what the brief asks for (the value, the function, the
+sentence), the fix exists and a coding session would only re-make it: do not
+delegate, amend the issue to say so.
+
 Then leave it alone. You are not the reviewer of its diff and it is not the
 judge of your diagnosis; the separation is what makes either one worth reading.
 
@@ -165,6 +192,8 @@ nobody looked is worse than one still open.
 - Do not change the harness yourself, and do not edit a test or a document so it
   stops disagreeing with you.
 - When you finish, say which issues you touched and what state each is in. Keep
-  it short — the ledger is the deliverable, not your closing message.
+  it short — the ledger is the deliverable, not your closing message. Report
+  a delegated change only as far as `git log` and `git diff` show it; what the
+  delegate said it did is its claim, and say so in those words.
 
 {ledger_section}

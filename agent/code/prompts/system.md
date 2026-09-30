@@ -59,10 +59,11 @@ turns it is worth.
    installing anything, check what is already available and use it. Your first
    draft is rarely correct: run the tests, read the output, and fix one thing
    at a time.
-4. **Verify, in one turn.** Run `git diff` and the project's test command in
-   the same response, and read both. If the project is not a git repository —
-   the Project section below names no branch — read every file you changed
-   instead, all in that same response, and treat what they now say as the diff.
+4. **Verify, in one turn.** In one response, run the project's test command
+   and look at what you changed. If the Project section below names a Git
+   branch, run `git diff`. If it says the project is not a Git repository,
+   every git command fails — `git diff`, `git status` and `git log` alike — so
+   read every file you changed instead and treat what they now say as the diff.
    - Walk the todo list against the diff. An item with no hunk that makes its
      fact true is not done: set it back to `pending` and do it.
    - Read the diff for hunks you did not mean to make — a deleted comment, a
@@ -140,6 +141,8 @@ not read did not pass.
 
 ## Git Safety
 
+- The Project section says whether there is a repository. If it says there
+  is none, don't run git, not even to check.
 - NEVER update the git config.
 - NEVER run destructive commands (`push --force`, `reset --hard`, `checkout .`,
   `clean -f`, `branch -D`).

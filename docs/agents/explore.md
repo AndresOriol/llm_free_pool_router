@@ -422,17 +422,51 @@ without a review the check says so, and the answer is better words — or, if
 words demonstrably will not do it, a mechanism argued for by that evidence
 rather than by anticipation.
 
+### The check that did not do the research
+
+*Added 2026-09-20, as step 6 of the workflow: `review-agent`, a sub-agent given
+the request and the page paths and nothing else
+([prompts/reviewer.md](../../agent/explore/prompts/reviewer.md)).*
+
+The review above is the orchestrator reviewing itself, and by the time it runs,
+the conversation has already agreed with what it is checking: it read the
+researchers' replies, found them confident, and wrote the pages from them. That
+is the state the [Claude Mods run](../evaluation/changing-behaviour.md#the-first-case-the-explorers-absence-claims)
+failed in — its review signed off "no weak claims resting solely on inference"
+over a claim no source carried. Two rounds of prompt changes did not move it,
+which is the evidence that made the next lever structural rather than verbal.
+
+So the check is delegated. The reviewer's context never saw the searching: it
+opens the pages, sorts the decision-critical claims into sourced, a party's
+claim about itself, unsourced and **absence claims**, spends its five searches
+on the weakest — absence first, by the thing's own name — and returns the
+wording its evidence supports. It writes nothing; the orchestrator applies the
+corrections with `edit_file` before it touches `overview.md`, and the log says
+what came back.
+
+**What is measured, and what is not.** Probes stop at a decision, so what they
+show is that the orchestrator now *delegates* where it used to write: on the
+`explore-evidence` dataset the two orchestrator absence probes went from
+1/3 and 0/3 at baseline to 3/3 with the check, and the researcher-level probes
+did not move ([Changing how an agent behaves](../evaluation/changing-behaviour.md#the-first-case-the-explorers-absence-claims)).
+Whether the reviewer is any good at the check is a different question and this
+does not answer it: driven once by hand over the Mods page, `gemini-3.5-flash-lite`
+searched for plugins rather than for "Mods", and confirmed the false claim. The
+structure puts a fresh context in front of the claim; it does not supply the
+judgement, and a scenario run is what would show whether the pages come out
+better.
+
 ### What each call carries
 
 What the model sees is assembled, per call, from a few places, and knowing
 which is how to change what the agent does:
 
-| | orchestrator | `research-agent` |
-| --- | --- | --- |
-| system prompt | `system.md`, `workflow.md`, `delegation.md`, then the framework's list of sub-agents | `researcher.md` |
-| tool schemas | one per tool, each described by `tool_descriptions/<name>.md` | the same |
-| conversation | the request, its own tool calls, and each sub-agent's *reply* | the brief it was given, its searches, and the pages they returned |
-| what outlives it | the files in the research directory | the note it saved there |
+| | orchestrator | `research-agent` | `review-agent` |
+| --- | --- | --- | --- |
+| system prompt | `system.md`, `workflow.md`, `delegation.md`, then the framework's list of sub-agents | `researcher.md` | `reviewer.md` |
+| tool schemas | one per tool, each described by `tool_descriptions/<name>.md` | the same | the same |
+| conversation | the request, its own tool calls, and each sub-agent's *reply* | the brief it was given, its searches, and the pages they returned | the request, the page paths, what it read and searched — never the researchers' replies |
+| what outlives it | the files in the research directory | the note it saved there | nothing: its reply is its whole output, and the orchestrator makes the edits |
 
 The framework summarizes a conversation that grows too long; the files are
 never summarized. That is the design: pages are read in a sub-agent's
@@ -452,7 +486,8 @@ Per `tavily_search` call:
   request budget. This is the scarce one.
 
 `think_tool` costs a model call and nothing else. A whole run costs an
-orchestrator conversation plus one sub-agent conversation per topic, which is the
+orchestrator conversation, one sub-agent conversation per topic, and one more
+for the check at the end ([The check that did not do the research](#the-check-that-did-not-do-the-research)), which is the
 trade [What it costs, and what was given up](#what-it-costs-and-what-was-given-up) is about and which
 nothing has measured yet.
 

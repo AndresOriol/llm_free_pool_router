@@ -75,7 +75,8 @@ def as_example(probe) -> dict:
                    "files": probe.files, "history": probe.history,
                    "research_dir": probe.research_dir,
                    "through": probe.through},
-        "outputs": {"expect": probe.expect},
+        "outputs": {"expect": probe.expect, "options": probe.options,
+                    "must_not": probe.must_not},
         "metadata": {"probe_id": probe.id, "why": probe.why.strip(),
                      "kind": probe.kind, "source": probe.source,
                      "reviewed": probe.reviewed},
@@ -106,10 +107,20 @@ def push(probes: list, dataset: str) -> dict:
         logger.info(f"Created dataset {dataset!r}")
 
     made = [as_example(p) for p in mine]
-    there = {str(e.id) for e in ls.list_examples(dataset_id=target.id)}
+    # An example already there keeps its id, found by the probe it came from
+    # rather than recomputed: the id is derived from the dataset's name, and
+    # renaming the datasets (probes-code-editing -> code-editing, 2026-09-25)
+    # would otherwise have deleted every example and orphaned its experiments.
+    there = {str(e.id): str((e.metadata or {}).get("probe_id") or "")
+             for e in ls.list_examples(dataset_id=target.id)}
+    by_probe = {}
+    for eid, pid in there.items():
+        by_probe.setdefault(pid, eid)
+    for example in made:
+        example["id"] = by_probe.get(example["metadata"]["probe_id"], example["id"])
     new = [e for e in made if e["id"] not in there]
     kept = [e for e in made if e["id"] in there]
-    gone = there - {e["id"] for e in made}
+    gone = set(there) - {e["id"] for e in made}
     if kept:
         ls.update_examples(dataset_id=target.id, updates=kept)
     if new:
@@ -157,12 +168,17 @@ def evaluate(probes: list, model, *, floor: int, members: int,
         """
         probe_id = ((example.metadata or {}).get("probe_id")
                     if example is not None else None)
+        reference = reference_outputs or {}
         probe = by_id.get(probe_id) or probes_mod.Probe(
             id=probe_id or "probe",
-            expect=(reference_outputs or {}).get("expect") or {})
+            expect=reference.get("expect") or {},
+            options=reference.get("options") or [],
+            must_not=reference.get("must_not") or [])
         result = probes_mod.score(probe, outputs or {})
+        # The outcome leads the comment: which option it took, which failure
+        # it repeated, or that it did something neither list names.
         return {"key": "decided_correctly", "score": bool(result["passed"]),
-                "comment": "; ".join(result["reasons"]) or "as expected"}
+                "comment": "; ".join([result["outcome"], *result["reasons"]])}
 
     logger.info(f"Running {len(probes)} probe(s) against {dataset!r}")
     results = ls.evaluate(target, data=dataset, evaluators=[decided_correctly],

@@ -83,6 +83,12 @@ MAX_STEPS = 2
 # decision it is judged on. Bounded, so a probe stays a few calls.
 MAX_THROUGH = 3
 
+# Passed through on every probe, whatever its `through` says. Neither touches
+# the workspace, so neither can be the decision a probe is about -- and a probe
+# that forgot to list them passed on a todo list: three NOTES.md probes scored
+# green on `write_todos` on 2026-09-25 and failed 3/3 once passed through it.
+ALWAYS_THROUGH = ("write_todos", "think_tool")
+
 
 @dataclass
 class Probe:
@@ -108,6 +114,19 @@ class Probe:
     # first call outside them. The baseline run of the explorer probes passed
     # three times on `think_tool` without ever reaching the write they test.
     through: list = field(default_factory=list)
+    # The moves that make sense here, each named and argued. The decision must
+    # be one of them: every call it makes matches an option, or its reply
+    # matches an `answer` option. A decision that matches none is `unlisted` --
+    # not forbidden, not endorsed -- and is the prompt to decide which it is.
+    options: list = field(default_factory=list)
+    # The moves that must not happen here, each named after the failure it
+    # stops recurring. Checked before the options: a forbidden call fails the
+    # probe even beside a good one.
+    must_not: list = field(default_factory=list)
+
+    @property
+    def passes_through(self) -> tuple:
+        return tuple(dict.fromkeys([*self.through, *ALWAYS_THROUGH]))
 
     @property
     def problems(self) -> list:
@@ -122,8 +141,10 @@ class Probe:
             messages(self)
         except (TypeError, ValueError, KeyError, AttributeError) as exc:
             found.append(f"history does not parse: {exc}")
-        if not self.expect:
+        if not (self.expect or self.options or self.must_not):
             found.append("a probe with no expectation asserts nothing")
+        found += _move_problems("options", self.options)
+        found += _move_problems("must_not", self.must_not)
         if self.kind not in KINDS:
             found.append(f"kind must be one of {', '.join(KINDS)}")
         try:
@@ -152,7 +173,18 @@ def load(directory: Path = PROBES_DIR) -> list:
         dataset = str(raw.get("dataset") or "")
         if not dataset:
             raise ValueError(f"{path.name}: a probe file names its dataset")
+        # `<agent>-<topic>`: which agent is under test, then what groups the
+        # examples (docs/evaluation/changing-behaviour.md#datasets-one-topic-each).
+        if not re.fullmatch(r"[a-z]+(-[a-z0-9]+)+", dataset):
+            raise ValueError(f"{path.name}: dataset {dataset!r} is not "
+                             f"<agent>-<topic>, lowercase and hyphenated")
         for entry in (raw.get("probes") or []):
+            agent = str(entry.get("agent", "code"))
+            family = agent.split("-")[0]
+            if agent in AGENTS and not dataset.startswith(family + "-"):
+                raise ValueError(f"{path.name}: probe {entry.get('id')!r} tests "
+                                 f"{family!r}, but dataset {dataset!r} names "
+                                 f"another agent")
             probe = Probe(
                 id=str(entry.get("id", "")),
                 agent=str(entry.get("agent", "code")),
@@ -166,7 +198,9 @@ def load(directory: Path = PROBES_DIR) -> list:
                 why=str(entry.get("why", "")),
                 history=list(entry.get("history") or []),
                 research_dir=str(entry.get("research_dir") or ""),
-                through=[str(t) for t in (entry.get("through") or [])])
+                through=[str(t) for t in (entry.get("through") or [])],
+                options=list(entry.get("options") or []),
+                must_not=list(entry.get("must_not") or []))
             problems = probe.problems
             if problems:
                 raise ValueError(f"{path.name}: probe {probe.id!r} — "
@@ -354,11 +388,12 @@ def first_decision(probe: Probe, model, *, floor: int, members: int,
         agent = _build(probe, workdir, model, floor, members)
 
         start = messages(probe)
-        seen, text = [], ""
+        through = probe.passes_through
+        seen, text, before, model_name = [], "", [], ""
         try:
             # Middleware nodes count as steps too, so the passes are counted
             # below rather than inferred from the recursion limit.
-            limit = MAX_STEPS + (10 * MAX_THROUGH if probe.through else 0)
+            limit = MAX_STEPS + 10 * MAX_THROUGH
             passed = 0
             for state in agent.stream({"messages": start},
                                       {"recursion_limit": limit},
@@ -366,15 +401,16 @@ def first_decision(probe: Probe, model, *, floor: int, members: int,
                 # Only what the agent said after the recorded history: a call
                 # in the history is the situation, not the decision.
                 said = ((state or {}).get("messages") or [])[len(start):]
-                passed = 0
+                passed, before = 0, []
                 for message in said:
                     if not isinstance(message, AIMessage):
                         continue
                     calls = getattr(message, "tool_calls", None) or []
-                    if calls and all(c.get("name") in probe.through
-                                     for c in calls):
+                    if calls and all(c.get("name") in through for c in calls):
                         passed += 1  # the decision is still ahead
+                        before += [c.get("name", "?") for c in calls]
                         continue
+                    model_name = _served_by(message) or model_name
                     if calls:
                         seen = [{"name": c.get("name", "?"),
                                  "args": c.get("args", {})} for c in calls]
@@ -390,15 +426,29 @@ def first_decision(probe: Probe, model, *, floor: int, members: int,
             # is itself an answer some probes assert on.
             if "recursion" not in repr(exc).lower():
                 logger.warning(f"{probe.id}: {exc!r}")
-                return {"tools": seen, "text": text, "error": repr(exc)}
+                return {"tools": seen, "text": text, "error": repr(exc),
+                        "before": before, "model": model_name}
 
-        if probe.through and not seen and not text:
+        if not seen and not text:
             # Out of passes with nothing decided is not a pass: the baseline
             # scored three of these green on negative expectations.
-            return {"tools": [], "text": "", "error":
+            return {"tools": [], "text": "", "before": before,
+                    "model": model_name, "error":
                     f"no decision within {MAX_THROUGH} turns of "
-                    f"{', '.join(probe.through)}"}
-        return {"tools": seen, "text": text, "error": ""}
+                    f"{', '.join(through)}"}
+        return {"tools": seen, "text": text, "error": "", "before": before,
+                "model": model_name}
+
+
+def _served_by(message) -> str:
+    """The model that made the decision, as its provider reported it.
+
+    A score read without it is half a result: the same probe has failed on the
+    full flash models and passed on flash-lite for different reasons
+    (evals/probes/code-scope.yaml).
+    """
+    meta = getattr(message, "response_metadata", None) or {}
+    return str(meta.get("model_name") or meta.get("model") or "")
 
 
 def _text(message) -> str:
@@ -501,21 +551,112 @@ CHECKS = {"tool": _check_tool, "tool_in": _check_tool_in,
           "text_not_matches": _check_text_not_matches, "no_tool": _check_no_tool}
 
 
-def score(probe: Probe, decision: dict) -> dict:
-    """Every expectation, checked. All must hold."""
-    if decision.get("error"):
-        return {"id": probe.id, "passed": False, "agent": probe.agent,
-                "reasons": [f"the run failed: {decision['error'][:200]}"],
-                "decision": _first_name(decision)}
+# -- options and must_not ----------------------------------------------------
+#
+# A move is `{name, because, tool?, args?, answer?}`. `tool` and `args` are
+# regexes over one call's name and its arguments; `answer` is a regex over a
+# reply given instead of a call. Named, because the report says which one the
+# agent took; argued, because an option nobody can justify is a preference.
 
-    reasons, passed = [], True
+MOVE_KEYS = {"name", "because", "tool", "args", "answer"}
+
+
+def _move_problems(key: str, moves) -> list:
+    if not isinstance(moves, list):
+        return [f"{key} must be a list"]
+    found, names = [], set()
+    for move in moves:
+        if not isinstance(move, dict):
+            found.append(f"{key}: every entry is a mapping")
+            continue
+        name = str(move.get("name") or "")
+        if not name or name in names:
+            found.append(f"{key}: every entry needs a unique name")
+        names.add(name)
+        if not str(move.get("because") or "").strip():
+            found.append(f"{key} {name!r}: says nothing about why")
+        unknown = set(move) - MOVE_KEYS
+        if unknown:
+            found.append(f"{key} {name!r}: unknown key(s) {', '.join(sorted(unknown))}")
+        if not ({"tool", "args", "answer"} & set(move)):
+            found.append(f"{key} {name!r}: matches nothing; give tool, args or answer")
+        if "answer" in move and ({"tool", "args"} & set(move)):
+            found.append(f"{key} {name!r}: an answer is a reply, not a call")
+        for part in ("tool", "args", "answer"):
+            try:
+                re.compile(str(move.get(part, "")))
+            except re.error as exc:
+                found.append(f"{key} {name!r}: {part} is not a regex ({exc})")
+    return found
+
+
+def _call_is(move: dict, call: dict) -> bool:
+    if "answer" in move:
+        return False
+    return bool(re.search(str(move.get("tool", "")), str(call.get("name", "")))
+                and re.search(str(move.get("args", "")), str(call.get("args", ""))))
+
+
+def _reply_is(move: dict, text: str) -> bool:
+    return "answer" in move and bool(re.search(str(move["answer"]), text or ""))
+
+
+def _moves(probe: Probe, decision: dict) -> tuple:
+    """(outcome, reasons): forbidden, unlisted, or the options it took."""
+    calls, text = decision.get("tools") or [], decision.get("text") or ""
+    for move in probe.must_not:
+        hit = next((c for c in calls if _call_is(move, c)), None)
+        if hit or (not calls and _reply_is(move, text)):
+            what = (f"{hit['name']} {str(hit.get('args', ''))[:160]}" if hit
+                    else f"said {text[:160]!r}")
+            return (f"forbidden:{move['name']}",
+                    [f"must not {move['name']}: {what}"])
+    if not probe.options:
+        return "", []
+    if calls:
+        taken, stray = [], []
+        for call in calls:
+            match = next((m["name"] for m in probe.options if _call_is(m, call)), None)
+            if match:
+                taken.append(match)
+            else:
+                stray.append(call)
+        if not stray:
+            return "option:" + "+".join(dict.fromkeys(taken)), []
+        return "unlisted", [f"not one of the options: {c['name']} "
+                            f"{str(c.get('args', ''))[:160]}" for c in stray]
+    match = next((m["name"] for m in probe.options if _reply_is(m, text)), None)
+    if match:
+        return f"option:{match}", []
+    return "unlisted", [f"not one of the options: said {text[:160]!r}"]
+
+
+def score(probe: Probe, decision: dict) -> dict:
+    """Every expectation, checked. All must hold.
+
+    `outcome` says which way it went: `option:<name>` for a move the probe
+    endorses, `forbidden:<name>` for one it names as a failure, `unlisted` for
+    a move it neither endorses nor forbids -- a fail, and the question of which
+    of the two lists that move belongs on.
+    """
+    base = {"id": probe.id, "agent": probe.agent,
+            "decision": _first_name(decision),
+            "model": decision.get("model") or "",
+            "before": decision.get("before") or []}
+    if decision.get("error"):
+        return {**base, "passed": False, "outcome": "error",
+                "reasons": [f"the run failed: {decision['error'][:200]}"]}
+
+    outcome, reasons = _moves(probe, decision)
+    passed = not reasons
     for key, want in probe.expect.items():
         ok, detail = CHECKS[key](want, decision)
         if not ok:
             passed = False
             reasons.append(f"expected {key}={want!r}, but {detail}")
-    return {"id": probe.id, "passed": passed, "agent": probe.agent,
-            "reasons": reasons, "decision": _first_name(decision)}
+            outcome = outcome or "failed"
+    return {**base, "passed": passed, "outcome": outcome or
+            ("passed" if passed else "failed"), "reasons": reasons}
 
 
 def report(results: list) -> str:
@@ -526,8 +667,11 @@ def report(results: list) -> str:
     lines = [f"{passed}/{len(results)} probe(s) passed.", ""]
     for result in sorted(results, key=lambda r: r["passed"]):
         mark = "PASS" if result["passed"] else "FAIL"
+        path = " > ".join([*result.get("before", []),
+                           result["decision"] or "no tool"])
+        served = f" [{result['model']}]" if result.get("model") else ""
         lines.append(f"[{mark}] {result['id']} ({result['agent']}) "
-                     f"-> {result['decision'] or 'no tool'}")
+                     f"-> {path} = {result.get('outcome', '')}{served}")
         for reason in result["reasons"]:
             lines.append(f"       {reason}")
     return "\n".join(lines)

@@ -76,11 +76,69 @@ documentation, it is the entry condition: a probe with no recorded failure
 behind it is a preference, and preferences do not belong in a suite that gates
 anything. The test suite asserts that every probe on disk has one.
 
-## The expectations
+## The expectations: options and must_not
 
-Seven, and mostly negative — because the failures this project records are
-things the agent should not have done, and a suite that could only assert the
-positive would have to guess the single right answer instead.
+A probe says two things about its situation: the moves that make sense there,
+and the moves that must not happen.
+
+```yaml
+    options:
+    - name: append-the-entry
+      tool: ^edit_file$
+      args: NOTES\.md
+      because: Code, tests and docs are done; the entry is what is left, and its
+        first lines are already in the conversation.
+    - name: report-and-finish
+      answer: (?s)\w.{60,}
+      because: Everything is on disk and checked; a closing account is the rest.
+    must_not:
+    - name: reread-the-notes
+      tool: ^read_file$
+      args: NOTES\.md
+      because: Read whole at turn 1 and unchanged since; four of the twelve
+        redundant reads in the 2026-09-17 runs were this one.
+```
+
+Each move is a regex over one call's tool name and arguments, or an `answer`
+regex over a reply given instead of a call. Each is named, and each says why:
+an option nobody can argue for is a preference, and a `must_not` cites the
+failure it keeps from recurring.
+
+The score has three outcomes, not two:
+
+| Outcome | When | What it asks of you |
+| --- | --- | --- |
+| `option:<name>` | every call in the decision matches an option, and none is forbidden | nothing: it passed, and the report says which way |
+| `forbidden:<name>` | a call (or the reply) matches a `must_not` | the recorded failure happened again |
+| `unlisted` | nothing is forbidden, but a call matches no option | decide: is this move sensible here (add it to `options`) or not (add it to `must_not`)? It fails until someone does |
+
+`unlisted` is why listing options is safe now. The first live runs taught
+*prefer the negative*: a probe that tried to enumerate every acceptable opening
+failed the agent for writing a todo list, a move nobody had thought of
+([What the first two live runs showed](#what-the-first-two-live-runs-showed)).
+The cost of a missing option was a false failure that looked like an agent
+bug. Now it is a failure *labelled* as a gap in the probe, and the fix is a
+decision about how the agent should work, written down where it is reviewed. A
+suite with only negatives could not say that an agent did something
+pointless-but-harmless. It passed, and so did a probe the agent never reached.
+
+`write_todos` and `think_tool` are passed through on every probe
+(`ALWAYS_THROUGH` in [evals/probes.py](../../evals/probes.py)). Neither touches
+the workspace, so neither is the decision. On 2026-09-25 three NOTES.md probes
+passed on a todo list and failed 3/3 once the runner looked past it.
+
+The report shows the path to the decision and the model that made it:
+
+```
+[FAIL] does-not-reread-the-notes-late-in-a-run (code) -> write_todos > read_file = forbidden:reread-the-notes [gemini-3.8-flash]
+```
+
+### The older keys
+
+`expect` still loads and scores, but no probe on disk uses it since
+2026-09-25: every dataset was moved to `options` and `must_not`, its old
+expectations carried over verbatim as named `must_not` moves. Seven keys,
+mostly negative:
 
 | Key | Holds when |
 | --- | --- |
@@ -122,6 +180,11 @@ the files, and experiments keep pointing at the same examples.
 > could no longer be compared with its fix, which is the comparison the
 > dataset exists for. What the old rule guarded against was a partial update,
 > and a whole rewrite under a stable id avoids that too.
+>
+> **Amended 2026-09-25.** A new example's id is derived from its dataset and
+> probe id, but an example already in the dataset keeps the id it has, found by
+> the `probe_id` in its metadata. Renaming the datasets to `<agent>-<topic>`
+> would otherwise have re-created every example and orphaned every experiment.
 
 **One file is one topic is one dataset.** Each `evals/probes/*.yaml` names its
 `dataset`, and how probes are grouped is part of the change under review
@@ -161,9 +224,9 @@ Two more fields exist because of what the first baseline did:
 ```bash
 python -m evals probes --list                 # what would run; no calls, no keys
 python -m evals probes                        # run them, print the table
-python -m evals probes --dataset probes-improve-diagnosis   # one topic
+python -m evals probes --dataset improve-diagnosis   # one topic
 python -m evals probes --push                 # sync every dataset, run nothing
-python -m evals probes --dataset probes-explore-evidence --experiment     --name explore-fix --repetitions 3        # one side of a comparison
+python -m evals probes --dataset explore-evidence --experiment     --name explore-fix --repetitions 3        # one side of a comparison
 python -m evals probes --stale                # which probes are due a review
 python -m evals probes --from-run trace.json --turn 10 --agent explore     --id name-the-decision                    # a skeleton from a recorded run
 ```
@@ -204,6 +267,14 @@ Two lessons, both already visible in that small a sample:
 - **Prefer the negative.** Enumerating acceptable behaviour means guessing every
   reasonable move a model might make and being wrong about one of them. Naming
   the wasteful or dangerous move does not.
+
+  > **Amended 2026-09-25.** The negatives stay, as `must_not`. What changed is
+  > that a probe now also lists its `options`, and a move on neither list scores
+  > `unlisted` rather than as a plain failure
+  > ([The expectations](#the-expectations-options-and-must_not)). The guess the
+  > lesson warned about still gets made, but when it is wrong the report says
+  > so, and the negatives-only form had its own blind spot: three probes passed
+  > on a todo list without ever reaching the decision they test.
 - **A single red probe is a question.** Two runs, two failures, zero agent bugs.
   Every failure so far has been a defect in the probe, which is what a young
   suite should expect and an argument against gating on one until the suite has

@@ -78,6 +78,9 @@ MAX_SEARCHES_PER_SUBAGENT = 5
 # The system prompt of each agent, as the files it is joined from.
 ORCHESTRATOR_PROMPTS = ("system.md", "workflow.md", "delegation.md")
 RESEARCHER_PROMPTS = ("researcher.md",)
+# The check before the run is signed off, in a context that never saw the
+# searching ([The web explorer](../../docs/agents/explore.md)).
+REVIEWER_PROMPTS = ("reviewer.md",)
 
 # Framework tools this agent is not offered: repository discovery it does not
 # do (15.5.1). There is no `execute` to remove: the backend cannot run anything,
@@ -175,7 +178,7 @@ def register_surface(values: dict) -> None:
 # --- 5. The agent ---------------------------------------------------------------
 
 def subagents(tools: list, values: dict, described: dict) -> list:
-    """The two agents the orchestrator can delegate to.
+    """The three agents the orchestrator can delegate to.
 
     Each gets `FrameworkSurface` and its own search limit; the rest of the tool
     surface reaches them through the harness profile. `general-purpose` is not
@@ -200,6 +203,14 @@ def subagents(tools: list, values: dict, described: dict) -> list:
          "description": ("Delegate research to the sub-agent researcher. Only "
                          "give this researcher one topic at a time."),
          "system_prompt": prompt(RESEARCHER_PROMPTS, values),
+         "tools": tools, "middleware": middleware()},
+        {"name": "review-agent",
+         "description": ("Check the pages written this run against the request, "
+                         "in a context that never saw the searching. Give it the "
+                         "request as it was made and the page paths; it reads "
+                         "them, checks the claims the decision turns on, and "
+                         "returns what must change. It writes nothing."),
+         "system_prompt": prompt(REVIEWER_PROMPTS, values),
          "tools": tools, "middleware": middleware()},
         {**GENERAL_PURPOSE_SUBAGENT, "tools": tools, "middleware": middleware()},
     ]
