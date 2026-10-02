@@ -18,49 +18,19 @@
 # Priority tiers: reasoning (1-9) -> mid (10-19) -> workhorse (20-29) -> last
 # resort (30+). Order within a tier barely matters -- Groq shares one org-wide
 # request budget across all its models. Gaps leave room to slot in new models.
+#
+# Accounts are families, one per platform. `api_key_env` is a pattern: every
+# env var matching it (GEMINI_API_KEY_1, GEMINI_API_KEY_2, ...) is one account,
+# named <platform>_<n>. Adding an account means adding a key to .env, not here.
 accounts:
-  - name: groq_1
-    user: [EMAIL_ADDRESS]
-    platform: groq
+  - platform: groq
     type: openai_compatible
     url: https://api.groq.com/openai/v1
-    api_key_env: GROQ_API_KEY_1
-  - name: gemini_1
-    user: [EMAIL_ADDRESS]
-    platform: gemini
+    api_key_env: GROQ_API_KEY_{n}
+  - platform: gemini
     type: gemini
     url: https://generativelanguage.googleapis.com/v1beta/models
-    api_key_env: GEMINI_API_KEY_1
-  - name: gemini_2
-    user: [EMAIL_ADDRESS]
-    platform: gemini
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
-    api_key_env: GEMINI_API_KEY_2
-  - name: gemini_3
-    user: [EMAIL_ADDRESS]
-    platform: gemini
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
-    api_key_env: GEMINI_API_KEY_3
-  - name: gemini_4
-    user: [EMAIL_ADDRESS]
-    platform: gemini
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
-    api_key_env: GEMINI_API_KEY_4
-  - name: gemini_5
-    user: [EMAIL_ADDRESS]
-    platform: gemini
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
-    api_key_env: GEMINI_API_KEY_5
-  - name: gemini_6
-    user: [EMAIL_ADDRESS]
-    platform: gemini
-    type: gemini
-    url: https://generativelanguage.googleapis.com/v1beta/models
-    api_key_env: GEMINI_API_KEY_6
+    api_key_env: GEMINI_API_KEY_{n}
 
 models:
   # Retired models (Groq's Llama line, qwen3-32b) are removed, not kept as

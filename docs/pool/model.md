@@ -45,15 +45,18 @@ providers: Llama3_70b_groq_1, Gemini_3_5_Flash_gemini_1,
 Every model is fanned out across every account on its platform
 ([loader.py](../../llm_router/loader.py)). This is the single most important
 property of the config format: the pool is meant to grow by adding accounts,
-and that must stay a one-line change.
+and that must stay a one-line change. It is now a zero-line change to the
+config: accounts are discovered from the environment, one per env var matching
+the platform's key pattern (`GEMINI_API_KEY_{n}` → `gemini_1`, `gemini_2`, …),
+so adding one is adding a key to `.env`.
 
-It has been exercised once. Adding `gemini_2` — six lines, no model touched —
+It was first exercised by hand. Adding `gemini_2` — six lines, no model touched —
 took every Gemini model from one account to two, and the pool from 14 providers
 to 21. That is the whole mechanism working as intended, and it is what makes
 running a scenario at n=5 affordable rather than extravagant.
 
-A provider whose account key is missing from the environment is **skipped with
-a warning**, not raised on. A half-filled `.env` gets you a working smaller
+An account whose key is not in the environment simply does not exist; a
+platform with no matching key at all is **skipped with a warning**, not raised on. A half-filled `.env` gets you a working smaller
 pool rather than a program that refuses to start — which matters because
 accounts get added incrementally.
 

@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 from pathlib import Path
 from typing import List
@@ -21,14 +22,36 @@ _PROVIDER_TYPES = {
 }
 
 
+def _discover_accounts(family: dict) -> List[dict]:
+    """Expand an account family into one account per matching env var.
+
+    `api_key_env` is a pattern such as `GEMINI_API_KEY_{n}`: every non-empty
+    env var it matches is one account, named `<platform>_<n>`, so adding an
+    account is adding a key to `.env` and nothing else.
+    """
+    prefix, _, suffix = family["api_key_env"].partition("{n}")
+    pattern = re.compile(re.escape(prefix) + r"(\d+)" + re.escape(suffix))
+    found = sorted(
+        (int(m.group(1)), var)
+        for var, value in os.environ.items()
+        if value and (m := pattern.fullmatch(var))
+    )
+    if not found:
+        logger.warning(f"No accounts for platform '{family['platform']}': "
+                       f"no env var matches '{family['api_key_env']}'.")
+    return [{**family, "name": f"{family['platform']}_{n}", "api_key_env": var}
+            for n, var in found]
+
+
 def load_providers_from_config(config_path=None) -> List[LLMProvider]:
     """Parse the YAML config and build one provider per (model, account) pair.
 
     Each model is listed once per platform; it's fanned out across every
     account on that platform, so a model backed by several accounts doesn't
-    need to be repeated in the config. Keys are read from the environment;
-    `.env` next to this package is loaded first so `GROQ_API_KEY_1` etc.
-    resolve without the caller wiring dotenv.
+    need to be repeated in the config. Accounts themselves are not listed:
+    each platform declares a key pattern and every matching env var is an
+    account (`_discover_accounts`). `.env` next to this package is loaded
+    first so `GROQ_API_KEY_1` etc. resolve without the caller wiring dotenv.
     """
     load_dotenv(_PACKAGE_DIR / ".env")
 
@@ -37,8 +60,8 @@ def load_providers_from_config(config_path=None) -> List[LLMProvider]:
         config = yaml.safe_load(f)
 
     accounts_by_platform: dict = {}
-    for account in config.get("accounts", []):
-        accounts_by_platform.setdefault(account["platform"], []).append(account)
+    for family in config.get("accounts", []):
+        accounts_by_platform[family["platform"]] = _discover_accounts(family)
 
     providers: List[LLMProvider] = []
     # What the panel measures consumption against. Collected here rather than
@@ -57,11 +80,7 @@ def load_providers_from_config(config_path=None) -> List[LLMProvider]:
         for account in matching_accounts:
             provider_name = f"{name}_{account['name']}"
 
-            api_key = os.getenv(account["api_key_env"])
-            if not api_key:
-                logger.warning(f"Skipping {provider_name}: env var '{account['api_key_env']}' not set.")
-                continue
-
+            api_key = os.environ[account["api_key_env"]]
             provider_cls = _PROVIDER_TYPES.get(account.get("type"))
             if provider_cls is None:
                 logger.warning(f"Skipping {provider_name}: unknown provider type '{account.get('type')}'.")

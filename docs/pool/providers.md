@@ -30,7 +30,7 @@ it, and how to grow the pool.*
 
 
 `llm_router/.env` is gitignored. Keys never go in code or in `config.yaml` —
-config references an env var *name*, never a value.
+config references an env var *pattern*, never a value.
 
 
 ### Creating a dedicated email for additional Gemini keys
@@ -48,20 +48,12 @@ To expand your Gemini key pool via Google AI Studio, each API key requires a sep
 3. **Generate and store key**:
    - Click **Create API key** (select **Create API key in new project**).
    - Copy the generated API key.
-   - Add it to your local `llm_router/.env` file with an incremented variable name:
+   - Add it to your local `llm_router/.env` file with the next free number:
      ```env
      GEMINI_API_KEY_2=AIzaSy...
      ```
-4. **Register in Config**:
-   - Add the new account entry under `accounts:` in `llm_router/config.yaml`:
-     ```yaml
-     accounts:
-       - name: gemini_2
-         user: yourproject.bot02@gmail.com
-         platform: gemini
-         type: gemini
-         api_key_env: GEMINI_API_KEY_2
-     ```
+   - That is all: the loader picks up every `GEMINI_API_KEY_<n>` as an account
+     named `gemini_<n>`, so `config.yaml` is not touched.
 
 ## Config schema
 
@@ -69,13 +61,11 @@ To expand your Gemini key pool via Google AI Studio, each API key requires a sep
 multiplies them ([The fan-out](model.md#the-fan-out)):
 
 ```yaml
-accounts:
-  - name: groq_1                              # label used in logs
-    user: someone@example.com                 # which signup this is, for your own tracking
-    platform: groq                            # groups models to accounts
+accounts:                                     # one family per platform, not one entry per account
+  - platform: groq                            # groups models to accounts
     type: openai_compatible                   # selects the adapter: openai_compatible | gemini
     url: https://api.groq.com/openai/v1       # v1 base, no /chat/completions
-    api_key_env: GROQ_API_KEY_1               # name of the env var, never the key
+    api_key_env: GROQ_API_KEY_{n}             # pattern; every set GROQ_API_KEY_<n> is account groq_<n>
 
 models:
   - name: Llama3_70b                          # label used in logs
@@ -192,10 +182,10 @@ few requests per day. Neither alone supports an agent. Together they mostly do.
 
 **A new account on an existing platform** — the cheap, high-value move:
 
-1. Add the key to `.env` under a new env var name.
-2. Add an `accounts:` entry with the same `platform`.
+1. Add the key to `.env` as the platform's pattern with the next number
+   (`GEMINI_API_KEY_8`).
 
-Done. Every model on that platform now has a second account behind it.
+Done — no config change. Every model on that platform now has a second account behind it.
 
 **A new model on an existing platform:**
 
@@ -214,7 +204,8 @@ tier, HuggingFace Inference. The provider list is meant to grow.
    Pooling means holding legitimate accounts — see
    [What is deliberately not built](../overview.md#what-is-deliberately-not-built).
 2. If its request/response shape is OpenAI-compatible, you need **no code** —
-   just an `accounts:` entry with `type: openai_compatible` and the right `url`.
+   just an `accounts:` family with `type: openai_compatible`, the right `url`
+   and a key pattern such as `CEREBRAS_API_KEY_{n}`.
 3. Otherwise implement an `LLMProvider` subclass in
    [providers.py](../../llm_router/providers.py) and register it in the loader's
    type map. Do **not** special-case a provider inside the router.

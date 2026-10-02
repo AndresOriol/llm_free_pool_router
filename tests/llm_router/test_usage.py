@@ -39,11 +39,10 @@ def _lines(path):
 
 _CONFIG = """
 accounts:
-  - name: groq_1
-    platform: groq
+  - platform: groq
     type: openai_compatible
     url: https://api.groq.com/openai/v1
-    api_key_env: TEST_QUOTA_KEY
+    api_key_env: TEST_QUOTA_KEY_{n}
 models:
   - name: GptOss120b
     platform: groq
@@ -63,7 +62,7 @@ def _check_loader_snapshot():
     """
     with tempfile.TemporaryDirectory() as tmp:
         os.environ["LLM_ROUTER_USAGE_DIR"] = tmp
-        os.environ["TEST_QUOTA_KEY"] = "not-a-real-key"
+        os.environ["TEST_QUOTA_KEY_1"] = "not-a-real-key"
         config = Path(tmp) / "config.yaml"
         config.write_text(_CONFIG, encoding="utf-8")
 
@@ -76,7 +75,7 @@ def _check_loader_snapshot():
         member = snapshot["pool"][0]
         assert member["provider"] == providers[0].name == "GptOss120b_groq_1", member
         assert member["limits"] == {"rpm": 30, "tpm": 8000, "rpd": 1000, "tpd": 100000}, member
-        del os.environ["TEST_QUOTA_KEY"]
+        del os.environ["TEST_QUOTA_KEY_1"]
 
 
 def _check_issue_time(ledger):
